@@ -239,6 +239,10 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
     const active = document.activeElement;
     const focused = active && body.contains(active) ? active.getAttribute('data-focus') : null;
     body.replaceChildren();
+    if (st.off) {
+      body.append(h('div.board-error', {}, st.off));
+      return;
+    }
     if (st.error && !st.items.length) {
       body.append(h('div.board-error', {}, `Couldn't load from GitHub: ${st.error}`, h('br'), h('small', {}, 'The server runs `gh` in the project directory — make sure it is installed and authenticated (gh auth login).')));
       return;

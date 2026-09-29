@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MergeWatch } from '../src/server/github.js';
+import { friendly, ISSUES_OFF, MergeWatch } from '../src/server/github.js';
 import type { GhPull } from '../src/shared/protocol.js';
 
 const pull = (number: number, state: string): GhPull => ({
@@ -25,4 +25,8 @@ test('a merge from the PR window rings right away, and not again when GitHub cat
   // A look that started before the merge still says open; the next one says merged.
   assert.deepEqual(numbers(w.look([pull(5, 'OPEN'), pull(6, 'OPEN')])), []);
   assert.deepEqual(numbers(w.look([pull(5, 'MERGED'), pull(6, 'MERGED')])), [6]);
+});
+
+test('a repository with issues turned off says so, instead of blaming gh', () => {
+  assert.equal(friendly("the 'Panzerplatte/agent-office' repository has disabled issues"), ISSUES_OFF);
 });

@@ -526,6 +526,8 @@ export interface MachineState {
 export interface GhState<T> {
   items: T[];
   error?: string;
+  /** Why the board has nothing to show and never will until it's switched on, such as issues turned off on GitHub. */
+  off?: string;
   fetchedAt: number;
   loading: boolean;
 }
