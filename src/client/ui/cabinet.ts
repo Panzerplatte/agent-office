@@ -5,6 +5,7 @@ import type { WorkerInfo } from '../../shared/protocol';
 import type { Net } from '../net';
 import { store } from '../state';
 import { t } from '../i18n';
+import { deskLabel } from '../i18n/labels';
 import { h, openModal, toast, type Modal } from './dom';
 import { ScreenZoom } from './arcade';
 import { Blocks, H, W, paintScreen, type ScreenView } from './blocks';
@@ -398,5 +399,5 @@ export function lostGame(asked: string, id: string): boolean {
 /** " at Desk 3", or nothing when it's not at a desk here. */
 function deskOf(w: WorkerInfo): string {
   const d = DESK_BY_ID.get(w.deskId);
-  return d ? t(d.station ? 'windows.cabinet.atStation' : 'windows.cabinet.atDesk', { desk: d.label }) : '';
+  return d ? t(d.station ? 'windows.cabinet.atStation' : 'windows.cabinet.atDesk', { desk: deskLabel(d) }) : '';
 }

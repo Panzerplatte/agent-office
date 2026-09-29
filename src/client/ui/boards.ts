@@ -1,4 +1,3 @@
-import { DESK_BY_ID } from '../../shared/layout';
 import type { AgentEffort, AgentProvider, GhIssue, GhLabel, GhPull, WorkerInfo } from '../../shared/protocol';
 import type { Net } from '../net';
 import { store, workerForPull } from '../state';
@@ -8,6 +7,7 @@ import { providerLabel } from './provider';
 import type { MeetingPreset } from './meeting';
 import { officePrompt } from './prompts';
 import { t } from '../i18n';
+import { deskLabelOf } from '../i18n/labels';
 
 export interface BoardActions {
   /** Start a worker on a ready-made prompt (shown for editing first). */
@@ -113,7 +113,7 @@ const CHECK_ICON: Record<GhPull['checks'], string> = { pass: '🟢', fail: '🔴
 
 /** A chip naming a worker and desk, color-coded to match the worker back on the floor. */
 function workerChip(w: WorkerInfo, title: string) {
-  return h('span.desk-link', { style: `--dot:${w.color}`, title }, `🪑 ${w.name} · ${DESK_BY_ID.get(w.deskId)?.label ?? t('boards.aDesk')}`);
+  return h('span.desk-link', { style: `--dot:${w.color}`, title }, `🪑 ${w.name} · ${deskLabelOf(w.deskId) ?? t('boards.aDesk')}`);
 }
 
 /** A chip naming the worker and desk a pull request came from. */
@@ -129,7 +129,7 @@ function queueChip(issue: number): Node | '' {
   if (task.status === 'queued') return h('span.qchip', {}, `${store.queue.tasks.find((x) => x.status === 'queued') === task ? t('boards.chipUpNext') : t('boards.chipQueued')} · ${provider}`);
   if (task.status === 'running') {
     const w = task.workerId ? store.workers.get(task.workerId) : undefined;
-    if (w) return workerChip(w, `${t('boards.workingOnThisAt', { name: w.name, desk: DESK_BY_ID.get(w.deskId)?.label ?? t('boards.aDesk') })} · ${provider}`);
+    if (w) return workerChip(w, `${t('boards.workingOnThisAt', { name: w.name, desk: deskLabelOf(w.deskId) ?? t('boards.aDesk') })} · ${provider}`);
     return h('span.qchip.running', {}, `🤖 ${task.workerName ?? t('boards.aWorker')} · ${provider}`);
   }
   return task.pr ? h('span.qchip.done', {}, `🔀 PR #${task.pr.number} · ${provider}`) : '';

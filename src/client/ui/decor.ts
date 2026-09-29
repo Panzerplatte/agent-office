@@ -1,5 +1,6 @@
 import { FRAMES, checkImageUrl, type Decoration } from '../../shared/decor';
 import { t } from '../i18n';
+import { frameName, imageUrlIssueText } from '../i18n/labels';
 import { store } from '../state';
 import { holdPicture, loadPicture, type Picture } from '../world/gallery';
 import { h, openModal, timeAgo } from './dom';
@@ -70,7 +71,7 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
           'button.btn',
           { type: 'button', role: 'radio', 'aria-checked': String(i === frame), class: i === frame ? 'on' : '', onclick: () => ((frame = i), paintFrames()) },
           h('span.dot', { style: `background:${f.color}` }),
-          f.name,
+          frameName(f),
         ),
       ),
     );
@@ -94,7 +95,7 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
     const raw = urlIn.value.trim();
     if (!raw) return setStatus(TIP);
     const checked = checkImageUrl(raw);
-    if ('error' in checked) return setStatus(checked.error, 'error');
+    if ('error' in checked) return setStatus(imageUrlIssueText(checked.issue), 'error');
     release = holdPicture(checked.url);
     setStatus(t('windows.decor.loading'), 'loading');
     loading = true;
