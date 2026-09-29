@@ -15,6 +15,7 @@ import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
 import type { RemoteExcalidrawElement } from '@excalidraw/excalidraw/data/reconcile';
 import type { ClientMsg, ServerMsg } from '../../shared/protocol';
 import { WB_MAX_ELEMENT_BYTES, byIndex, newer, type WbElement, type WbPointer } from '../../shared/whiteboard';
+import { lang, t } from '../i18n';
 import { store } from '../state';
 import { toast } from './dom';
 
@@ -282,7 +283,7 @@ export function mountWhiteboard(host: HTMLElement, send: (msg: ClientMsg) => voi
         isCollaborating: true,
         name,
         theme: 'light',
-        langCode: 'en',
+        langCode: lang() === 'de' ? 'de-DE' : 'en',
         autoFocus: true,
         aiEnabled: false,
         // Opening a file would replace the drawing for you alone; everything else in the menu works for everyone.
@@ -305,7 +306,7 @@ export function mountWhiteboard(host: HTMLElement, send: (msg: ClientMsg) => voi
         e(WelcomeScreen.Hints.MenuHint),
         e(WelcomeScreen.Hints.ToolbarHint),
         e(WelcomeScreen.Hints.HelpHint),
-        e(WelcomeScreen.Center, null, e(WelcomeScreen.Center.Heading, null, 'Draw together: everyone on this floor sees it live, and it stays up on the board')),
+        e(WelcomeScreen.Center, null, e(WelcomeScreen.Center.Heading, null, t('windows.whiteboard.welcome'))),
       ),
     ),
   );
