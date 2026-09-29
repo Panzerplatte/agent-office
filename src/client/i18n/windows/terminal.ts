@@ -1,0 +1,43 @@
+import { strings } from '../table';
+
+/** ui/terminal.ts: the terminal window's chrome (not what the terminal itself shows). */
+export default strings(
+  {
+    'terminal.dialog': '{name} terminal',
+    'terminal.models': '🧠 Models',
+    'terminal.modelsAria': 'OpenCode models',
+    'terminal.modelsTitle': 'OpenCode models: Ctrl+X then M (use /models if custom bindings override it)',
+    'terminal.changes': '🌿 Changes',
+    'terminal.changesTitle': 'What this worker changed: files, diff, commit, open a PR (C at the desk)',
+    'terminal.closeTitle': 'Leave terminal (Esc) · Ctrl+[ sends Esc to the terminal',
+    'terminal.typingOne': '{name} is typing…',
+    'terminal.typingTwo': '{a} and {b} are typing…',
+    'terminal.typingMany': (v) => `${v.name} and ${v.n} ${v.n === 1 ? 'other is' : 'others are'} typing…`,
+    'terminal.viewerYou': '{name} (you)',
+    'terminal.viewerTyping': '{name} · typing',
+    'terminal.viewers': 'In this terminal: {names}',
+    'terminal.typedLast': '{name} typed here last, {ago}',
+    'terminal.waitingMetrics': 'waiting for metrics',
+    'terminal.waitingFirstReport': 'waiting for first report',
+    'terminal.usageUntracked': 'usage untracked',
+  },
+  {
+    'terminal.dialog': 'Terminal von {name}',
+    'terminal.models': '🧠 Modelle',
+    'terminal.modelsAria': 'OpenCode-Modelle',
+    'terminal.modelsTitle': 'OpenCode-Modelle: Ctrl+X, dann M (nimm /models, falls eigene Tastenbelegungen das überschreiben)',
+    'terminal.changes': '🌿 Änderungen',
+    'terminal.changesTitle': 'Was dieser Worker geändert hat: Dateien, Diff, Commit, PR öffnen (C am Schreibtisch)',
+    'terminal.closeTitle': 'Terminal verlassen (Esc) · Ctrl+[ schickt Esc ans Terminal',
+    'terminal.typingOne': '{name} tippt…',
+    'terminal.typingTwo': '{a} und {b} tippen…',
+    'terminal.typingMany': (v) => `${v.name} und ${v.n} ${v.n === 1 ? 'weitere Person tippen' : 'weitere tippen'}…`,
+    'terminal.viewerYou': '{name} (du)',
+    'terminal.viewerTyping': '{name} · tippt',
+    'terminal.viewers': 'In diesem Terminal: {names}',
+    'terminal.typedLast': '{name} hat hier zuletzt getippt, {ago}',
+    'terminal.waitingMetrics': 'warte auf Messwerte',
+    'terminal.waitingFirstReport': 'warte auf ersten Bericht',
+    'terminal.usageUntracked': 'Verbrauch nicht erfasst',
+  },
+);

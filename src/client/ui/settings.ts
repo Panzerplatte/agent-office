@@ -10,17 +10,25 @@ import { openPromptEditor, rewrittenPrompts } from './prompts';
 import { LANGS, lang, setLang, t } from '../i18n';
 
 const VIEWS: [ViewMode, string, string][] = [
-  ['first', '👀 First person', 'See through your own eyes. Click the office to look around with the mouse and click things to use them. Esc frees the mouse.'],
-  ['third', '🎥 Third person', 'Follow your character from behind. Drag to orbit the camera, scroll to zoom, and click things to use them.'],
+  ['first', t('windows.settings.viewFirst'), t('windows.settings.viewFirstNote')],
+  ['third', t('windows.settings.viewThird'), t('windows.settings.viewThirdNote')],
 ];
 
-const THEME_LABEL: Record<ThemePick, string> = { auto: '📅 By the calendar', halloween: '🎃 Halloween', christmas: '🎄 Christmas', off: 'Off' };
+const THEME_LABEL: Record<ThemePick, string> = {
+  auto: t('windows.settings.themeAuto'),
+  halloween: t('windows.settings.themeHalloween'),
+  christmas: t('windows.settings.themeChristmas'),
+  off: t('windows.settings.themeOff'),
+};
 
-const WEBHOOK_NAME: Record<WebhookKind, string> = { slack: 'Slack', discord: 'Discord', other: 'a webhook' };
+const WEBHOOK_NAME: Record<WebhookKind, string> = { slack: 'Slack', discord: 'Discord', other: t('windows.settings.webhookOther') };
+
+/** "It’s the same for everyone in the building", and who set it, when someone did. */
+const sameForAll = (by?: string, at?: string | number) => (by ? t('windows.settings.sameForAllBy', { by, when: at ? ` ${timeAgo(at)}` : '' }) : t('windows.settings.sameForAll'));
 
 /** `outside` describes the sky over the office (see describeSky), once the server has said. */
 export function openSettings(net: Net, settings: Settings, onChange: (s: Settings) => void, onCharacter: () => void, previewSound: () => void, notifier: DesktopNotifier, onSignOut: () => void, outside?: { now: string; live: boolean }) {
-  const seg = h('div.seg', { role: 'radiogroup', 'aria-label': 'Camera view' });
+  const seg = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.settings.cameraView') });
   const note = h('p.setting-note');
   const paint = () => {
     seg.replaceChildren(
@@ -57,8 +65,8 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
       const v = Math.round(settings[level] * 100);
       slider.value = String(v);
       slider.style.setProperty('--fill', `${v}%`);
-      pct.textContent = settings[muted] ? 'Muted' : `${v}%`;
-      mute.textContent = settings[muted] ? '🔊 Unmute' : '🔇 Mute';
+      pct.textContent = settings[muted] ? t('windows.settings.muted') : `${v}%`;
+      mute.textContent = settings[muted] ? t('windows.settings.unmute') : t('windows.settings.mute');
       mute.setAttribute('aria-pressed', String(settings[muted]));
       mute.classList.toggle('danger', settings[muted]);
       row.classList.toggle('muted', settings[muted]);
@@ -78,7 +86,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     });
     return row;
   };
-  const soundRow = volumeRow('Office sounds volume', 'volume', 'muted', previewSound);
+  const soundRow = volumeRow(t('windows.settings.officeSoundsVolume'), 'volume', 'muted', previewSound);
 
   // Your language, for you alone: the page reloads in it, since everything on screen is built with its text.
   const langRow = h(
@@ -105,13 +113,13 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   );
 
   // Voice chat: an open mic, or muted until you hold V.
-  const talkRow = h('div.seg', { role: 'radiogroup', 'aria-label': 'Voice chat' });
+  const talkRow = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.settings.voiceChat') });
   const paintTalk = () => {
     talkRow.replaceChildren(
       ...(
         [
-          [false, '🎙️ Open mic'],
-          [true, '✋ Push to talk'],
+          [false, t('windows.settings.openMic')],
+          [true, t('windows.settings.pushToTalk')],
         ] as const
       ).map(([ptt, label]) =>
         h(
@@ -134,10 +142,10 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     );
   };
   paintTalk();
-  const musicRow = volumeRow('Jukebox volume', 'music', 'musicMuted');
+  const musicRow = volumeRow(t('windows.settings.jukeboxVolume'), 'music', 'musicMuted');
 
   // The building's holiday theme, for everyone.
-  const themeRow = h('div.seg', { role: 'radiogroup', 'aria-label': 'Holiday theme' });
+  const themeRow = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.settings.holidayTheme') });
   const themeNote = h('p.setting-note');
   const paintTheme = () => {
     const { pick, active, by, at } = store.theme;
@@ -160,12 +168,12 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     );
     const now =
       active === 'halloween'
-        ? 'Halloween: the workers are zombies, your hands are an undead warlock’s, the dog’s in costume, the sky’s gone creepy and there are jack-o’-lanterns everywhere.'
+        ? t('windows.settings.themeHalloweenNow')
         : active === 'christmas'
-          ? 'Christmas: the workers are elves, your hands are in mittens, the dog’s Rudolph, and it’s snowing outside.'
-          : 'No decorations up right now.';
-    const how = pick === 'auto' ? ' By the calendar it’s Halloween through October and Christmas through December.' : '';
-    themeNote.textContent = `${now}${how} It’s the same for everyone in the building${by ? `, set by ${by}${at ? ` ${timeAgo(at)}` : ''}` : ''}.`;
+          ? t('windows.settings.themeChristmasNow')
+          : t('windows.settings.themeNoneNow');
+    const how = pick === 'auto' ? ` ${t('windows.settings.themeByCalendar')}` : '';
+    themeNote.textContent = `${now}${how} ${sameForAll(by, at)}`;
   };
   paintTheme();
 
@@ -191,13 +199,13 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
               paintNotify();
             },
           },
-          '🔔 Turn on notifications',
+          t('windows.settings.notifyTurnOn'),
         ),
       );
     } else if (perm === 'granted') {
       for (const [value, label] of [
-        [true, '🔔 On'],
-        [false, '🔕 Off'],
+        [true, t('windows.settings.notifyOn')],
+        [false, t('windows.settings.notifyOff')],
       ] as const) {
         notifyRow.append(
           h(
@@ -217,34 +225,40 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
           ),
         );
       }
-      if (on) notifyRow.append(h('button.btn', { type: 'button', onclick: () => notifier.sample() }, 'Show me one'));
+      if (on) notifyRow.append(h('button.btn', { type: 'button', onclick: () => notifier.sample() }, t('windows.settings.notifySample')));
     }
     notifyNote.textContent =
       perm === 'unsupported'
-        ? 'This browser can’t show notifications from the office here. They need https or localhost (an SSH tunnel counts).'
+        ? t('windows.settings.notifyUnsupported')
         : perm === 'denied'
-          ? 'Your browser blocks notifications from the office. Allow them in the site settings (the icon left of the address), then open this again.'
-          : 'When a worker needs input or finishes while you’re in another tab or app, you get a notification. Click it to jump to that worker’s terminal. The tab title counts the workers waiting on someone either way.';
+          ? t('windows.settings.notifyDenied')
+          : t('windows.settings.notifyNote');
   };
   paintNotify();
 
   // The office's Slack / Discord webhook, shared by everyone.
   const hookStatus = h('p.setting-note');
-  const hookInput = h('input', { type: 'text', placeholder: 'https://hooks.slack.com/services/…', 'aria-label': 'Slack or Discord webhook URL', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
-  const hookSave = h('button.btn.primary', { type: 'button' }, 'Save');
-  const hookTest = h('button.btn', { type: 'button' }, 'Send a test');
-  const hookRemove = h('button.btn.danger', { type: 'button' }, 'Remove');
+  const hookInput = h('input', { type: 'text', placeholder: 'https://hooks.slack.com/services/…', 'aria-label': t('windows.settings.webhookUrl'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
+  const hookSave = h('button.btn.primary', { type: 'button' }, t('windows.settings.save'));
+  const hookTest = h('button.btn', { type: 'button' }, t('windows.settings.sendTest'));
+  const hookRemove = h('button.btn.danger', { type: 'button' }, t('windows.settings.remove'));
   const hookActions = h('div.seg', { style: 'margin-top:8px' }, hookTest, hookRemove);
   const paintHook = () => {
     const { webhook, error, lastSentAt } = store.notify;
     hookActions.classList.toggle('hidden', !webhook);
-    hookSave.textContent = webhook ? 'Replace' : 'Save';
+    hookSave.textContent = webhook ? t('windows.settings.replace') : t('windows.settings.save');
     hookStatus.classList.toggle('bad', !!error);
     hookStatus.textContent = !webhook
-      ? 'Paste an incoming webhook from Slack or Discord, and the office posts to that channel when a worker needs input or finishes and nobody has its terminal open. It’s for everyone in the office.'
+      ? t('windows.settings.webhookNone')
       : error
-        ? `⚠️ Posting to ${WEBHOOK_NAME[webhook.kind]} (${webhook.hint}) failed: ${error}`
-        : `📣 Posting to ${WEBHOOK_NAME[webhook.kind]} (${webhook.hint}), set by ${webhook.by} ${timeAgo(webhook.at)}${lastSentAt ? ` · last message ${timeAgo(lastSentAt)}` : ''}.`;
+        ? t('windows.settings.webhookFailed', { where: WEBHOOK_NAME[webhook.kind], hint: webhook.hint, error })
+        : t('windows.settings.webhookPosting', {
+            where: WEBHOOK_NAME[webhook.kind],
+            hint: webhook.hint,
+            by: webhook.by,
+            when: timeAgo(webhook.at),
+            last: lastSentAt ? t('windows.settings.webhookLast', { when: timeAgo(lastSentAt) }) : '',
+          });
   };
   paintHook();
   const saveHook = () => {
@@ -265,7 +279,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   let agentTouched = false;
   agent.element.addEventListener('change', () => (agentTouched = true));
   agent.element.addEventListener('input', () => (agentTouched = true));
-  const agentSave = h('button.btn.primary', { type: 'button' }, 'Save');
+  const agentSave = h('button.btn.primary', { type: 'button' }, t('windows.settings.save'));
   const agentBack = h('button.btn', { type: 'button' });
   const agentActions = h('div.seg', { style: 'margin-top:8px' }, agentSave, agentBack);
   const agentNow = h('p.outside-now');
@@ -279,12 +293,13 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     agentNow.classList.toggle('hidden', admin);
     agentNow.textContent = choiceLabel(now);
     agentBack.classList.toggle('hidden', !picked);
-    agentBack.textContent = `Back to ${store.project?.agentCmd.split(' ')[0].split(/[\\/]/).pop() ?? 'the --agent'}`;
+    const started = store.project?.agentCmd.split(' ')[0].split(/[\\/]/).pop();
+    agentBack.textContent = started === undefined ? t('windows.settings.agentBackDefault') : t('windows.settings.agentBack', { agent: started });
     if (!agentTouched) agent.set(now);
     agentNote.textContent =
-      'Every worker starts on this: hired at a desk, handed an issue or a pull request from the boards, taken off the queue, the board agents and meetings. Where you start one, ✏️ Edit picks another just for it.' +
-      (picked ? ` Set by ${picked.by} ${timeAgo(picked.at)}.` : ' It’s the agent the office was started with, on its own default model.') +
-      (admin ? '' : ' Admins can change it.');
+      t('windows.settings.agentNote') +
+      ` ${picked ? t('windows.settings.setBy', { by: picked.by, when: timeAgo(picked.at) }) : t('windows.settings.agentDefault')}` +
+      (admin ? '' : ` ${t('windows.settings.adminsCanChange')}`);
   };
   paintAgent();
   agentSave.addEventListener('click', () => {
@@ -302,17 +317,17 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   const promptsNote = h('p.setting-note');
   const paintPrompts = () => {
     const n = rewrittenPrompts();
-    promptsOpen.textContent = store.me.admin ? '📝 Edit the prompts…' : '📝 Read the prompts…';
+    promptsOpen.textContent = store.me.admin ? t('windows.settings.promptsEdit') : t('windows.settings.promptsRead');
     promptsNote.textContent =
-      'What 🤖 Hand to a worker, 🔍 Review and the boards’ other buttons tell a worker, the note the queue adds to a task, the board agents’ briefs, the meeting room’s parts and the sign writer’s instructions. ' +
-      (n ? `${n} of them rewritten.` : 'All as the office wrote them.') +
-      (store.me.admin ? '' : ' Admins can rewrite them.');
+      `${t('windows.settings.promptsNote')} ` +
+      (n ? t('windows.settings.promptsRewritten', { n }) : t('windows.settings.promptsOriginal')) +
+      (store.me.admin ? '' : ` ${t('windows.settings.adminsCanRewrite')}`);
   };
   paintPrompts();
 
   // The most workers the office runs at once, across every floor. Admins set it.
-  const limitInput = h('input', { type: 'text', inputmode: 'numeric', 'aria-label': 'Most workers at once', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
-  const limitSave = h('button.btn.primary', { type: 'button' }, 'Set limit');
+  const limitInput = h('input', { type: 'text', inputmode: 'numeric', 'aria-label': t('windows.settings.limitInput'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
+  const limitSave = h('button.btn.primary', { type: 'button' }, t('windows.settings.limitSet'));
   const limitClear = h('button.btn', { type: 'button' });
   const limitRow = h('div.webhook', {}, limitInput, limitSave, limitClear);
   const limitNote = h('p.setting-note');
@@ -320,16 +335,16 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     const m = store.machine;
     const admin = store.me.admin;
     limitRow.classList.toggle('hidden', !admin);
-    limitInput.placeholder = m.ceiling ? `1 to ${m.ceiling}` : 'e.g. 6';
-    limitClear.textContent = m.ceiling ? `Back to ${m.ceiling}` : 'No limit';
+    limitInput.placeholder = m.ceiling ? t('windows.settings.limitRange', { n: m.ceiling }) : t('windows.settings.limitExample');
+    limitClear.textContent = m.ceiling ? t('windows.settings.limitBack', { n: m.ceiling }) : t('windows.settings.limitNone');
     limitClear.classList.toggle('hidden', !m.set);
     const now =
       m.limit === undefined
-        ? `No limit: the office hires a worker for every free seat. ${m.workers} ${m.workers === 1 ? 'is' : 'are'} here now, across every floor.`
-        : `At most ${m.limit} worker${m.limit === 1 ? '' : 's'} at once, across every floor (${m.workers} now), shells and board agents too. Hiring past that is refused.`;
-    const from = m.set ? ` Set by ${m.set.by} ${timeAgo(m.set.at)}.` : '';
-    const cap = m.ceiling ? ` The office was started with --max-workers ${m.ceiling}, so it can't go any higher.` : '';
-    limitNote.textContent = now + from + cap + (admin ? '' : ' Admins can change it.');
+        ? t('windows.settings.limitNoneNote', { n: m.workers })
+        : t('windows.settings.limitAtNote', { limit: m.limit, n: m.workers });
+    const from = m.set ? ` ${t('windows.settings.setBy', { by: m.set.by, when: timeAgo(m.set.at) })}` : '';
+    const cap = m.ceiling ? ` ${t('windows.settings.limitCeiling', { n: m.ceiling })}` : '';
+    limitNote.textContent = now + from + cap + (admin ? '' : ` ${t('windows.settings.adminsCanChange')}`);
   };
   paintLimit();
   const saveLimit = () => {
@@ -345,14 +360,14 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   limitClear.addEventListener('click', () => net.send({ t: 'machine.limit', limit: null }));
 
   // Whether a worker whose pull request merged goes home by itself, for everyone.
-  const leaveRow = h('div.seg', { role: 'radiogroup', 'aria-label': 'Workers whose pull request merged' });
+  const leaveRow = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.settings.leaveGroup') });
   const leaveNote = h('p.setting-note');
   const paintLeave = () => {
     const { on, by, at } = store.leaveOnMerge;
     leaveRow.replaceChildren(
       ...([
-        [true, '🏠 Go home by themselves'],
-        [false, '🪑 Stay until sent home'],
+        [true, t('windows.settings.leaveGo')],
+        [false, t('windows.settings.leaveStay')],
       ] as const).map(([value, label]) =>
         h(
           'button.btn',
@@ -370,16 +385,16 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
       ),
     );
     const now = on
-      ? 'Once a worker’s pull request merges, it goes home as soon as it isn’t working or waiting on you and nobody has its terminal open, and its worktree and branch are deleted. A worktree with uncommitted changes, or commits that aren’t on GitHub, is kept.'
-      : 'A worker whose pull request merged stays at its desk, outlined in purple, until someone sends it home. Turned on, the ones already merged go too.';
-    leaveNote.textContent = `${now} It’s the same for everyone in the building${by ? `, set by ${by}${at ? ` ${timeAgo(at)}` : ''}` : ''}.`;
+      ? t('windows.settings.leaveGoNote')
+      : t('windows.settings.leaveStayNote');
+    leaveNote.textContent = `${now} ${sameForAll(by, at)}`;
   };
   paintLeave();
 
   // Where the elevator clones new projects on the office's machine. Admins move it.
-  const dirInput = h('input', { type: 'text', placeholder: '~/Workspace', 'aria-label': 'Workspace folder', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
-  const dirSave = h('button.btn.primary', { type: 'button' }, 'Save');
-  const dirDefault = h('button.btn', { type: 'button' }, 'Use the default');
+  const dirInput = h('input', { type: 'text', placeholder: '~/Workspace', 'aria-label': t('windows.settings.workspaceInput'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
+  const dirSave = h('button.btn.primary', { type: 'button' }, t('windows.settings.save'));
+  const dirDefault = h('button.btn', { type: 'button' }, t('windows.settings.useDefault'));
   const dirRow = h('div.webhook', {}, dirInput, dirSave);
   const dirActions = h('div.seg', { style: 'margin-top:8px' }, dirDefault);
   const dirNote = h('p.setting-note');
@@ -390,9 +405,9 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     dirRow.classList.toggle('hidden', !admin);
     dirActions.classList.toggle('hidden', !admin || !custom);
     dirNote.textContent =
-      `New projects from the elevator are cloned into ${dir}/<owner>/<repo> on the office’s machine.` +
-      (custom && by && at ? ` Set by ${by} ${timeAgo(at)}.` : '') +
-      (admin ? ' A checkout of the same repository that’s already there is used as it is. Floors you already have stay where they are.' : ' An admin can move it.');
+      t('windows.settings.workspaceNote', { path: `${dir}/<owner>/<repo>` }) +
+      (custom && by && at ? ` ${t('windows.settings.setBy', { by, when: timeAgo(at) })}` : '') +
+      ` ${admin ? t('windows.settings.workspaceAdminNote') : t('windows.settings.workspaceAnAdmin')}`;
   };
   paintDir();
   const saveDir = () => {
@@ -407,16 +422,16 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   dirDefault.addEventListener('click', () => net.send({ t: 'floor.projectsDir', dir: '' }));
 
   // The dog on this floor, named for everyone here.
-  const dogInput = h('input', { type: 'text', maxlength: DOG_NAME_MAX, 'aria-label': 'The dog’s name', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
-  const dogSave = h('button.btn.primary', { type: 'button' }, 'Rename');
+  const dogInput = h('input', { type: 'text', maxlength: DOG_NAME_MAX, 'aria-label': t('windows.settings.dogName'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
+  const dogSave = h('button.btn.primary', { type: 'button' }, t('windows.settings.rename'));
   const dogNote = h('p.setting-note');
-  const dogSection = h('div', {}, h('label', { style: 'margin-top:18px' }, 'Office dog'), h('div.webhook', {}, dogInput, dogSave), dogNote);
+  const dogSection = h('div', {}, h('label', { style: 'margin-top:18px' }, t('windows.settings.officeDog')), h('div.webhook', {}, dogInput, dogSave), dogNote);
   const paintDog = () => {
     const dog = store.dog;
     dogSection.classList.toggle('hidden', !dog);
     if (!dog) return;
     dogInput.placeholder = dog.name;
-    dogNote.textContent = `${dog.name} lives on this floor. When a worker needs input, ${dog.name} runs to its desk and barks. Walk up and press E to pet it. A new name is for everyone on this floor.`;
+    dogNote.textContent = t('windows.settings.dogNote', { name: dog.name });
   };
   paintDog();
   const renameDog = () => {
@@ -431,73 +446,73 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   });
 
   const account = store.me.account;
-  const signOut = h('button.btn', { type: 'button' }, '🚪 Sign out');
+  const signOut = h('button.btn', { type: 'button' }, t('windows.settings.signOut'));
   signOut.addEventListener('click', onSignOut);
-  const character = h('button.btn', { type: 'button' }, account ? '🧍 Change your look' : '🧍 Change your look & name');
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
+  const character = h('button.btn', { type: 'button' }, account ? t('windows.settings.changeLook') : t('windows.settings.changeLookName'));
+  const close = h('button.btn.close', { 'aria-label': t('windows.common.close') }, '✕');
   const el = h(
     'div.modal',
-    { role: 'dialog', 'aria-label': 'Settings' },
-    h('header', {}, h('h2', {}, '⚙️ Settings'), close),
+    { role: 'dialog', 'aria-label': t('windows.settings.dialog') },
+    h('header', {}, h('h2', {}, t('windows.settings.title')), close),
     h(
       'div.body',
       {},
       h('label', {}, t('core.language')),
       langRow,
       h('p.setting-note', {}, t('core.languageNote')),
-      h('label', { style: 'margin-top:18px' }, 'Camera view'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.cameraView')),
       seg,
       note,
-      h('label', { style: 'margin-top:18px' }, 'Office sounds'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.officeSounds')),
       soundRow,
-      h('p.setting-note', {}, 'Workers typing, footsteps, the coffee machine, birds and rain outside, the dog, and the ding when a worker is done. Voice chat isn’t affected.'),
-      h('label', { style: 'margin-top:18px' }, 'Voice chat'),
+      h('p.setting-note', {}, t('windows.settings.officeSoundsNote')),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.voiceChat')),
       talkRow,
-      h('p.setting-note', {}, 'Either way, V joins voice, holding V talks and you’re muted once you let go, and M mutes or unmutes. With push to talk you join muted. Leave voice from the ☰ menu.'),
-      h('label', { style: 'margin-top:18px' }, '🎵 Jukebox'),
+      h('p.setting-note', {}, t('windows.settings.voiceChatNote')),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.jukebox')),
       musicRow,
-      h('p.setting-note', {}, 'The jukebox in the lounge. Everyone on the floor hears the same song, louder the closer they are to it; this is how loud it is for you alone.'),
+      h('p.setting-note', {}, t('windows.settings.jukeboxNote')),
       ...(outside
         ? [
-            h('label', { style: 'margin-top:18px' }, 'Outside'),
+            h('label', { style: 'margin-top:18px' }, t('windows.settings.outside')),
             h('p.outside-now', {}, outside.now),
-            h('p.setting-note', {}, outside.live ? 'Everyone sees the same sky: the office’s clock and the live weather where it is.' : 'Everyone sees the same sky: the office’s clock, and weather that comes and goes. Start the office with --city to use a real city’s forecast.'),
+            h('p.setting-note', {}, outside.live ? t('windows.settings.skyLive') : t('windows.settings.skyMade')),
           ]
         : []),
-      h('label', { style: 'margin-top:18px' }, 'Holiday theme'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.holidayTheme')),
       themeRow,
       themeNote,
-      h('label', { style: 'margin-top:18px' }, 'Desktop notifications'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.desktopNotifications')),
       notifyRow,
       notifyNote,
-      h('label', { style: 'margin-top:18px' }, 'Team notifications (Slack / Discord)'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.teamNotifications')),
       h('div.webhook', {}, hookInput, hookSave),
       hookActions,
       hookStatus,
-      h('label', { style: 'margin-top:18px' }, '🤖 Default worker'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.defaultWorker')),
       agentNow,
       agent.element,
       agentActions,
       agentNote,
-      h('label', { style: 'margin-top:18px' }, '📝 Prompts'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.prompts')),
       promptsOpen,
       promptsNote,
-      h('label', { style: 'margin-top:18px' }, '👷 Worker limit'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.workerLimit')),
       limitRow,
       limitNote,
-      h('label', { style: 'margin-top:18px' }, '🎉 Workers whose pull request merged'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.leave')),
       leaveRow,
       leaveNote,
-      h('label', { style: 'margin-top:18px' }, '📁 Workspace folder'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.workspace')),
       dirRow,
       dirActions,
       dirNote,
       dogSection,
-      h('label', { style: 'margin-top:18px' }, 'Your character'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.yourCharacter')),
       character,
-      h('label', { style: 'margin-top:18px' }, 'Signed in'),
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.signedIn')),
       h('div.volume', {}, signOut),
-      h('p.setting-note', {}, account ? `As ${account.name}, with your own account (${account.role}).` : 'With the shared office password.'),
+      h('p.setting-note', {}, account ? t('windows.settings.signedInAs', { name: account.name, role: account.role }) : t('windows.settings.sharedPassword')),
     ),
   );
   const offNotify = store.on('notify', paintHook);

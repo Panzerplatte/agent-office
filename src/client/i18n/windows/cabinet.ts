@@ -1,0 +1,43 @@
+import { strings } from '../table';
+
+/** ui/cabinet.ts: the arcade cabinet in the lounge, up close. */
+export default strings(
+  {
+    'cabinet.watchingLabel': '{name} playing {game}',
+    'cabinet.stopPlaying': '✕ Stop playing',
+    'cabinet.stopWatching': '✕ Stop watching',
+    'cabinet.controls': '← → move · ↑ turn · ↓ faster · Space drop · C hold · P pause',
+    'cabinet.watching': '👀 Watching {name}',
+    'cabinet.openTerminal': '💬 Open its terminal',
+    'cabinet.carryOn': '▶ Carry on',
+    'cabinet.needsInput': '🙋 {name} needs input{desk}',
+    'cabinet.needsYou': '{name} needs you{desk}',
+    'cabinet.pToCarryOn': 'P to carry on',
+    'cabinet.ranked': '🏆 #{rank} on the table! Enter: again',
+    'cabinet.playAgain': 'Enter to play again',
+    'cabinet.backSoon': 'Back in a moment',
+    'cabinet.pressToCarryOn': 'PRESS E TO CARRY ON',
+    'cabinet.pressToPlay': 'PRESS E TO PLAY',
+    'cabinet.atDesk': ' at {desk}',
+    'cabinet.atStation': ' at the {desk}',
+  },
+  {
+    'cabinet.watchingLabel': '{name} spielt {game}',
+    'cabinet.stopPlaying': '✕ Aufhören',
+    'cabinet.stopWatching': '✕ Nicht mehr zuschauen',
+    'cabinet.controls': '← → bewegen · ↑ drehen · ↓ schneller · Space fallen lassen · C halten · P Pause',
+    'cabinet.watching': '👀 Du schaust {name} zu',
+    'cabinet.openTerminal': '💬 Zum Terminal',
+    'cabinet.carryOn': '▶ Weiterspielen',
+    'cabinet.needsInput': '🙋 {name} braucht eine Antwort{desk}',
+    'cabinet.needsYou': '{name} braucht dich{desk}',
+    'cabinet.pToCarryOn': 'P zum Weiterspielen',
+    'cabinet.ranked': '🏆 Platz {rank}! Enter: nochmal',
+    'cabinet.playAgain': 'Enter: nochmal spielen',
+    'cabinet.backSoon': 'Gleich zurück',
+    'cabinet.pressToCarryOn': 'DRÜCK E ZUM WEITERSPIELEN',
+    'cabinet.pressToPlay': 'DRÜCK E ZUM SPIELEN',
+    'cabinet.atDesk': ' bei {desk}',
+    'cabinet.atStation': ' bei {desk}',
+  },
+);
