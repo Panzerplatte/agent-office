@@ -3,6 +3,7 @@ import { BALCONY, FLOOR, GOLF_HOLE, GOLF_TEE, ROAD, SLAB, STOREY, STREET_Y, WALL
 import type { Collider, Interactable } from './office';
 import { bulb, neighbourBoxes, streetLamp, tree, type NightParts } from './outside';
 import { disposeSprite, mergeByMaterial, mesh, textPlane, textSprite, toon } from './toon';
+import { locale, t } from '../i18n';
 
 // Golf off the balcony: the tee out there (a square of turf, a ball on a tee, a bag of clubs), the
 // hole across the street it's hit at (a green with a flag on it, a fairway up to it, bunkers), and
@@ -244,7 +245,7 @@ export function buildGreen(ground: THREE.Group, colliders: Collider[], night: Ni
     colliders.push({ minX: sx + dx - 0.08, maxX: sx + dx + 0.08, minZ: sz - 0.08, maxZ: sz + 0.08, bottom: G, top: G + 1.5 });
   }
   ground.add(mergeByMaterial(parts));
-  const sign = textPlane('⛳ Hole 1 · Par 1', { bg: '#2b2d42', color: '#fffaf3', size: 64, border: '#fffaf3' });
+  const sign = textPlane(t('world.signGolf'), { bg: '#2b2d42', color: '#fffaf3', size: 64, border: '#fffaf3' });
   sign.position.set(sx, G + 1.5, sz - 0.07);
   sign.rotation.y = Math.PI;
   ground.add(sign);
@@ -479,27 +480,28 @@ export function fly(shot: Shot, street: number, index: number): Flight {
 /** A distance to the pin, as it's read out: "40 cm", "3.4 m", "27 m". */
 export function pinText(m: number): string {
   if (m < 1) return `${Math.round(m * 100)} cm`;
-  return m < 10 ? `${m.toFixed(1)} m` : `${Math.round(m)} m`;
+  return m < 10 ? `${m.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m` : `${Math.round(m)} m`;
 }
 
 /** Where a ball stopped, in words. */
 export function lieText(f: Flight): string {
-  if (f.holed) return 'In the hole!';
+  if (f.holed) return t('world.lieHoled');
+  const pin = pinText(f.fromPin);
   switch (f.lie) {
     case 'lost':
-      return 'Lost';
+      return t('world.lieLost');
     case 'deck':
-      return "Didn't clear the railing";
+      return t('world.lieDeck');
     case 'below':
-      return 'Onto the balcony below';
+      return t('world.lieBelow');
     case 'roof':
-      return 'On the roof';
+      return t('world.lieRoof');
     case 'sand':
-      return `In the bunker · ${pinText(f.fromPin)}`;
+      return t('world.lieSand', { pin });
     case 'green':
-      return `On the green · ${pinText(f.fromPin)}`;
+      return t('world.lieGreen', { pin });
     default:
-      return `${pinText(f.fromPin)} from the pin`;
+      return t('world.lieFromPin', { pin });
   }
 }
 

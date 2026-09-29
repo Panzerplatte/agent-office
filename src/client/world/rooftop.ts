@@ -7,6 +7,7 @@ import { buildElevator, type Elevator } from './elevator';
 import type { Collider, Interactable } from './office';
 import { bulb, type NightParts } from './outside';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
+import { t } from '../i18n';
 
 // The rooftop bar, on top of the building (see shared/rooftop.ts): a deck with a glass railing round
 // it and the city all around, the elevator's housing where you arrive, a DJ on a stage under a rig
@@ -295,7 +296,7 @@ export function buildRooftop(night: NightParts, floors: number): Rooftop {
 
   // The elevator, in its housing: a back wall and a roof over the shaft (as tall as a floor), with a light on top.
   const elevator = buildElevator();
-  elevator.setSign('🍸 Rooftop bar');
+  elevator.setSign(t('world.signRooftop'));
   group.add(elevator.group);
   colliders.push(...elevator.colliders);
   interactables.push(elevator.interactable);
@@ -780,6 +781,7 @@ export function buildRooftop(night: NightParts, floors: number): Rooftop {
   const tmp = new THREE.Color();
   const tmp2 = new THREE.Color();
   /** `calm`: the slow washes whatever the set is doing, for anyone who'd rather nothing flashed. */
+  const getReady = t('world.djGetReady');
   const drawLed = (f: DjFrame, t: number, calm: boolean) => {
     const g = ledCtx;
     const W = 512;
@@ -820,7 +822,7 @@ export function buildRooftop(night: NightParts, floors: number): Rooftop {
       }
       g.globalAlpha = 0.85;
     }
-    const words = f.part === 'drop' ? 'AGENT OFFICE' : f.part === 'build' ? 'GET READY' : 'DJ MERGE CONFLICT';
+    const words = f.part === 'drop' ? 'AGENT OFFICE' : f.part === 'build' ? getReady : 'DJ MERGE CONFLICT';
     fitFont(g, words, 60, W - 40);
     g.textAlign = 'center';
     g.textBaseline = 'middle';

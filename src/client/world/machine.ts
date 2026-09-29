@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MachineState } from '../../shared/protocol';
+import { locale, t } from '../i18n';
 
 const FONT = 'Nunito, ui-rounded, system-ui, sans-serif';
 const INK = '#1b1d2e';
@@ -12,7 +13,8 @@ export function loadColor(pct: number): string {
 
 export function fmtGb(bytes: number): string {
   const gb = bytes / 2 ** 30;
-  return `${gb.toFixed(gb < 10 ? 1 : 0)} GB`;
+  const digits = gb < 10 ? 1 : 0;
+  return `${gb.toLocaleString(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })} GB`;
 }
 
 /** The office has as many workers as it takes. */
@@ -22,7 +24,7 @@ export function officeFull(s: MachineState): boolean {
 
 /** What the hire dialog says while the machine is under pressure. */
 export function pressureNote(s: MachineState): string | undefined {
-  return s.pressure ? `⚠️ This machine is under pressure: ${s.pressure}. Another worker may slow down the ones already working.` : undefined;
+  return s.pressure ? t('world.pressureNote', { why: s.pressure }) : undefined;
 }
 
 /**
@@ -60,9 +62,9 @@ export class MachineTexture {
     g.textAlign = 'left';
     g.fillStyle = '#ffffff';
     g.font = `900 40px ${FONT}`;
-    g.fillText('🖥️ This machine', 30, 62);
+    g.fillText(t('world.machineTitle'), 30, 62);
     const full = officeFull(s);
-    const status = !s.memTotal ? ['…', MUTED] : s.pressure ? ['⚠️ Under pressure', '#ef476f'] : full ? ['🚫 Office full', '#ffd166'] : ['✅ Room to hire', '#06d6a0'];
+    const status = !s.memTotal ? ['…', MUTED] : s.pressure ? [t('world.machinePressure'), '#ef476f'] : full ? [t('world.machineFull'), '#ffd166'] : [t('world.machineRoom'), '#06d6a0'];
     g.font = `800 30px ${FONT}`;
     const tw = g.measureText(status[0]).width;
     g.fillStyle = status[1];
@@ -73,15 +75,15 @@ export class MachineTexture {
     g.fillText(status[0], W - 30 - (tw + 32) / 2, 60);
 
     const memPct = s.memTotal ? Math.round((s.memUsed / s.memTotal) * 100) : 0;
-    this.panel(30, 100, 415, 'CPU', s.cpu, s.cores ? `${s.cores} core${s.cores === 1 ? '' : 's'}` : '', s.history.map(([c]) => c));
-    this.panel(475, 100, 415, 'Memory', memPct, s.memTotal ? `${fmtGb(s.memUsed)} of ${fmtGb(s.memTotal)}` : '', s.history.map(([, m]) => m));
+    this.panel(30, 100, 415, t('world.machineCpu'), s.cpu, s.cores ? t('world.machineCores', { n: s.cores }) : '', s.history.map(([c]) => c));
+    this.panel(475, 100, 415, t('world.machineMemory'), memPct, s.memTotal ? t('world.machineMemOf', { used: fmtGb(s.memUsed), total: fmtGb(s.memTotal) }) : '', s.history.map(([, m]) => m));
 
     // Footer: the workers, one pip each, against the limit.
     const y = 440;
     g.textAlign = 'left';
     g.font = `800 32px ${FONT}`;
     g.fillStyle = '#ffffff';
-    const label = s.limit === undefined ? `👷 ${s.workers} worker${s.workers === 1 ? '' : 's'} · no limit` : `👷 ${s.workers} of ${s.limit} workers`;
+    const label = s.limit === undefined ? t('world.machineWorkers', { n: s.workers }) : t('world.machineWorkersOf', { n: s.workers, limit: s.limit });
     g.fillText(label, 30, y + 12);
     if (s.limit !== undefined) {
       const x0 = 30 + g.measureText(label).width + 28;

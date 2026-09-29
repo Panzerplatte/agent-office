@@ -4,6 +4,7 @@ import type { Theme } from '../../shared/protocol';
 import { dogAntlers, dogBatWings, dogRedNose, dogScarf, dogWitchHat } from './costumes';
 import type { Interactable } from './office';
 import { disposeSprite, mesh, textSprite, toon, toonUnique } from './toon';
+import { t } from '../i18n';
 
 export interface DogSounds {
   bark(x: number, z: number, times: number): void;
@@ -178,21 +179,21 @@ export class Dog {
     const s = this.state;
     if (!s) return '';
     const moving = performance.now() < this.arriveAt;
-    const w = s.workerId ? (workerName(s.workerId) ?? 'a worker') : 'a worker';
-    if (s.following) return `following ${personName(s.following) ?? 'someone'}`;
+    const who = (s.workerId && workerName(s.workerId)) || '';
+    if (s.following) return t('world.dogFollowing', { who: personName(s.following) ?? '' });
     switch (s.act) {
       case 'bark':
-        return moving ? `running to ${w}, who needs input` : `barking at ${w}: needs input`;
+        return t(moving ? 'world.dogRunningTo' : 'world.dogBarking', { who });
       case 'nap':
-        return moving ? 'off for a nap' : `napping under ${w}'s desk`;
+        return moving ? t('world.dogOffToNap') : t('world.dogNapping', { who });
       case 'wag':
-        return s.petBy ? `wagging at ${s.petBy}` : 'wagging';
+        return s.petBy ? t('world.dogWaggingAt', { who: s.petBy }) : t('world.dogWagging');
       case 'lie':
-        return moving ? 'trotting to the lounge' : 'lounging';
+        return t(moving ? 'world.dogToLounge' : 'world.dogLounging');
       case 'sniff':
-        return moving ? 'trotting about' : 'sniffing around';
+        return t(moving ? 'world.dogTrotting' : 'world.dogSniffing');
       case 'sit':
-        return 'sitting';
+        return t('world.dogSitting');
       default:
         return '';
     }
@@ -225,7 +226,7 @@ export class Dog {
       if (!this.hushed(s.workerId)) {
         this.sounds.bark(at.x, at.z, this.barks === 0 ? 3 : 2);
         this.woofT = 0;
-        this.say('woof', this.barks === 0 ? 'Woof! Woof! Woof!' : 'Woof! Woof!', 1.4);
+        this.say('woof', t(this.barks === 0 ? 'world.woof3' : 'world.woof2'), 1.4);
       }
       this.barks++;
       this.nextBark = this.arriveAt + this.barks * BARK_EVERY_S * 1000;

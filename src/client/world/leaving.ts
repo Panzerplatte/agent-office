@@ -5,6 +5,7 @@ import type { Worker } from './character';
 import type { Laptop } from './laptop';
 import type { DeskView } from './office';
 import { mesh, toonUnique } from './toon';
+import { t, type Key } from '../i18n';
 
 /** Walking pace on the way out, in m/s: no hurry any more. */
 const PACE = 2.3;
@@ -19,7 +20,7 @@ const GONE = 0.6;
 /** Seconds for a shut laptop to shrink away. */
 const LAPTOP_GONE = 0.3;
 
-const FAREWELLS = ['😢 bye, everyone', '🥲 it was fun', '📦 welp', '😞 cleaning out my desk', '🥺 but my PR…', '😶 security is walking me out'];
+const FAREWELLS: Key[] = ['world.farewell0', 'world.farewell1', 'world.farewell2', 'world.farewell3', 'world.farewell4', 'world.farewell5'];
 
 // Leaving a floor with no exit door, by parachute off the balcony.
 /** Seconds climbing up onto the railing, then teetering on it. */
@@ -36,7 +37,7 @@ const TURN = 1.2;
 /** Seconds for the chute to pop open, and to crumple on the ground once it's down. */
 const POP = 0.45;
 const CRUMPLE = 1.3;
-const JUMPS = ['🪂 geronimo!', '🪂 see ya!', '🪂 wheee!', '🪂 bye bye!', '🪂 I quit!'];
+const JUMPS: Key[] = ['world.jump0', 'world.jump1', 'world.jump2', 'world.jump3', 'world.jump4'];
 const CANOPIES = ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#8338ec', '#ff8a5b'];
 
 /** Seen from below too, so both sides of the fabric. */
@@ -170,7 +171,7 @@ export class Departures {
     // On the seat it faces the desk: the seat anchor is turned round from the desk's own rotation.
     model.root.rotation.set(0, desk.def.rotY + Math.PI, 0);
     model.root.scale.setScalar(scale);
-    model.leave(pick(FAREWELLS));
+    model.leave(t(pick(FAREWELLS)));
     const chair = desk.def.beanbag ? null : desk.chair;
     const up = this.upstairs();
     const chute: Chute | null = up ? { phase: 'walk', t: 0, color: pick(CANOPIES), canopy: null, from: new THREE.Vector3(), vel: new THREE.Vector3(), land: new THREE.Vector3(), angle: 0, radius: 0, height: 1 } : null;
@@ -315,7 +316,7 @@ export class Departures {
       if (p < 1) return true;
       c.phase = 'teeter';
       c.t = 0;
-      l.model.say(pick(JUMPS));
+      l.model.say(t(pick(JUMPS)));
       return true;
     }
     if (c.phase === 'teeter') {
