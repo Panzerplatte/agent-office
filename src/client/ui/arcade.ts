@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { h, openModal, type Modal } from './dom';
 import { H, Minesweeper, W } from './minesweeper';
+import { t } from '../i18n';
 
 /** How much of the view (across or down, whichever runs out first) a screen fills while you play on it. */
 const FILL = 0.8;
@@ -92,13 +93,13 @@ export class Arcade {
     const game = this.game;
     // A finished game stays up on the monitor until the next player sits down to a fresh one.
     if (game.state === 'won' || game.state === 'lost') game.reset();
-    const board = h('canvas', { 'aria-label': 'Minesweeper board' });
-    const stop = h('button.btn', { type: 'button' }, '✕ Stop playing');
+    const board = h('canvas', { 'aria-label': t('windows.arcade.board') });
+    const stop = h('button.btn', { type: 'button' }, t('windows.arcade.stopPlaying'));
     const box = h(
       'div.arcade',
       { role: 'dialog', 'aria-label': 'Minesweeper' },
       h('div.arcade-screen', {}, board),
-      h('div.arcade-bar', {}, h('span', {}, '💣 Minesweeper'), h('span.tip', {}, 'Click to dig · right-click to flag'), stop),
+      h('div.arcade-bar', {}, h('span', {}, '💣 Minesweeper'), h('span.tip', {}, t('windows.arcade.tip')), stop),
     );
 
     // Where the mouse is, in the game's 960×540.

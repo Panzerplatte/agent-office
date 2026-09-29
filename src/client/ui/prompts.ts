@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Net } from '../net';
 import { store } from '../state';
 import { PROMPTS, PROMPT_GROUPS, PROMPT_IDS, PROMPT_MAX, fillPrompt, placeholders, promptText, type PromptGroup, type PromptId, type PromptVars } from '../../shared/prompts';
@@ -31,7 +32,7 @@ export function openPromptEditor(net: Net, first: PromptId = PROMPT_IDS[0]) {
   const text = (id: PromptId) => drafts.get(id) ?? saved(id);
   const dirty = (id: PromptId) => drafts.has(id) && norm(drafts.get(id)!) !== saved(id);
 
-  const list = h('nav.prompt-list', { 'aria-label': 'Prompts' });
+  const list = h('nav.prompt-list', { 'aria-label': t('windows.prompts.list') });
   const items = new Map<PromptId, HTMLButtonElement>();
   const groups = new Map<PromptGroup, PromptId[]>();
   for (const id of PROMPT_IDS) groups.set(PROMPTS[id].group, [...(groups.get(PROMPTS[id].group) ?? []), id]);
@@ -47,18 +48,18 @@ export function openPromptEditor(net: Net, first: PromptId = PROMPT_IDS[0]) {
   const heading = h('h3');
   const status = h('span.prompt-status');
   const used = h('p.prompt-used');
-  const ta = h('textarea.prompt-text', { spellcheck: 'false', 'aria-label': 'Prompt', maxlength: PROMPT_MAX }) as HTMLTextAreaElement;
+  const ta = h('textarea.prompt-text', { spellcheck: 'false', 'aria-label': t('windows.prompts.textLabel'), maxlength: PROMPT_MAX }) as HTMLTextAreaElement;
   const vars = h('div.prompt-vars');
   const warnings = h('div.prompt-warnings');
-  const reset = h('button.btn', { type: 'button', title: 'Put the office’s own wording back in the box (then Save)' }, '↺ Default');
-  const undo = h('button.btn', { type: 'button', title: 'Back to what’s saved' }, 'Undo changes');
-  const save = h('button.btn.primary', { type: 'button' }, 'Save');
+  const reset = h('button.btn', { type: 'button', title: t('windows.prompts.resetTitle') }, t('windows.prompts.reset'));
+  const undo = h('button.btn', { type: 'button', title: t('windows.prompts.undoTitle') }, t('windows.prompts.undo'));
+  const save = h('button.btn.primary', { type: 'button' }, t('windows.prompts.save'));
   const note = h('span.grow');
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
+  const close = h('button.btn.close', { 'aria-label': t('windows.common.close') }, '✕');
   const el = h(
     'div.modal.prompts',
-    { role: 'dialog', 'aria-label': 'Prompts' },
-    h('header', {}, h('h2', {}, '📝 Prompts'), close),
+    { role: 'dialog', 'aria-label': t('windows.prompts.title') },
+    h('header', {}, h('h2', {}, t('windows.prompts.heading')), close),
     h('div.prompts-body', {}, list, h('section.prompt-edit', {}, h('div.prompt-head', {}, heading, status), used, ta, vars, warnings)),
     h('footer', {}, note, reset, undo, save),
   );
@@ -70,7 +71,7 @@ export function openPromptEditor(net: Net, first: PromptId = PROMPT_IDS[0]) {
       const mark = b.querySelector('.prompt-mark')!;
       const edited = !!store.prompts.custom[id];
       mark.textContent = dirty(id) ? '●' : edited ? '✎' : '';
-      b.title = dirty(id) ? 'Not saved yet' : edited ? 'Rewritten' : 'The default';
+      b.title = dirty(id) ? t('windows.prompts.notSaved') : edited ? t('windows.prompts.rewritten') : t('windows.prompts.default');
     }
   };
 
@@ -78,9 +79,9 @@ export function openPromptEditor(net: Net, first: PromptId = PROMPT_IDS[0]) {
     const def = PROMPTS[current];
     const inText = placeholders(ta.value);
     const lines: string[] = [];
-    if (!ta.value.trim() && !def.optional) lines.push('It can’t be empty: write something, or put the default back.');
-    for (const name of inText) if (!(name in def.vars)) lines.push(`{{${name}}} isn’t filled in here, so it’s sent just as it’s written.`);
-    for (const name of def.needs ?? []) if (!inText.includes(name)) lines.push(`The office counts on {{${name}}} (${def.vars[name].toLowerCase()}): without it the worker isn’t told.`);
+    if (!ta.value.trim() && !def.optional) lines.push(t('windows.prompts.empty'));
+    for (const name of inText) if (!(name in def.vars)) lines.push(t('windows.prompts.unknownVar', { name }));
+    for (const name of def.needs ?? []) if (!inText.includes(name)) lines.push(t('windows.prompts.neededVar', { name, what: def.vars[name].toLowerCase() }));
     warnings.replaceChildren(...lines.map((l) => h('p', {}, `⚠️ ${l}`)));
   };
 
@@ -89,27 +90,27 @@ export function openPromptEditor(net: Net, first: PromptId = PROMPT_IDS[0]) {
     const admin = store.me.admin;
     const edit = store.prompts.custom[current];
     heading.textContent = def.label;
-    status.textContent = dirty(current) ? '● Not saved yet' : edit ? `✎ Rewritten by ${edit.by} ${timeAgo(edit.at)}` : 'The default';
+    status.textContent = dirty(current) ? t('windows.prompts.notSavedStatus') : edit ? t('windows.prompts.rewrittenBy', { by: edit.by, ago: timeAgo(edit.at) }) : t('windows.prompts.default');
     status.classList.toggle('dirty', dirty(current));
-    used.textContent = def.used + (def.optional ? ' Leave it empty to send nothing.' : '');
+    used.textContent = def.used + (def.optional ? t('windows.prompts.leaveEmpty') : '');
     ta.readOnly = !admin;
     const names = Object.entries(def.vars);
     vars.replaceChildren(
       ...(names.length
         ? [
-            h('span.prompt-vars-head', {}, admin ? 'Placeholders (click one to put it in):' : 'Placeholders:'),
+            h('span.prompt-vars-head', {}, admin ? t('windows.prompts.varsAdmin') : t('windows.prompts.vars')),
             ...names.map(([name, desc]) =>
               h('button.prompt-var', { type: 'button', title: desc, disabled: !admin, onclick: () => insert(`{{${name}}}`) }, h('code', {}, `{{${name}}}`), h('small', {}, desc)),
             ),
           ]
-        : [h('span.prompt-vars-head', {}, 'No placeholders: it’s sent just as it’s written.')]),
+        : [h('span.prompt-vars-head', {}, t('windows.prompts.noVars'))]),
     );
     reset.classList.toggle('hidden', !admin);
     reset.toggleAttribute('disabled', norm(ta.value) === def.text);
     undo.classList.toggle('hidden', !admin || !dirty(current));
     save.classList.toggle('hidden', !admin);
     save.toggleAttribute('disabled', !dirty(current));
-    note.textContent = admin ? 'For the whole office, on every floor. A rewritten prompt is used from the next time it’s sent.' : 'Only admins can change the office’s prompts. This is what they say now.';
+    note.textContent = admin ? t('windows.prompts.noteAdmin') : t('windows.prompts.note');
     paintItems();
     paintWarnings();
   };

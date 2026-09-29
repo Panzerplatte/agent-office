@@ -1,4 +1,5 @@
 import type { ServerMsg, TeamState } from '../../shared/protocol';
+import { t as tr } from '../i18n';
 import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal } from './dom';
@@ -25,14 +26,13 @@ export function tunnelCommand(t: TeamState, os: Os): string {
 }
 
 function inviteMessage(t: TeamState, os: Os): string {
-  const project = store.project?.name ?? 'our';
   return [
-    `You're invited to the ${project} Agent Office. Run this in a terminal (${OS_LABEL[os]}):`,
+    tr('windows.team.inviteHead', { project: store.project?.name ?? '', os: OS_LABEL[os] }),
     '',
     tunnelCommand(t, os),
     '',
-    `It opens the office at http://localhost:${t.port} — sign in (with the office password, or the account link you get from me) and keep that terminal open while you're in.`,
-    t.fingerprint ? `The first time, ssh asks whether to trust the server. Only say yes if it shows ${t.fingerprint}` : '',
+    tr('windows.team.inviteOpens', { url: `http://localhost:${t.port}` }),
+    t.fingerprint ? tr('windows.team.inviteFingerprint', { fingerprint: t.fingerprint }) : '',
   ]
     .filter((l, i, all) => l || all[i - 1])
     .join('\n')
@@ -58,7 +58,7 @@ export async function copy(text: string): Promise<boolean> {
 export function copyButton(label: string, text: () => string, cls = '') {
   const btn = h('button.btn', { type: 'button', class: cls }, label);
   btn.addEventListener('click', async () => {
-    btn.textContent = (await copy(text())) ? '✓ Copied' : 'Copy failed';
+    btn.textContent = (await copy(text())) ? tr('windows.team.copied') : tr('windows.team.copyFailed');
     setTimeout(() => (btn.textContent = label), 1600);
   });
   return btn;
@@ -74,13 +74,13 @@ export function openTeam(net: Net) {
   let os = guessOs();
   let status: HTMLElement | null = null;
   const body = h('div.body.team');
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
-  const copyMsg = copyButton('✉️ Copy invite message', () => (store.team ? inviteMessage(store.team, os) : ''), 'primary');
-  const footer = h('footer', {}, h('span.grow', {}, 'Invited people still need to sign in: the office password, or an account from 🔑 Accounts.'), copyMsg);
-  const el = h('div.modal', { role: 'dialog', 'aria-label': 'Invite teammates', style: 'width:min(680px,100%)' }, h('header', {}, h('h2', {}, '👥 Invite teammates'), close), body, footer);
+  const close = h('button.btn.close', { 'aria-label': tr('windows.common.close') }, '✕');
+  const copyMsg = copyButton(tr('windows.team.copyInvite'), () => (store.team ? inviteMessage(store.team, os) : ''), 'primary');
+  const footer = h('footer', {}, h('span.grow', {}, tr('windows.team.footer')), copyMsg);
+  const el = h('div.modal', { role: 'dialog', 'aria-label': tr('windows.team.title'), style: 'width:min(680px,100%)' }, h('header', {}, h('h2', {}, tr('windows.team.heading')), close), body, footer);
 
-  const input = h('input', { type: 'text', maxlength: 40, placeholder: 'GitHub username', 'aria-label': 'GitHub username', autocomplete: 'off', spellcheck: 'false' }) as HTMLInputElement;
-  const inviteBtn = h('button.btn.primary', { type: 'submit' }, 'Invite');
+  const input = h('input', { type: 'text', maxlength: 40, placeholder: tr('windows.team.github'), 'aria-label': tr('windows.team.github'), autocomplete: 'off', spellcheck: 'false' }) as HTMLInputElement;
+  const inviteBtn = h('button.btn.primary', { type: 'submit' }, tr('windows.team.invite'));
   const form = h('form.invite-row', {}, input, inviteBtn) as HTMLFormElement;
   const setStatus = (text: string, kind: 'busy' | 'ok' | 'error') => {
     status = h('p.team-status', { class: kind }, text);
@@ -91,7 +91,7 @@ export function openTeam(net: Net) {
     const github = input.value.trim();
     if (!github) return input.focus();
     inviteBtn.disabled = true;
-    setStatus(`Fetching ${github}'s keys from GitHub…`, 'busy');
+    setStatus(tr('windows.team.fetching', { github }), 'busy');
     net.send({ t: 'team.invite', github });
   });
 
@@ -100,14 +100,14 @@ export function openTeam(net: Net) {
     const t = store.team;
     const typing = document.activeElement === input;
     body.replaceChildren();
-    if (!t) return body.append(h('p.empty', {}, 'Loading…'));
+    if (!t) return body.append(h('p.empty', {}, tr('windows.team.loading')));
     footer.classList.toggle('hidden', !!t.unavailable);
     if (t.unavailable) return body.append(h('p', { style: 'margin:0;font-weight:700' }, t.unavailable));
 
     body.append(
-      h('label', {}, 'Invite someone by their GitHub username'),
+      h('label', {}, tr('windows.team.inviteLabel')),
       form,
-      h('p.note', {}, 'Their SSH keys from github.com/<username>.keys can open a tunnel to this office — nothing else: no shell on the machine, no other ports.'),
+      h('p.note', {}, tr('windows.team.keysNote')),
     );
     if (status) body.append(status);
     if (t.error) body.append(h('p.team-status.error', {}, t.error));
@@ -120,32 +120,32 @@ export function openTeam(net: Net) {
       ),
     );
     body.append(
-      h('div.team-head', {}, h('h4', {}, 'Then send them this'), tabs),
-      h('div.cmd', {}, h('pre', {}, tunnelCommand(t, os)), copyButton('Copy', () => tunnelCommand(t, os))),
+      h('div.team-head', {}, h('h4', {}, tr('windows.team.sendThis')), tabs),
+      h('div.cmd', {}, h('pre', {}, tunnelCommand(t, os)), copyButton(tr('windows.team.copy'), () => tunnelCommand(t, os))),
       h(
         'p.note',
         {},
-        `It opens the tunnel and http://localhost:${t.port} in their browser. They keep the terminal open while they're in. `,
-        t.fingerprint ? h('span', {}, 'The first time, ssh asks whether to trust the server: the fingerprint must be ', h('code', {}, t.fingerprint), '.') : null,
+        tr('windows.team.opensNote', { url: `http://localhost:${t.port}` }),
+        t.fingerprint ? h('span', {}, tr('windows.team.fingerprint1'), h('code', {}, t.fingerprint), tr('windows.team.fingerprint2')) : null,
       ),
-      h('p.note', {}, 'SSH only answers IP addresses you allowed. If theirs isn\'t, run ', h('code', {}, 'deploy/aws.sh allow <their-ip>'), ' (or ', h('code', {}, 'allow anywhere'), ') on your machine.'),
+      h('p.note', {}, tr('windows.team.allow1'), h('code', {}, 'deploy/aws.sh allow <their-ip>'), tr('windows.team.allow2'), h('code', {}, 'allow anywhere'), tr('windows.team.allow3')),
     );
 
     const list = h('ul.team-list');
     for (const m of t.members) {
-      const remove = h('button.btn', { type: 'button', title: `Remove ${m.name}'s access` }, 'Remove');
+      const remove = h('button.btn', { type: 'button', title: tr('windows.team.removeTitle', { name: m.name }) }, tr('windows.team.remove'));
       remove.addEventListener('click', () =>
         confirmDialog(
-          `Remove ${m.name}?`,
-          `Their keys stop working right away. Every open tunnel drops for a moment too (other teammates just re-run their command). ${m.name} still knows the office password.`,
-          'Remove',
+          tr('windows.team.removeQ', { name: m.name }),
+          tr('windows.team.removeBody', { name: m.name }),
+          tr('windows.team.remove'),
           () => net.send({ t: 'team.remove', name: m.name }),
         ),
       );
-      list.append(h('li', {}, h('span.name', {}, m.name), h('span.keys', {}, `${m.keys} key${m.keys === 1 ? '' : 's'}`), remove));
+      list.append(h('li', {}, h('span.name', {}, m.name), h('span.keys', {}, tr('windows.team.keys', { n: m.keys })), remove));
     }
-    if (!t.members.length) list.append(h('li.empty', {}, 'Nobody yet'));
-    body.append(h('h4', {}, `Invited `, h('span.count', {}, String(t.members.length))), list);
+    if (!t.members.length) list.append(h('li.empty', {}, tr('windows.team.nobody')));
+    body.append(h('h4', {}, tr('windows.team.invited'), h('span.count', {}, String(t.members.length))), list);
     if (typing || !focused) setTimeout(() => input.focus(), 30);
     focused = true;
   };
@@ -154,7 +154,7 @@ export function openTeam(net: Net) {
     inviteBtn.disabled = false;
     if (msg.error) return setStatus(msg.error, 'error');
     input.value = '';
-    setStatus(`✅ ${msg.name} is invited (${msg.keys} key${msg.keys === 1 ? '' : 's'}). Send them the command below.`, 'ok');
+    setStatus(tr('windows.team.invitedOk', { name: msg.name ?? '', n: msg.keys ?? 0 }), 'ok');
   };
   const unsub = store.on('team', render);
   const modal = openModal(el, {

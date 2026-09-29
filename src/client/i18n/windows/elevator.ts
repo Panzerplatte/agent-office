@@ -1,4 +1,133 @@
 import { strings } from '../table';
 
+const s = (n: string | number, one: string, many: string) => (Number(n) === 1 ? one : many);
+
 /** ui/elevator.ts */
-export default strings({}, {});
+export default strings(
+  {
+    'elevator.title': 'Elevator',
+    'elevator.heading': '🛗 Elevator',
+    'elevator.headingSetup': '🏢 Welcome to Agent Office',
+    'elevator.introSome': 'Every project is a floor of this building. Pick a floor to ride to, or add another project.',
+    'elevator.introNone': 'Every project is a floor of this building, and it doesn’t have any yet. Pick one of your repositories: the office clones it and it becomes the first floor.',
+    'elevator.foot': 'Pick a floor · Esc to stay here',
+    'elevator.footSetup': 'Your office, one floor per project',
+    'elevator.noFloors': 'No floors yet.',
+
+    // A floor's button
+    'elevator.cloning': '⏳ Cloning…',
+    'elevator.statWorking': 'Working',
+    'elevator.statWaiting': 'Waiting on someone',
+    'elevator.statDesks': 'Workers at desks',
+    'elevator.statPeople': 'People on this floor',
+    'elevator.onThisFloor': 'You’re on this floor',
+    'elevator.stillCloning': 'Still being cloned',
+    'elevator.rideTo': 'Ride to {name}',
+    'elevator.youAreHere': 'you are here',
+    'elevator.onRoof': 'You’re up on the roof',
+    'elevator.rideUp': 'Ride up to the rooftop bar',
+    'elevator.roofSub': 'The roof: a DJ playing drum and bass, a bar, and the city all around',
+    'elevator.peopleUpThere': 'People up there',
+
+    // Taking a floor off the building
+    'elevator.removeTitle': 'Take {name} off the building',
+    'elevator.removeLabel': 'Remove {name}',
+    'elevator.removeAsk': 'Take {name} off the building?',
+    'elevator.removeWorkers': (v) => `Its ${v.n} ${s(v.n, 'worker stops', 'workers stop')}. `,
+    'elevator.removePeopleTo': 'Everyone on it rides the elevator to {name}. ',
+    'elevator.removePeopleLobby': 'Everyone on it rides the elevator to the lobby. ',
+    'elevator.removeOwn': ' The office keeps its own settings there too, so it carries on as before, just without this floor.',
+    'elevator.removeBody': '{workers}{people}Nothing is deleted: its checkout stays in {dir}, .agent-office folder and all.{own}',
+    'elevator.removeButton': '🗑 Remove floor',
+
+    // Adding a project
+    'elevator.addProject': '➕ Add a project',
+    'elevator.firstProject': 'Pick your first project',
+    'elevator.addFloor': '🛗 Add floor',
+    'elevator.addRepo': '🛗 Add {repo}',
+    'elevator.repoPlaceholder': 'Search your repositories, or type owner/name',
+    'elevator.repoLabel': 'Repository',
+    'elevator.reposLabel': 'Repositories',
+    'elevator.refresh': 'Ask GitHub for the list again',
+    'elevator.private': 'Private',
+    'elevator.floorNo': 'floor {n}',
+    'elevator.notInList': 'Not in your list — the office will try to clone it',
+    'elevator.asking': 'Asking GitHub for your repositories…',
+    'elevator.nothingMatches': 'Nothing matches. Type owner/name to clone any repository.',
+    'elevator.noRepos': 'No repositories.',
+    'elevator.more': '…and {n} more — type to narrow it down',
+    'elevator.cloningInto': '⏳ Cloning {repo} into {dir}… A big repository can take a minute.',
+    'elevator.clonedInto': 'Cloned into {dest} with this machine’s gh login. Everything on the new floor works in that checkout.',
+    'elevator.addFailed': 'The floor could not be added',
+
+    // Where clones go
+    'elevator.dirLabel': 'Workspace folder',
+    'elevator.dirChange': '📁 Change folder',
+    'elevator.dirChangeTitle': 'Clone new projects into another folder on the office’s machine',
+    'elevator.save': 'Save',
+    'elevator.cancel': 'Cancel',
+  },
+  {
+    'elevator.title': 'Aufzug',
+    'elevator.heading': '🛗 Aufzug',
+    'elevator.headingSetup': '🏢 Willkommen im Agent Office',
+    'elevator.introSome': 'Jedes Projekt ist eine Etage dieses Gebäudes. Wähle eine Etage, zu der du fahren willst, oder füge ein weiteres Projekt hinzu.',
+    'elevator.introNone': 'Jedes Projekt ist eine Etage dieses Gebäudes, und noch gibt es keine. Wähle eins deiner Repositorys: Das Büro klont es, und es wird die erste Etage.',
+    'elevator.foot': 'Wähle eine Etage · Esc, um hierzubleiben',
+    'elevator.footSetup': 'Dein Büro, eine Etage pro Projekt',
+    'elevator.noFloors': 'Noch keine Etagen.',
+
+    // Der Knopf einer Etage
+    'elevator.cloning': '⏳ Wird geklont…',
+    'elevator.statWorking': 'Bei der Arbeit',
+    'elevator.statWaiting': 'Wartet auf jemanden',
+    'elevator.statDesks': 'Worker an Schreibtischen',
+    'elevator.statPeople': 'Leute auf dieser Etage',
+    'elevator.onThisFloor': 'Du bist auf dieser Etage',
+    'elevator.stillCloning': 'Wird noch geklont',
+    'elevator.rideTo': 'Zu {name} fahren',
+    'elevator.youAreHere': 'du bist hier',
+    'elevator.onRoof': 'Du bist oben auf dem Dach',
+    'elevator.rideUp': 'Hoch zur Dachbar fahren',
+    'elevator.roofSub': 'Das Dach: ein DJ legt Drum & Bass auf, eine Bar, und rundherum die Stadt',
+    'elevator.peopleUpThere': 'Leute dort oben',
+
+    // Eine Etage aus dem Gebäude nehmen
+    'elevator.removeTitle': '{name} aus dem Gebäude nehmen',
+    'elevator.removeLabel': '{name} entfernen',
+    'elevator.removeAsk': '{name} aus dem Gebäude nehmen?',
+    'elevator.removeWorkers': (v) => (Number(v.n) === 1 ? 'Ihr Worker wird beendet. ' : `Ihre ${v.n} Worker werden beendet. `),
+    'elevator.removePeopleTo': 'Alle auf ihr fahren mit dem Aufzug zu {name}. ',
+    'elevator.removePeopleLobby': 'Alle auf ihr fahren mit dem Aufzug in die Lobby. ',
+    'elevator.removeOwn': ' Das Büro hat dort auch seine eigenen Einstellungen und läuft darum weiter wie bisher, nur ohne diese Etage.',
+    'elevator.removeBody': '{workers}{people}Nichts wird gelöscht: Der Checkout bleibt in {dir}, samt .agent-office-Ordner.{own}',
+    'elevator.removeButton': '🗑 Etage entfernen',
+
+    // Ein Projekt hinzufügen
+    'elevator.addProject': '➕ Projekt hinzufügen',
+    'elevator.firstProject': 'Wähle dein erstes Projekt',
+    'elevator.addFloor': '🛗 Etage hinzufügen',
+    'elevator.addRepo': '🛗 {repo} hinzufügen',
+    'elevator.repoPlaceholder': 'Deine Repositorys durchsuchen oder owner/name eingeben',
+    'elevator.repoLabel': 'Repository',
+    'elevator.reposLabel': 'Repositorys',
+    'elevator.refresh': 'GitHub noch mal nach der Liste fragen',
+    'elevator.private': 'Privat',
+    'elevator.floorNo': 'Etage {n}',
+    'elevator.notInList': 'Nicht in deiner Liste — das Büro versucht, es zu klonen',
+    'elevator.asking': 'GitHub wird nach deinen Repositorys gefragt…',
+    'elevator.nothingMatches': 'Nichts passt. Gib owner/name ein, um ein beliebiges Repository zu klonen.',
+    'elevator.noRepos': 'Keine Repositorys.',
+    'elevator.more': '…und {n} weitere — tippe, um einzugrenzen',
+    'elevator.cloningInto': '⏳ {repo} wird nach {dir} geklont… Ein großes Repository kann eine Minute dauern.',
+    'elevator.clonedInto': 'Wird mit dem gh-Login dieses Rechners nach {dest} geklont. Alles auf der neuen Etage arbeitet in diesem Checkout.',
+    'elevator.addFailed': 'Die Etage konnte nicht hinzugefügt werden',
+
+    // Wohin geklont wird
+    'elevator.dirLabel': 'Workspace-Ordner',
+    'elevator.dirChange': '📁 Ordner ändern',
+    'elevator.dirChangeTitle': 'Neue Projekte in einen anderen Ordner auf dem Rechner des Büros klonen',
+    'elevator.save': 'Speichern',
+    'elevator.cancel': 'Abbrechen',
+  },
+);

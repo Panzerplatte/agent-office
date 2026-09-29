@@ -1,4 +1,131 @@
 import { strings } from '../table';
 
+const s = (n: string | number, one: string, many: string) => (Number(n) === 1 ? one : many);
+
 /** ui/accounts.ts */
-export default strings({}, {});
+export default strings(
+  {
+    'accounts.title': 'Accounts',
+    'accounts.heading': '🔑 Accounts',
+    'accounts.loading': 'Loading…',
+    'accounts.signedInAs': 'You’re signed in as {name} ({role}).',
+    'accounts.signedInShared': 'You’re signed in with the shared office password.',
+
+    // Inviting
+    'accounts.inviteSomeone': 'Invite someone',
+    'accounts.namePlaceholder': 'Their name (optional)',
+    'accounts.nameAria': 'Their name',
+    'accounts.roleAria': 'Role',
+    'accounts.optionMember': 'Member',
+    'accounts.optionAdmin': 'Admin',
+    'accounts.makeInvite': 'Make invite link',
+    'accounts.inviteNote': 'You get a link that makes one account, with its own name and password. It works once and expires after 7 days. Leave the name empty and they pick their own.',
+    'accounts.copy': 'Copy',
+    'accounts.needKeys': 'On this office they also need a way in: add their GitHub keys under 👥 Invite.',
+    'accounts.inviteFailed': 'Could not make the invite',
+    'accounts.sendLink': '✅ Send this link to {name}. It works once and expires after 7 days.',
+    'accounts.them': 'them',
+
+    // People
+    'accounts.people': 'People ',
+    'accounts.nobody': 'Nobody has an account yet',
+    'accounts.you': ' (you)',
+    'accounts.tagAdmin': 'admin',
+    'accounts.tagMember': 'member',
+    'accounts.inOffice': 'in the office',
+    'accounts.seen': 'seen {when}',
+    'accounts.neverCame': 'never came in',
+    'accounts.invitedBy': 'Invited by {name}',
+    'accounts.makeMember': 'Make member',
+    'accounts.makeAdmin': 'Make admin',
+    'accounts.takeAdmin': 'Take away admin rights',
+    'accounts.letManage': 'Let them manage accounts too',
+    'accounts.revoke': 'Revoke',
+    'accounts.revokeTitle': 'Delete {name}’s account',
+    'accounts.revokeConfirm': 'Revoke {name}?',
+    'accounts.revokeBody': 'Their account is deleted and they’re signed out everywhere right away. Terminals they typed in keep running. ',
+    'accounts.revokeShared': 'If {name} also knows the shared office password, they can still use that: switch it off below.',
+
+    // Open invites
+    'accounts.openInvites': 'Open invites ',
+    'accounts.theyPick': 'they pick a name',
+    'accounts.madeBy': 'Made by {name} {when}',
+    'accounts.expiresIn': (v) => `expires in ${v.n} ${s(v.n, 'day', 'days')}`,
+    'accounts.expiresToday': 'expires today',
+    'accounts.copyLink': 'Copy link',
+    'accounts.cancel': 'Cancel',
+    'accounts.cancelTitle': 'The link stops working',
+
+    // The shared password
+    'accounts.shared': 'Shared office password',
+    'accounts.switchOff': 'Switch it off',
+    'accounts.switchOn': 'Switch it back on',
+    'accounts.switchOffConfirm': 'Switch off the shared password?',
+    'accounts.switchOffBody': 'From now on only people with an account of their own can sign in. Everyone who came in with the shared password is signed out right away.',
+    'accounts.sharedOn': 'On. Anyone who knows it gets in as an admin and picks any name they like. Once everyone has an account, switch it off, so that revoking someone really locks them out.',
+    'accounts.sharedOff': 'Off: only accounts can sign in. If every admin is ever locked out, run agent-office accounts password on on the office’s machine.',
+    'accounts.adminFirst': ' Make yourself an admin account and sign in with it before you switch it off.',
+  },
+  {
+    'accounts.title': 'Konten',
+    'accounts.heading': '🔑 Konten',
+    'accounts.loading': 'Wird geladen…',
+    'accounts.signedInAs': 'Du bist als {name} ({role}) angemeldet.',
+    'accounts.signedInShared': 'Du bist mit dem gemeinsamen Büro-Passwort angemeldet.',
+
+    // Einladen
+    'accounts.inviteSomeone': 'Jemanden einladen',
+    'accounts.namePlaceholder': 'Name (optional)',
+    'accounts.nameAria': 'Name',
+    'accounts.roleAria': 'Rolle',
+    'accounts.optionMember': 'Mitglied',
+    'accounts.optionAdmin': 'Admin',
+    'accounts.makeInvite': 'Einladungslink erstellen',
+    'accounts.inviteNote': 'Du bekommst einen Link, der ein Konto mit eigenem Namen und Passwort anlegt. Er funktioniert einmal und läuft nach 7 Tagen ab. Lässt du den Namen leer, sucht die Person sich selbst einen aus.',
+    'accounts.copy': 'Kopieren',
+    'accounts.needKeys': 'In diesem Büro braucht die Person außerdem einen Zugang: Füge ihre GitHub-Keys unter 👥 Einladen hinzu.',
+    'accounts.inviteFailed': 'Die Einladung konnte nicht erstellt werden',
+    'accounts.sendLink': '✅ Schick diesen Link an {name}. Er funktioniert einmal und läuft nach 7 Tagen ab.',
+    'accounts.them': 'die Person',
+
+    // Leute
+    'accounts.people': 'Leute ',
+    'accounts.nobody': 'Noch hat niemand ein Konto',
+    'accounts.you': ' (du)',
+    'accounts.tagAdmin': 'Admin',
+    'accounts.tagMember': 'Mitglied',
+    'accounts.inOffice': 'im Büro',
+    'accounts.seen': 'gesehen {when}',
+    'accounts.neverCame': 'war noch nie da',
+    'accounts.invitedBy': 'Eingeladen von {name}',
+    'accounts.makeMember': 'Zum Mitglied machen',
+    'accounts.makeAdmin': 'Zum Admin machen',
+    'accounts.takeAdmin': 'Admin-Rechte entziehen',
+    'accounts.letManage': 'Darf dann auch Konten verwalten',
+    'accounts.revoke': 'Widerrufen',
+    'accounts.revokeTitle': 'Das Konto von {name} löschen',
+    'accounts.revokeConfirm': '{name} widerrufen?',
+    'accounts.revokeBody': 'Das Konto wird gelöscht und die Person sofort überall abgemeldet. Terminals, in denen sie getippt hat, laufen weiter. ',
+    'accounts.revokeShared': 'Falls {name} auch das gemeinsame Büro-Passwort kennt, kommt die Person damit noch rein: Schalte es unten ab.',
+
+    // Offene Einladungen
+    'accounts.openInvites': 'Offene Einladungen ',
+    'accounts.theyPick': 'sucht sich einen Namen aus',
+    'accounts.madeBy': 'Erstellt von {name} {when}',
+    'accounts.expiresIn': (v) => `läuft in ${v.n} ${s(v.n, 'Tag', 'Tagen')} ab`,
+    'accounts.expiresToday': 'läuft heute ab',
+    'accounts.copyLink': 'Link kopieren',
+    'accounts.cancel': 'Zurückziehen',
+    'accounts.cancelTitle': 'Der Link funktioniert dann nicht mehr',
+
+    // Das gemeinsame Passwort
+    'accounts.shared': 'Gemeinsames Büro-Passwort',
+    'accounts.switchOff': 'Abschalten',
+    'accounts.switchOn': 'Wieder einschalten',
+    'accounts.switchOffConfirm': 'Das gemeinsame Passwort abschalten?',
+    'accounts.switchOffBody': 'Ab dann können sich nur noch Leute mit eigenem Konto anmelden. Alle, die mit dem gemeinsamen Passwort reingekommen sind, werden sofort abgemeldet.',
+    'accounts.sharedOn': 'An. Wer es kennt, kommt als Admin rein und wählt einen beliebigen Namen. Sobald alle ein Konto haben, schalte es ab, damit Widerrufen jemanden wirklich aussperrt.',
+    'accounts.sharedOff': 'Aus: Anmelden geht nur mit Konto. Falls einmal alle Admins ausgesperrt sind, führ auf dem Rechner des Büros agent-office accounts password on aus.',
+    'accounts.adminFirst': ' Leg dir selbst ein Admin-Konto an und melde dich damit an, bevor du es abschaltest.',
+  },
+);

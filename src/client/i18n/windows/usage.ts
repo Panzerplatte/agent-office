@@ -1,4 +1,81 @@
 import { strings } from '../table';
 
-/** ui/usage.ts */
-export default strings({}, {});
+const s = (n: string | number, one: string, many: string) => (Number(n) === 1 ? one : many);
+
+/** ui/usage.ts: what the workers cost, on their desks, in the terminal and in the spend panel. */
+export default strings(
+  {
+    // One worker's figure and its tooltip
+    'usage.costUnavailable': 'cost unavailable',
+    'usage.reported': '{cost} reported',
+    'usage.partial': 'Partial: ',
+    'usage.tokens': '{n} tokens',
+    'usage.callsUnavailable': 'API call count unavailable',
+    'usage.reportedCalls': (v) => `${v.n} reported ${s(v.n, 'call', 'calls')}`,
+    'usage.apiCalls': (v) => `${v.n} API ${s(v.n, 'call', 'calls')}`,
+    'usage.partialMetrics': 'Partial metrics: some session history is still loading or unavailable.',
+    'usage.codexBreakdown': 'Codex root-session metrics; subagent usage is not included; {money}; {calls}',
+    'usage.opencodeBreakdown': 'OpenCode reported estimate {money}; model/provider estimate, not billing; {calls}',
+    'usage.moneyOverCalls': '{money} over {calls}',
+    'usage.inputOutput': 'input {input} · output {output}',
+    'usage.reasoning': 'reasoning {n}',
+    'usage.cache': 'cache write {write} · cache read {read}',
+
+    // The spend panel
+    'usage.workersCostTitle': 'Current desks: tracked Claude Code costs plus reported OpenCode estimates; Codex root-session tokens appear below; sessions with unavailable cost or partial history are excluded.',
+    'usage.claudeToday': '💸 Claude Code today',
+    'usage.ofBudget': 'of {budget}',
+    'usage.budgetSpentPaused': 'Budget spent — no new hires until tomorrow',
+    'usage.budgetSpent': 'Budget spent',
+    'usage.budgetPct': '{pct}% of today’s budget',
+    'usage.claudeAllTime': 'Claude Code all time {cost} · {tokens}',
+    'usage.partialRow': 'partial',
+    'usage.currentDesks': 'current desks',
+    'usage.providerRow': '{provider} {which} {amount} · {tokens}',
+    'usage.opencodeDesksTitle': 'OpenCode current-desk metrics are model/provider estimates, not billing.',
+    'usage.opencodeWaitingTitle': 'OpenCode usage appears after its first metrics report.',
+    'usage.opencodeWaiting': 'OpenCode metrics waiting for first report',
+    'usage.codexDesksTitle': 'Codex current-desk metrics cover the root session only; subagent usage is not included; cost is unavailable.',
+    'usage.codexWaitingTitle': 'Codex usage appears after its first root-session metrics report; subagent usage is not included.',
+    'usage.codexWaiting': 'Codex metrics waiting for first report',
+    'usage.customTitle': 'Custom provider usage is not reported by the office.',
+    'usage.customUntracked': 'Custom usage untracked · budget and totals cover Claude Code only',
+  },
+  {
+    // Die Zahl eines Workers und ihr Tooltip
+    'usage.costUnavailable': 'Kosten nicht verfügbar',
+    'usage.reported': '{cost} gemeldet',
+    'usage.partial': 'Unvollständig: ',
+    'usage.tokens': '{n} Tokens',
+    'usage.callsUnavailable': 'Anzahl der API-Aufrufe nicht verfügbar',
+    'usage.reportedCalls': (v) => `${v.n} ${s(v.n, 'gemeldeter Aufruf', 'gemeldete Aufrufe')}`,
+    'usage.apiCalls': (v) => `${v.n} ${s(v.n, 'API-Aufruf', 'API-Aufrufe')}`,
+    'usage.partialMetrics': 'Unvollständige Metriken: Ein Teil des Sitzungsverlaufs lädt noch oder ist nicht verfügbar.',
+    'usage.codexBreakdown': 'Codex-Metriken der Hauptsitzung; Subagents nicht enthalten; {money}; {calls}',
+    'usage.opencodeBreakdown': 'Von OpenCode gemeldete Schätzung {money}; Schätzung von Modell/Anbieter, keine Abrechnung; {calls}',
+    'usage.moneyOverCalls': '{money} für {calls}',
+    'usage.inputOutput': 'Input {input} · Output {output}',
+    'usage.reasoning': 'Reasoning {n}',
+    'usage.cache': 'Cache-Schreiben {write} · Cache-Lesen {read}',
+
+    // Das Kosten-Panel
+    'usage.workersCostTitle': 'Aktuelle Schreibtische: erfasste Claude-Code-Kosten plus von OpenCode gemeldete Schätzungen; Codex-Tokens der Hauptsitzung stehen darunter; Sitzungen ohne Kosten oder mit unvollständigem Verlauf sind nicht enthalten.',
+    'usage.claudeToday': '💸 Claude Code heute',
+    'usage.ofBudget': 'von {budget}',
+    'usage.budgetSpentPaused': 'Budget aufgebraucht — bis morgen keine neuen Worker',
+    'usage.budgetSpent': 'Budget aufgebraucht',
+    'usage.budgetPct': '{pct} % des heutigen Budgets',
+    'usage.claudeAllTime': 'Claude Code insgesamt {cost} · {tokens}',
+    'usage.partialRow': 'unvollständig',
+    'usage.currentDesks': 'aktuelle Schreibtische',
+    'usage.providerRow': '{provider} {which} {amount} · {tokens}',
+    'usage.opencodeDesksTitle': 'Die OpenCode-Metriken der aktuellen Schreibtische sind Schätzungen von Modell/Anbieter, keine Abrechnung.',
+    'usage.opencodeWaitingTitle': 'Die OpenCode-Nutzung erscheint nach dem ersten Metrik-Bericht.',
+    'usage.opencodeWaiting': 'OpenCode-Metriken warten auf den ersten Bericht',
+    'usage.codexDesksTitle': 'Die Codex-Metriken der aktuellen Schreibtische umfassen nur die Hauptsitzung; Subagents sind nicht enthalten; Kosten sind nicht verfügbar.',
+    'usage.codexWaitingTitle': 'Die Codex-Nutzung erscheint nach dem ersten Metrik-Bericht der Hauptsitzung; Subagents sind nicht enthalten.',
+    'usage.codexWaiting': 'Codex-Metriken warten auf den ersten Bericht',
+    'usage.customTitle': 'Die Nutzung eigener Anbieter meldet das Büro nicht.',
+    'usage.customUntracked': 'Eigene Nutzung nicht erfasst · Budget und Summen gelten nur für Claude Code',
+  },
+);

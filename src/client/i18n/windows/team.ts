@@ -1,4 +1,77 @@
 import { strings } from '../table';
 
+const keys = (n: string | number) => (Number(n) === 1 ? '1 key' : `${n} keys`);
+const schluessel = (n: string | number) => (Number(n) === 1 ? '1 Schlüssel' : `${n} Schlüssel`);
+
 /** ui/team.ts */
-export default strings({}, {});
+export default strings(
+  {
+    // The invite message you copy and send them
+    'team.inviteHead': (v) => `You're invited to ${v.project ? `the ${v.project}` : 'our'} Agent Office. Run this in a terminal (${v.os}):`,
+    'team.inviteOpens': 'It opens the office at {url} — sign in (with the office password, or the account link you get from me) and keep that terminal open while you’re in.',
+    'team.inviteFingerprint': 'The first time, ssh asks whether to trust the server. Only say yes if it shows {fingerprint}',
+
+    'team.copied': '✓ Copied',
+    'team.copyFailed': 'Copy failed',
+    'team.copy': 'Copy',
+    'team.copyInvite': '✉️ Copy invite message',
+    'team.footer': 'Invited people still need to sign in: the office password, or an account from 🔑 Accounts.',
+    'team.title': 'Invite teammates',
+    'team.heading': '👥 Invite teammates',
+    'team.github': 'GitHub username',
+    'team.invite': 'Invite',
+    'team.fetching': 'Fetching {github}’s keys from GitHub…',
+    'team.loading': 'Loading…',
+    'team.inviteLabel': 'Invite someone by their GitHub username',
+    'team.keysNote': 'Their SSH keys from github.com/<username>.keys can open a tunnel to this office — nothing else: no shell on the machine, no other ports.',
+    'team.sendThis': 'Then send them this',
+    'team.opensNote': 'It opens the tunnel and {url} in their browser. They keep the terminal open while they’re in. ',
+    'team.fingerprint1': 'The first time, ssh asks whether to trust the server: the fingerprint must be ',
+    'team.fingerprint2': '.',
+    'team.allow1': 'SSH only answers IP addresses you allowed. If theirs isn’t, run ',
+    'team.allow2': ' (or ',
+    'team.allow3': ') on your machine.',
+    'team.removeTitle': 'Remove {name}’s access',
+    'team.remove': 'Remove',
+    'team.removeQ': 'Remove {name}?',
+    'team.removeBody': 'Their keys stop working right away. Every open tunnel drops for a moment too (other teammates just re-run their command). {name} still knows the office password.',
+    'team.keys': (v) => keys(v.n),
+    'team.nobody': 'Nobody yet',
+    'team.invited': 'Invited ',
+    'team.invitedOk': (v) => `✅ ${v.name} is invited (${keys(v.n)}). Send them the command below.`,
+  },
+  {
+    'team.inviteHead': (v) => `Du bist ins Agent Office${v.project ? ` von ${v.project}` : ''} eingeladen. Führ das in einem Terminal aus (${v.os}):`,
+    'team.inviteOpens': 'Das öffnet das Büro unter {url} — melde dich an (mit dem Büro-Passwort oder dem Account-Link, den du von mir bekommst) und lass das Terminal offen, solange du drin bist.',
+    'team.inviteFingerprint': 'Beim ersten Mal fragt ssh, ob du dem Server vertraust. Sag nur ja, wenn dort {fingerprint} steht',
+
+    'team.copied': '✓ Kopiert',
+    'team.copyFailed': 'Kopieren fehlgeschlagen',
+    'team.copy': 'Kopieren',
+    'team.copyInvite': '✉️ Einladung kopieren',
+    'team.footer': 'Eingeladene müssen sich trotzdem anmelden: mit dem Büro-Passwort oder einem Account aus 🔑 Accounts.',
+    'team.title': 'Teammitglieder einladen',
+    'team.heading': '👥 Teammitglieder einladen',
+    'team.github': 'GitHub-Benutzername',
+    'team.invite': 'Einladen',
+    'team.fetching': 'Hole die Schlüssel von {github} bei GitHub…',
+    'team.loading': 'Lädt…',
+    'team.inviteLabel': 'Lade jemanden über den GitHub-Benutzernamen ein',
+    'team.keysNote': 'Die SSH-Schlüssel von github.com/<username>.keys können einen Tunnel zu diesem Büro öffnen — sonst nichts: keine Shell auf dem Rechner, keine anderen Ports.',
+    'team.sendThis': 'Dann schick ihnen das',
+    'team.opensNote': 'Das öffnet den Tunnel und {url} im Browser. Das Terminal bleibt offen, solange sie drin sind. ',
+    'team.fingerprint1': 'Beim ersten Mal fragt ssh, ob sie dem Server vertrauen: Der Fingerprint muss ',
+    'team.fingerprint2': ' sein.',
+    'team.allow1': 'SSH antwortet nur IP-Adressen, die du erlaubt hast. Ist ihre nicht dabei, führ ',
+    'team.allow2': ' (oder ',
+    'team.allow3': ') auf deinem Rechner aus.',
+    'team.removeTitle': 'Zugang von {name} entfernen',
+    'team.remove': 'Entfernen',
+    'team.removeQ': '{name} entfernen?',
+    'team.removeBody': 'Die Schlüssel funktionieren sofort nicht mehr. Außerdem bricht jeder offene Tunnel kurz ab (andere Teammitglieder führen ihren Befehl einfach nochmal aus). {name} kennt das Büro-Passwort weiterhin.',
+    'team.keys': (v) => schluessel(v.n),
+    'team.nobody': 'Noch niemand',
+    'team.invited': 'Eingeladen ',
+    'team.invitedOk': (v) => `✅ ${v.name} ist eingeladen (${schluessel(v.n)}). Schick den Befehl unten.`,
+  },
+);

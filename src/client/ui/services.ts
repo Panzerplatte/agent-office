@@ -1,4 +1,5 @@
 import type { ServiceInfo, ServicesState } from '../../shared/protocol';
+import { t } from '../i18n';
 import { store } from '../state';
 import { h, openModal, timeAgo } from './dom';
 import { copy, copyButton, guessOs, openCommand, OS_LABEL, type Os } from './team';
@@ -19,7 +20,7 @@ export function serviceTunnel(s: ServicesState, port: number, os: Os): string {
 
 function describe(svc: ServiceInfo): { who: string; color: string; branch?: string } {
   const w = store.workers.get(svc.workerId);
-  return { who: w?.name ?? 'A worker', color: w?.color ?? '#8d99ae', branch: w?.worktree?.branch };
+  return { who: w?.name ?? t('windows.services.aWorker'), color: w?.color ?? '#8d99ae', branch: w?.worktree?.branch };
 }
 
 export function openServices() {
@@ -27,13 +28,13 @@ export function openServices() {
   let picked: number | null = null;
   let copied: number | null = null;
   const body = h('div.body.team.services');
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
+  const close = h('button.btn.close', { 'aria-label': t('windows.common.close') }, '✕');
   const tabs = h('div.os-tabs');
-  const footer = h('footer', {}, h('span.grow', {}, 'Tunnels go through the office, so the office password still guards every page. Keep the terminal open while you look.'));
+  const footer = h('footer', {}, h('span.grow', {}, t('windows.services.footer')));
   const el = h(
     'div.modal',
-    { role: 'dialog', 'aria-label': 'Services', style: 'width:min(760px,100%)' },
-    h('header', {}, h('h2', {}, '🌐 Services'), tabs, close),
+    { role: 'dialog', 'aria-label': t('windows.services.title'), style: 'width:min(760px,100%)' },
+    h('header', {}, h('h2', {}, t('windows.services.heading')), tabs, close),
     body,
     footer,
   );
@@ -50,15 +51,15 @@ export function openServices() {
       ...(Object.keys(OS_LABEL) as Os[]).map((o) => h('button.btn', { type: 'button', class: o === os ? 'on' : '', onclick: () => ((os = o), (copied = null), render()) }, OS_LABEL[o])),
     );
     body.replaceChildren(
-      h('p.note', { style: 'margin:0 0 12px' }, 'Web servers the workers are running. Click one to copy a command that opens it on your computer — run it in a terminal and the page opens by itself.'),
+      h('p.note', { style: 'margin:0 0 12px' }, t('windows.services.intro')),
     );
     if (!s.items.length) {
       body.append(
         h(
           'div.svc-empty',
           {},
-          h('p', {}, 'Nothing running yet.'),
-          h('p.note', {}, 'When a worker starts a web server — ', h('code', {}, 'npm run dev'), ', a preview build, ', h('code', {}, 'python -m http.server'), ' — it shows up here within a few seconds. Try prompting: “start the dev server in the background so we can review it”.'),
+          h('p', {}, t('windows.services.empty')),
+          h('p.note', {}, t('windows.services.emptyHint1'), h('code', {}, 'npm run dev'), t('windows.services.emptyHint2'), h('code', {}, 'python -m http.server'), t('windows.services.emptyHint3')),
         ),
       );
       return;
@@ -67,17 +68,17 @@ export function openServices() {
     for (const svc of s.items) {
       const { who, color, branch } = describe(svc);
       const on = picked === svc.port;
-      const open = h('a.btn', { href: serviceUrl(svc.port), target: '_blank', rel: 'noopener', title: `Open ${serviceUrl(svc.port)} (needs the tunnel, unless the office runs on this computer)` }, 'Open ↗');
+      const open = h('a.btn', { href: serviceUrl(svc.port), target: '_blank', rel: 'noopener', title: t('windows.services.openTitle', { url: serviceUrl(svc.port) }) }, t('windows.services.open'));
       open.addEventListener('click', (e) => e.stopPropagation());
       const li = h(
         'li',
-        { class: on ? 'on' : '', tabindex: 0, role: 'button', title: 'Copy the tunnel command' },
+        { class: on ? 'on' : '', tabindex: 0, role: 'button', title: t('windows.services.copyTitle') },
         h('span.dot', { style: `background:${color}` }),
         h(
           'div.svc-main',
           {},
           h('div.svc-title', {}, svc.title || svc.command),
-          h('div.svc-meta', {}, [who, branch ? `🌿 ${branch}` : '', svc.title ? svc.command : '', `started ${timeAgo(svc.since)}`].filter(Boolean).join(' · ')),
+          h('div.svc-meta', {}, [who, branch ? `🌿 ${branch}` : '', svc.title ? svc.command : '', t('windows.services.started', { ago: timeAgo(svc.since) })].filter(Boolean).join(' · ')),
         ),
         h('span.svc-port', {}, `:${svc.port}`),
         open,
@@ -98,17 +99,17 @@ export function openServices() {
       const cmd = serviceTunnel(s, svc.port, os);
       body.append(
         copied === svc.port
-          ? h('p.team-status.ok', {}, `✅ Copied. Paste it in a terminal: it opens ${serviceUrl(svc.port)} once the tunnel is up.`)
-          : h('p.team-status', {}, `The command for :${svc.port} — run it in a terminal, and it opens ${serviceUrl(svc.port)}.`),
-        h('div.cmd', {}, h('pre', {}, cmd), copyButton('Copy', () => cmd)),
+          ? h('p.team-status.ok', {}, t('windows.services.copied', { url: serviceUrl(svc.port) }))
+          : h('p.team-status', {}, t('windows.services.command', { port: svc.port, url: serviceUrl(svc.port) })),
+        h('div.cmd', {}, h('pre', {}, cmd), copyButton(t('windows.services.copy'), () => cmd)),
       );
     } else if (picked !== null) {
-      body.append(h('p.team-status.error', {}, `The server on :${picked} stopped.`));
+      body.append(h('p.team-status.error', {}, t('windows.services.stopped', { port: picked })));
     }
     body.append(
       s.ssh
-        ? h('p.note', {}, 'It uses the same SSH access as the office. Not invited yourself (you set the office up)? Run ', h('code', {}, 'deploy/aws.sh service <port>'), ' instead.')
-        : h('p.note', {}, 'Replace ', h('code', {}, 'you@your-server'), ' with how you SSH to the office\'s machine. If the office runs on this computer, just click Open.'),
+        ? h('p.note', {}, t('windows.services.sshNote1'), h('code', {}, 'deploy/aws.sh service <port>'), t('windows.services.sshNote2'))
+        : h('p.note', {}, t('windows.services.noSsh1'), h('code', {}, 'you@your-server'), t('windows.services.noSsh2')),
     );
   };
 
