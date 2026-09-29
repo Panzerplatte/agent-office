@@ -29,20 +29,20 @@ export type Vars = Record<string, string | number>;
 
 const LANG_KEY = 'agent-office.lang';
 
-/** The language you picked, or else the browser's first one we have (English if none). */
+/** The language you picked, or else the first of the browser's languages there is (`de-AT` counts as `de`), or else English. */
+export function pickLang(saved: string | null, asked: readonly string[]): Lang {
+  const known = (id: string | undefined) => LANGS.find((l) => l.id === id)?.id;
+  return known(saved ?? undefined) ?? asked.map((tag) => known(tag.toLowerCase().split('-')[0])).find(Boolean) ?? 'en';
+}
+
 function startLang(): Lang {
+  let saved: string | null = null;
   try {
-    const saved = localStorage.getItem(LANG_KEY);
-    if (LANGS.some((l) => l.id === saved)) return saved as Lang;
+    saved = localStorage.getItem(LANG_KEY);
   } catch {
     // storage blocked
   }
-  const asked = typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language]);
-  for (const tag of asked) {
-    const found = LANGS.find((l) => tag?.toLowerCase().split('-')[0] === l.id);
-    if (found) return found.id;
-  }
-  return 'en';
+  return pickLang(saved, typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language]));
 }
 
 let current: Lang = startLang();

@@ -1,19 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LANGS, format, lang, setLang, t, tables } from '../src/client/i18n/index.js';
+import { LANGS, format, lang, pickLang, setLang, t, tables } from '../src/client/i18n/index.js';
 
-test('without a saved pick or a browser language, the office is in English', () => {
-  assert.equal(lang(), 'en');
-  assert.equal(t('core.language'), '🌐 Language');
+test('the language is the one you picked, else the browser’s first one there is, else English', () => {
+  assert.equal(pickLang('de', ['en-US']), 'de');
+  assert.equal(pickLang(null, ['fr-FR', 'de-AT', 'en']), 'de');
+  assert.equal(pickLang('klingon', ['en-GB']), 'en');
+  assert.equal(pickLang(null, ['fr']), 'en');
+  assert.equal(pickLang(null, []), 'en');
 });
 
-test('picking German switches every text to it', () => {
-  setLang('de');
+test('picking a language switches every text to it', () => {
+  const was = lang();
   try {
+    setLang('en');
+    assert.equal(t('core.language'), '🌐 Language');
+    setLang('de');
     assert.equal(lang(), 'de');
     assert.equal(t('core.language'), '🌐 Sprache');
   } finally {
-    setLang('en');
+    setLang(was);
   }
 });
 
