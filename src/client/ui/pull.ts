@@ -6,8 +6,9 @@ import { issueMeeting } from './meeting';
 import { officePrompt } from './prompts';
 import { h, openModal, timeAgo, type Modal } from './dom';
 import { markdown, repoUrlOf } from './markdown';
-import { buildTree, looksGenerated, parseDiff, renderFileDiff, renderThread, repliesOf, Reviewed, STATUS_WORD, treeOrder, type DiffFile, type TreeDir } from './pulldiff';
+import { buildTree, looksGenerated, parseDiff, renderFileDiff, renderThread, repliesOf, Reviewed, statusWord, treeOrder, type DiffFile, type TreeDir } from './pulldiff';
 import { providerPicker } from './provider';
+import { locale, t, type Key } from '../i18n';
 
 // The windows behind the board cards. A PR opens on its conversation (description, comments,
 // reviews, line comments, checks) with a Files tab for the diff, where you tick files off as
@@ -72,7 +73,7 @@ interface MergePref {
   deleteBranch?: boolean;
 }
 
-const METHOD_LABEL: Record<GhMergeMethod, string> = { squash: 'Squash and merge', merge: 'Create a merge commit', rebase: 'Rebase and merge' };
+const METHOD_LABEL: Record<GhMergeMethod, Key> = { squash: 'boards.methodSquash', merge: 'boards.methodMerge', rebase: 'boards.methodRebase' };
 
 function mergePref(methods: GhMergeMethod[]): { method: GhMergeMethod; deleteBranch: boolean } {
   const p = pref<MergePref>(MERGE_KEY, {});
@@ -100,16 +101,22 @@ function avatar(name: string) {
 }
 
 function when(iso: string, url?: string) {
-  const title = iso ? new Date(iso).toLocaleString() : '';
+  const title = iso ? new Date(iso).toLocaleString(locale()) : '';
   return url ? h('a.when', { href: url, target: '_blank', rel: 'noopener noreferrer', title }, timeAgo(iso)) : h('span.when', { title }, timeAgo(iso));
 }
 
-const REVIEW_BADGE: Record<string, [string, string]> = {
-  APPROVED: ['✅ approved', 'ok'],
-  CHANGES_REQUESTED: ['🛠 requested changes', 'bad'],
-  COMMENTED: ['💬 reviewed', ''],
-  DISMISSED: ['review dismissed', 'muted'],
+const REVIEW_BADGE: Record<string, [Key, string]> = {
+  APPROVED: ['boards.reviewApproved', 'ok'],
+  CHANGES_REQUESTED: ['boards.reviewChanges', 'bad'],
+  COMMENTED: ['boards.reviewCommented', ''],
+  DISMISSED: ['boards.reviewDismissed', 'muted'],
 };
+
+/** A review's badge: its words and its look. */
+function reviewBadge(state: string | undefined): [string, string] | undefined {
+  const b = REVIEW_BADGE[state ?? ''];
+  return b && [t(b[0]), b[1]];
+}
 
 function commentCard(c: GhComment, itemUrl: string, verb: string, badge?: [string, string]) {
   return h(
@@ -130,15 +137,15 @@ function spinnerRow(text: string) {
 }
 
 function errorBox(text: string, retry?: () => void) {
-  return h('div.gh-error', {}, `Couldn't load from GitHub: ${text}`, retry ? h('button.btn', { type: 'button', onclick: retry }, 'Try again') : null);
+  return h('div.gh-error', {}, t('boards.loadError', { error: text }), retry ? h('button.btn', { type: 'button', onclick: retry }, t('boards.tryAgain')) : null);
 }
 
 const CHECK_ICON: Record<GhCheck['state'], string> = { pass: '✅', fail: '❌', pending: '🟡', skip: '⚪' };
 
 function stateOf(it: { state: string; isDraft?: boolean }): [string, string] {
-  if (it.state === 'MERGED') return ['merged', 'merged'];
-  if (it.state === 'CLOSED') return ['closed', 'offline'];
-  return it.isDraft ? ['draft', 'idle'] : ['open', 'working'];
+  if (it.state === 'MERGED') return [t('boards.pillMerged'), 'merged'];
+  if (it.state === 'CLOSED') return [t('boards.pillClosed'), 'offline'];
+  return it.isDraft ? [t('boards.pillDraft'), 'idle'] : [t('boards.pillOpen'), 'working'];
 }
 
 // ---- Whether a PR can merge ---------------------------------------------------------------------
@@ -161,20 +168,29 @@ function conflicted(d: GhPullDetail) {
 function mergeStatus(d: GhPullDetail): MergeStatus {
   const failing = d.checks.filter((c) => c.state === 'fail').length;
   const pending = d.checks.filter((c) => c.state === 'pending').length;
-  if (d.state === 'MERGED') return { icon: '🎉', text: 'Merged.', cls: 'ok', can: false, auto: false };
-  if (d.state === 'CLOSED') return { icon: '🗑️', text: 'Closed without merging.', cls: 'muted', can: false, auto: false };
-  if (d.isDraft) return { icon: '📝', text: 'This is still a draft. Mark it ready for review on GitHub before merging.', cls: 'muted', can: false, auto: false };
+  if (d.state === 'MERGED') return { icon: '🎉', text: t('boards.msMerged'), cls: 'ok', can: false, auto: false };
+  if (d.state === 'CLOSED') return { icon: '🗑️', text: t('boards.msClosed'), cls: 'muted', can: false, auto: false };
+  if (d.isDraft) return { icon: '📝', text: t('boards.msDraft'), cls: 'muted', can: false, auto: false };
   if (conflicted(d))
-    return { icon: '⚠️', text: `This branch has conflicts with ${d.baseRefName} that must be resolved first.`, cls: 'bad', can: false, auto: false };
-  if (d.mergeStateStatus === 'BEHIND') return { icon: '⤵️', text: `The branch is behind ${d.baseRefName}, and this repo wants it up to date before merging.`, cls: 'warn', can: true, auto: true };
+    return { icon: '⚠️', text: t('boards.msConflicts', { base: d.baseRefName }), cls: 'bad', can: false, auto: false };
+  if (d.mergeStateStatus === 'BEHIND') return { icon: '⤵️', text: t('boards.msBehind', { base: d.baseRefName }), cls: 'warn', can: true, auto: true };
   if (d.mergeStateStatus === 'BLOCKED') {
-    const why = d.reviewDecision === 'CHANGES_REQUESTED' ? 'changes were requested' : d.reviewDecision === 'REVIEW_REQUIRED' ? 'it needs an approving review' : failing ? `${failing} check${failing > 1 ? 's are' : ' is'} failing` : pending ? 'required checks are still running' : 'a branch rule is not met yet';
-    return { icon: '🚫', text: `Merging is blocked: ${why}.`, cls: 'bad', can: true, auto: true };
+    const why =
+      d.reviewDecision === 'CHANGES_REQUESTED'
+        ? t('boards.whyChanges')
+        : d.reviewDecision === 'REVIEW_REQUIRED'
+          ? t('boards.whyReview')
+          : failing
+            ? t('boards.whyFailing', { n: failing })
+            : pending
+              ? t('boards.whyPending')
+              : t('boards.whyRule');
+    return { icon: '🚫', text: t('boards.msBlocked', { why }), cls: 'bad', can: true, auto: true };
   }
-  if (failing) return { icon: '❌', text: `${failing} check${failing > 1 ? 's' : ''} failing. It can still be merged.`, cls: 'warn', can: true, auto: false };
-  if (pending || d.mergeStateStatus === 'UNSTABLE') return { icon: '🟡', text: 'Checks are still running. It can be merged now, or once they pass.', cls: 'warn', can: true, auto: true };
-  if (d.mergeStateStatus === 'UNKNOWN' || d.mergeable === 'UNKNOWN') return { icon: '⏳', text: 'GitHub is still working out whether this can merge. Refresh in a moment.', cls: 'muted', can: true, auto: false };
-  return { icon: '✅', text: `Ready to merge: no conflicts with ${d.baseRefName}${d.checks.length ? ' and all checks passed' : ''}.`, cls: 'ok', can: true, auto: false };
+  if (failing) return { icon: '❌', text: t('boards.msFailing', { n: failing }), cls: 'warn', can: true, auto: false };
+  if (pending || d.mergeStateStatus === 'UNSTABLE') return { icon: '🟡', text: t('boards.msPending'), cls: 'warn', can: true, auto: true };
+  if (d.mergeStateStatus === 'UNKNOWN' || d.mergeable === 'UNKNOWN') return { icon: '⏳', text: t('boards.msUnknown'), cls: 'muted', can: true, auto: false };
+  return { icon: '✅', text: t(d.checks.length ? 'boards.msReadyChecks' : 'boards.msReady', { base: d.baseRefName }), cls: 'ok', can: true, auto: false };
 }
 
 function checksList(checks: GhCheck[]) {
@@ -207,18 +223,18 @@ function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: string, net
   const waitKey = `${kind}#${number}`;
   let busy = false;
   let timer = 0;
-  const ta = h('textarea', { rows: 4, placeholder: 'Leave a comment. Markdown works; ⌘/Ctrl+Enter posts it.', 'aria-label': 'Comment' }) as HTMLTextAreaElement;
+  const ta = h('textarea', { rows: 4, placeholder: t('boards.commentPlaceholder'), 'aria-label': t('boards.commentAria') }) as HTMLTextAreaElement;
   ta.value = pref<string>(draftKey, '');
   const shown = h('div.gh-compose-preview.hidden');
-  const write = h('button.btn.on', { type: 'button' }, 'Write');
-  const preview = h('button.btn', { type: 'button' }, 'Preview');
-  const who = h('span.grow', {}, "Posts to GitHub as the office's gh account");
-  const post = h('button.btn.primary', { type: 'button' }, '💬 Comment');
+  const write = h('button.btn.on', { type: 'button' }, t('boards.write'));
+  const preview = h('button.btn', { type: 'button' }, t('boards.preview'));
+  const who = h('span.grow', {}, t('boards.postsAsOffice'));
+  const post = h('button.btn.primary', { type: 'button' }, t('boards.comment'));
   const result = h('div.gh-merge-result.error.hidden');
   const el = h(
     'article.gh-card.gh-compose',
     {},
-    h('header', {}, h('b', {}, 'Add a comment'), h('span.grow'), h('div.seg', {}, write, preview)),
+    h('header', {}, h('b', {}, t('boards.addComment')), h('span.grow'), h('div.seg', {}, write, preview)),
     h('div.gh-compose-body', {}, ta, shown),
     result,
     h('div.gh-compose-foot', {}, who, post),
@@ -227,7 +243,7 @@ function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: string, net
   const sync = () => {
     post.disabled = busy || !ta.value.trim();
     ta.readOnly = busy;
-    post.textContent = busy ? 'Posting…' : '💬 Comment';
+    post.textContent = t(busy ? 'boards.posting' : 'boards.comment');
   };
   const saveDraft = () => {
     if (ta.value) savePref(draftKey, ta.value);
@@ -243,7 +259,7 @@ function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: string, net
     preview.classList.toggle('on', on);
     ta.classList.toggle('hidden', on);
     shown.classList.toggle('hidden', !on);
-    if (on) shown.replaceChildren(ta.value.trim() ? markdown(ta.value, itemUrl) : h('p.gh-quiet', {}, 'Nothing to preview.'));
+    if (on) shown.replaceChildren(ta.value.trim() ? markdown(ta.value, itemUrl) : h('p.gh-quiet', {}, t('boards.nothingToPreview')));
     else ta.focus();
   };
   const fail = (text: string) => {
@@ -268,13 +284,13 @@ function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: string, net
         saveDraft();
         setPreview(false);
         onPosted(msg.comment);
-      } else fail(msg.error ?? 'GitHub did not take the comment');
+      } else fail(msg.error ?? t('boards.commentRejected'));
       sync();
     });
     // The office drops messages while it's disconnected, and then no answer comes.
     timer = window.setTimeout(() => {
       settle();
-      fail('No answer from the office. Reload the conversation to see whether the comment went through before posting it again.');
+      fail(t('boards.commentNoAnswer'));
       sync();
     }, 45_000);
     net.send({ t: 'gh.comment', kind, number, body });
@@ -294,7 +310,7 @@ function commentBox(kind: 'issue' | 'pull', number: number, itemUrl: string, net
   return {
     el,
     setViewer(login) {
-      if (login) who.textContent = `Posts to GitHub as @${login}`;
+      if (login) who.textContent = t('boards.postsAs', { login });
     },
     dispose: settle,
   };
@@ -350,10 +366,10 @@ function openMerge(it: GhPull, d: GhPullDetail, net: Net, handToWorker: () => vo
   const renderMethods = () => {
     methodBtns.replaceChildren(
       ...methods.map((m) =>
-        h('button.btn', { type: 'button', class: m === method ? 'on' : '', onclick: () => ((method = m), savePref(MERGE_KEY, { method, deleteBranch }), renderMethods()) }, METHOD_LABEL[m]),
+        h('button.btn', { type: 'button', class: m === method ? 'on' : '', onclick: () => ((method = m), savePref(MERGE_KEY, { method, deleteBranch }), renderMethods()) }, t(METHOD_LABEL[m])),
       ),
     );
-    go.textContent = auto.checked ? '⏱ Merge when ready' : `🔀 ${METHOD_LABEL[method]}`;
+    go.textContent = auto.checked ? t('boards.mergeWhenReady') : `🔀 ${t(METHOD_LABEL[method])}`;
   };
   auto.addEventListener('change', renderMethods);
   const del = h('input', { type: 'checkbox', id: 'merge-del' }) as HTMLInputElement;
@@ -363,26 +379,26 @@ function openMerge(it: GhPull, d: GhPullDetail, net: Net, handToWorker: () => vo
     savePref(MERGE_KEY, { method, deleteBranch });
   });
   const result = h('div.gh-merge-result.hidden');
-  const cancel = h('button.btn', { type: 'button' }, 'Cancel');
+  const cancel = h('button.btn', { type: 'button' }, t('boards.cancel'));
   // Conflicts can't be merged from here, so fixing them is the main button.
   const worker = conflicted(d)
-    ? h('button.btn.primary', { type: 'button', title: 'A new worker merges the base in, resolves the conflicts, then merges it the way picked above' }, '✨ New worker: fix conflicts & merge')
-    : h('button.btn', { type: 'button', title: 'A worker fixes whatever is in the way, then merges' }, '🤖 Hand to a worker');
+    ? h('button.btn.primary', { type: 'button', title: t('boards.fixConflictsWorkerTitle') }, t('boards.fixConflictsWorker'))
+    : h('button.btn', { type: 'button', title: t('boards.handTitle') }, t('boards.handToWorker'));
 
   const el = h(
     'div.modal.gh-merge',
-    { role: 'dialog', 'aria-label': `Merge PR #${it.number}` },
-    h('header', {}, h('h2', {}, `🔀 Merge #${it.number}`)),
+    { role: 'dialog', 'aria-label': t('boards.mergeAria', { n: it.number }) },
+    h('header', {}, h('h2', {}, t('boards.mergeHeading', { n: it.number }))),
     h(
       'div.body',
       {},
       h('p.gh-merge-title', {}, it.title, h('small', {}, `${it.headRefName} → ${it.baseRefName}`)),
       h('div.gh-status', { class: st.cls }, h('span', {}, st.icon), st.text),
       d.checks.length ? checksList(d.checks) : null,
-      h('label', { style: 'margin-top:14px' }, 'How'),
+      h('label', { style: 'margin-top:14px' }, t('boards.mergeHow')),
       methodBtns,
-      h('label.gh-check', { for: 'merge-del' }, del, `Delete ${it.headRefName} after merging`),
-      st.auto ? h('label.gh-check', { for: 'merge-auto', title: 'gh pr merge --auto (the repo must allow auto-merge)' }, auto, 'Merge automatically once the requirements pass') : null,
+      h('label.gh-check', { for: 'merge-del' }, del, t('boards.deleteAfter', { branch: it.headRefName })),
+      st.auto ? h('label.gh-check', { for: 'merge-auto', title: t('boards.autoTitle') }, auto, t('boards.autoLabel')) : null,
       result,
     ),
     h('footer', {}, st.can || conflicted(d) ? null : worker, h('span.grow'), cancel, conflicted(d) ? worker : go),
@@ -401,7 +417,7 @@ function openMerge(it: GhPull, d: GhPullDetail, net: Net, handToWorker: () => vo
     busy = true;
     go.disabled = true;
     result.className = 'gh-merge-result';
-    result.replaceChildren(h('span.spinner'), auto.checked && st.auto ? 'Asking GitHub to merge it when ready…' : 'Merging…');
+    result.replaceChildren(h('span.spinner'), t(auto.checked && st.auto ? 'boards.askingAuto' : 'boards.merging'));
     mergeWaiters.set(it.number, (msg) => {
       mergeWaiters.delete(it.number);
       busy = false;
@@ -421,7 +437,7 @@ function openMerge(it: GhPull, d: GhPullDetail, net: Net, handToWorker: () => vo
 
 // ---- Close dialog -------------------------------------------------------------------------------
 
-const REASON_LABEL: Record<GhCloseReason, string> = { completed: '✅ Completed', 'not planned': '🚫 Not planned' };
+const REASON_LABEL: Record<GhCloseReason, Key> = { completed: 'boards.reasonCompleted', 'not planned': 'boards.reasonNotPlanned' };
 
 /** Closes an issue (as completed or not planned) or a PR without merging, with an optional comment. */
 function openClose(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Net, onClosed: () => void) {
@@ -433,28 +449,27 @@ function openClose(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Net, onClo
   const go = h('button.btn.danger', { type: 'button' });
   const reasons = h('div.seg');
   const renderReasons = () => {
-    reasons.replaceChildren(...(Object.keys(REASON_LABEL) as GhCloseReason[]).map((r) => h('button.btn', { type: 'button', class: r === reason ? 'on' : '', onclick: () => ((reason = r), renderReasons()) }, REASON_LABEL[r])));
-    go.textContent = pull ? '🚫 Close pull request' : `${reason === 'completed' ? '✔️' : '🚫'} Close as ${reason}`;
+    reasons.replaceChildren(...(Object.keys(REASON_LABEL) as GhCloseReason[]).map((r) => h('button.btn', { type: 'button', class: r === reason ? 'on' : '', onclick: () => ((reason = r), renderReasons()) }, t(REASON_LABEL[r]))));
+    go.textContent = t(pull ? 'boards.closePullBtn' : reason === 'completed' ? 'boards.closeAsCompleted' : 'boards.closeAsNotPlanned');
   };
-  const comment = h('textarea', { rows: 4, placeholder: 'Leave a comment (optional)', 'aria-label': 'Closing comment' }) as HTMLTextAreaElement;
+  const comment = h('textarea', { rows: 4, placeholder: t('boards.closeComment'), 'aria-label': t('boards.closeCommentAria') }) as HTMLTextAreaElement;
   const del = h('input', { type: 'checkbox', id: 'close-del' }) as HTMLInputElement;
   const w = pull && workerForPull(store.workers.values(), pull);
   const result = h('div.gh-merge-result.hidden');
-  const cancel = h('button.btn', { type: 'button' }, 'Cancel');
-  const noun = pull ? 'pull request' : 'issue';
+  const cancel = h('button.btn', { type: 'button' }, t('boards.cancel'));
 
   const el = h(
     'div.modal.gh-merge',
-    { role: 'dialog', 'aria-label': `Close ${noun} #${it.number}` },
-    h('header', {}, h('h2', {}, `${pull ? '🚫' : '✔️'} Close ${pull ? 'PR' : 'issue'} #${it.number}`)),
+    { role: 'dialog', 'aria-label': t(pull ? 'boards.closePullAria' : 'boards.closeIssueAria', { n: it.number }) },
+    h('header', {}, h('h2', {}, t(pull ? 'boards.closePullHeading' : 'boards.closeIssueHeading', { n: it.number }))),
     h(
       'div.body',
       {},
       h('p.gh-merge-title', {}, it.title, pull ? h('small', {}, `${pull.headRefName} → ${pull.baseRefName}`) : null),
       pull
-        ? h('div.gh-status.muted', {}, h('span', {}, 'ℹ️'), `It won't be merged, and can be reopened on GitHub later.${w ? ` ${w.name} is still at a desk working on its branch.` : ''}`)
-        : h('label', {}, 'Why'),
-      pull ? h('label.gh-check', { for: 'close-del' }, del, `Delete ${pull.headRefName} too`) : reasons,
+        ? h('div.gh-status.muted', {}, h('span', {}, 'ℹ️'), `${t('boards.closePullNote')}${w ? t('boards.closePullWorker', { name: w.name }) : ''}`)
+        : h('label', {}, t('boards.closeWhy')),
+      pull ? h('label.gh-check', { for: 'close-del' }, del, t('boards.deleteToo', { branch: pull.headRefName })) : reasons,
       comment,
       result,
     ),
@@ -469,7 +484,7 @@ function openClose(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Net, onClo
     busy = true;
     go.disabled = true;
     result.className = 'gh-merge-result';
-    result.replaceChildren(h('span.spinner'), `Closing the ${noun}…`);
+    result.replaceChildren(h('span.spinner'), t(pull ? 'boards.closingPull' : 'boards.closingIssue'));
     closeWaiters.set(key, (msg) => {
       closeWaiters.delete(key);
       busy = false;
@@ -497,7 +512,7 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
   const key = `${kind}:${it.number}`;
   const had = new Set(it.labels.map((l) => l.name));
   const on = new Set(had);
-  const noun = kind === 'pull' ? 'PR' : 'issue';
+  const heading = t(kind === 'pull' ? 'boards.labelsOnPull' : 'boards.labelsOnIssue', { n: it.number });
   const manage = `${repoUrlOf(it.url)}/labels`;
   let repo: GhLabel[] | null = null;
   let error = '';
@@ -506,17 +521,17 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
   /** Each row and the text the filter looks in. */
   const rows = new Map<HTMLElement, string>();
 
-  const filter = h('input', { type: 'text', placeholder: 'Filter labels…', 'aria-label': 'Filter labels' }) as HTMLInputElement;
+  const filter = h('input', { type: 'text', placeholder: t('boards.filterLabels'), 'aria-label': t('boards.filterLabelsAria') }) as HTMLInputElement;
   const list = h('ul.gh-labels');
   const none = h('p.gh-quiet.hidden');
   const result = h('div.gh-merge-result.hidden');
   const summary = h('span.grow');
-  const cancel = h('button.btn', { type: 'button' }, 'Cancel');
-  const save = h('button.btn.primary', { type: 'button' }, '🏷️ Save labels');
+  const cancel = h('button.btn', { type: 'button' }, t('boards.cancel'));
+  const save = h('button.btn.primary', { type: 'button' }, t('boards.saveLabels'));
   const el = h(
     'div.modal.gh-merge.gh-labeler',
-    { role: 'dialog', 'aria-label': `Labels on ${noun} #${it.number}` },
-    h('header', {}, h('h2', {}, `🏷️ Labels on ${noun} #${it.number}`)),
+    { role: 'dialog', 'aria-label': heading },
+    h('header', {}, h('h2', {}, `🏷️ ${heading}`)),
     h('div.body', {}, h('p.gh-merge-title', {}, it.title), filter, list, none, result),
     h('footer', {}, summary, cancel, save),
   );
@@ -525,8 +540,8 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
   const sync = () => {
     const { add, remove } = changes();
     save.disabled = busy || (!add.length && !remove.length);
-    save.textContent = busy ? 'Saving…' : '🏷️ Save labels';
-    summary.textContent = add.length || remove.length ? [...add.map((l) => `+${l}`), ...remove.map((l) => `−${l}`)].join('  ') : `${on.size} label${on.size === 1 ? '' : 's'} on it`;
+    save.textContent = t(busy ? 'boards.saving' : 'boards.saveLabels');
+    summary.textContent = add.length || remove.length ? [...add.map((l) => `+${l}`), ...remove.map((l) => `−${l}`)].join('  ') : t('boards.labelCount', { n: on.size });
     for (const box of list.querySelectorAll('input')) box.disabled = busy;
   };
   const applyFilter = () => {
@@ -540,7 +555,7 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
     const empty = !!repo && !shown;
     none.classList.toggle('hidden', !empty);
     if (empty)
-      none.replaceChildren(q ? `No labels match “${filter.value.trim()}”. ` : 'This repository has no labels yet. ', h('a', { href: manage, target: '_blank', rel: 'noopener noreferrer' }, 'Make one on GitHub ↗'));
+      none.replaceChildren(q ? t('boards.noLabelMatch', { q: filter.value.trim() }) : t('boards.repoNoLabels'), h('a', { href: manage, target: '_blank', rel: 'noopener noreferrer' }, t('boards.makeLabel')));
   };
   const row = (l: GhLabel) => {
     const box = h('input', { type: 'checkbox' }) as HTMLInputElement;
@@ -563,7 +578,7 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
     const rest = (repo ?? []).filter((l) => !had.has(l.name)).sort(byName);
     list.replaceChildren(...[...mine, ...rest].map(row));
     if (error) list.append(h('li', {}, errorBox(error, load)));
-    else if (!repo) list.append(h('li', {}, spinnerRow("Loading the repo's labels…")));
+    else if (!repo) list.append(h('li', {}, spinnerRow(t('boards.loadingLabels'))));
     applyFilter();
     sync();
   };
@@ -591,18 +606,18 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
     if (busy || (!add.length && !remove.length)) return;
     busy = true;
     result.className = 'gh-merge-result';
-    result.replaceChildren(h('span.spinner'), 'Saving the labels on GitHub…');
+    result.replaceChildren(h('span.spinner'), t('boards.savingLabels'));
     sync();
     labelWaiters.set(key, (msg) => {
       settle();
-      if (!msg.labels) return fail(msg.error ?? 'GitHub did not take the labels');
+      if (!msg.labels) return fail(msg.error ?? t('boards.labelsRejected'));
       modal.close();
       onSaved?.(msg.labels);
     });
     // The office drops messages while it's disconnected, and then no answer comes.
     timer = window.setTimeout(() => {
       settle();
-      fail('No answer from the office. Look at the board to see whether the labels changed before saving again.');
+      fail(t('boards.labelsNoAnswer'));
     }, 45_000);
     net.send({ t: 'gh.labels', kind, number: it.number, add, remove });
   };
@@ -626,7 +641,7 @@ export function openLabels(kind: 'issue' | 'pull', it: GhIssue | GhPull, net: Ne
 /** The button that opens the label picker, after an issue's or PR's labels. */
 function labelButton(kind: 'issue' | 'pull', it: () => GhIssue | GhPull, net: Net, onSaved: (labels: GhLabel[]) => void) {
   const has = it().labels.length > 0;
-  return h('button.btn.gh-label-edit', { type: 'button', title: 'Change the labels', 'aria-label': 'Change the labels', onclick: () => openLabels(kind, it(), net, onSaved) }, has ? '🏷️ Edit' : '🏷️ Add labels');
+  return h('button.btn.gh-label-edit', { type: 'button', title: t('boards.changeLabels'), 'aria-label': t('boards.changeLabels'), onclick: () => openLabels(kind, it(), net, onSaved) }, t(has ? 'boards.editLabels' : 'boards.addLabels'));
 }
 
 // ---- The PR window ------------------------------------------------------------------------------
@@ -651,8 +666,8 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
   // --- Frame
   const pill = h('span.pill');
   const title = h('h2');
-  const reload = h('button.btn', { type: 'button', title: 'Reload from GitHub' }, '🔄');
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
+  const reload = h('button.btn', { type: 'button', title: t('boards.reloadTitle') }, '🔄');
+  const close = h('button.btn.close', { 'aria-label': t('boards.close') }, '✕');
   const meta = h('div.gh-meta');
   const tabConv = h('button.gh-tab', { type: 'button', role: 'tab' });
   const tabFiles = h('button.gh-tab', { type: 'button', role: 'tab' });
@@ -671,18 +686,18 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
   const footBtns = h('span.gh-foot');
   const el = h(
     'div.modal.gh-window',
-    { role: 'dialog', 'aria-label': `Pull request #${it.number}`, tabindex: -1 },
+    { role: 'dialog', 'aria-label': t('boards.pullAria', { n: it.number }), tabindex: -1 },
     h('header', {}, pill, title, reload, close),
     meta,
     h('nav.gh-tabs', { role: 'tablist' }, tabConv, tabFiles),
     h('div.gh-body', {}, conv, filesPane),
-    h('footer', {}, h('a.grow', { href: it.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open on GitHub ↗'), footBtns),
+    h('footer', {}, h('a.grow', { href: it.url, target: '_blank', rel: 'noopener noreferrer' }, t('boards.openOnGithub')), footBtns),
   );
 
   const handToWorker = () => {
     const p = mergePref(detail?.repo.methods ?? ['squash', 'merge', 'rebase']);
-    if (detail && conflicted(detail)) actions.assign(fixConflictsPrompt(it, p.method, p.deleteBranch), `Fix conflicts & merge PR #${it.number}`);
-    else actions.assign(fixAndMergePrompt(it, p.method, p.deleteBranch), `Fix up & merge PR #${it.number}`);
+    if (detail && conflicted(detail)) actions.assign(fixConflictsPrompt(it, p.method, p.deleteBranch), t('boards.fixConflictsTask', { n: it.number }));
+    else actions.assign(fixAndMergePrompt(it, p.method, p.deleteBranch), t('boards.fixUpTask', { n: it.number }));
   };
 
   const renderFrame = () => {
@@ -691,24 +706,24 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
     pill.textContent = word;
     title.textContent = `#${it.number} ${it.title}`;
     title.title = it.title;
-    const commits = detail ? `${detail.commits} commit${detail.commits === 1 ? '' : 's'}` : 'its commits';
+    const commits = detail ? t('boards.commits', { n: detail.commits }) : t('boards.itsCommits');
     meta.replaceChildren(
       ...nodes(
       avatar(it.author),
       h('b', {}, it.author),
-      h('span', {}, it.state === 'MERGED' ? `merged ${commits} into` : `wants to merge ${commits} into`),
+      h('span', {}, t(it.state === 'MERGED' ? 'boards.mergedInto' : 'boards.wantsToMerge', { commits })),
       h('code', {}, it.baseRefName),
-      h('span', {}, 'from'),
+      h('span', {}, t('boards.from')),
       h('code', {}, it.headRefName),
       h('span.gh-pm', {}, h('span.add', {}, `+${it.additions}`), ' ', h('span.del', {}, `−${it.deletions}`)),
       ...it.labels.map(labelChip),
       labelButton('pull', () => it, net, (labels) => ((it = { ...it, labels }), renderFrame())),
-      it.reviewDecision ? h('span.gh-badge', { class: REVIEW_BADGE[it.reviewDecision]?.[1] ?? '' }, it.reviewDecision === 'REVIEW_REQUIRED' ? 'review required' : (REVIEW_BADGE[it.reviewDecision]?.[0] ?? it.reviewDecision.toLowerCase())) : null,
+      it.reviewDecision ? h('span.gh-badge', { class: REVIEW_BADGE[it.reviewDecision]?.[1] ?? '' }, it.reviewDecision === 'REVIEW_REQUIRED' ? t('boards.reviewRequired') : (reviewBadge(it.reviewDecision)?.[0] ?? it.reviewDecision.toLowerCase())) : null,
       ),
     );
     const done = files ? files.filter((f) => reviewed.mark(f) === 'reviewed').length : 0;
-    tabConv.replaceChildren(...nodes('💬 Conversation', detail ? h('span.gh-count', {}, String(detail.comments.length + detail.reviews.length + detail.reviewComments.filter((c) => !c.replyTo).length)) : null));
-    tabFiles.replaceChildren(...nodes('📄 Files changed', files ? h('span.gh-count', {}, String(files.length)) : null, files?.length ? h('span.gh-progress', { class: done === files.length ? 'all' : '' }, `✓ ${done}/${files.length}`) : null));
+    tabConv.replaceChildren(...nodes(t('boards.tabConversation'), detail ? h('span.gh-count', {}, String(detail.comments.length + detail.reviews.length + detail.reviewComments.filter((c) => !c.replyTo).length)) : null));
+    tabFiles.replaceChildren(...nodes(t('boards.tabFiles'), files ? h('span.gh-count', {}, String(files.length)) : null, files?.length ? h('span.gh-progress', { class: done === files.length ? 'all' : '' }, `✓ ${done}/${files.length}`) : null));
     tabConv.classList.toggle('on', tab === 'conversation');
     tabFiles.classList.toggle('on', tab === 'files');
     tabConv.setAttribute('aria-selected', String(tab === 'conversation'));
@@ -718,23 +733,23 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
 
     const isOpen = it.state === 'OPEN';
     const conflicts = !!detail && conflicted(detail);
-    const merge = h(conflicts ? 'button.btn' : 'button.btn.primary', { type: 'button', disabled: !detail, title: detail ? 'Merge this pull request' : 'Loading…' }, '🔀 Merge…');
+    const merge = h(conflicts ? 'button.btn' : 'button.btn.primary', { type: 'button', disabled: !detail, title: t(detail ? 'boards.mergeTitle' : 'boards.loading') }, t('boards.mergeBtn'));
     merge.addEventListener('click', () => detail && openMerge(it, detail, net, handToWorker, loadAll));
     const w = workerForPull(store.workers.values(), it);
     footBtns.replaceChildren(
       ...nodes(
-      w ? h('button.btn', { type: 'button', onclick: () => actions.goToDesk(w.deskId) }, `🪑 Go to ${w.name}'s desk`) : null,
-      h('button.btn', { type: 'button', title: 'Send a worker your own prompt about this PR', onclick: () => actions.ask(pullContext(it), `Ask about PR #${it.number}`) }, '✍️ Ask a worker…'),
-      isOpen ? h('button.btn', { type: 'button', onclick: () => actions.assign(reviewPrompt(it), `Review PR #${it.number}`) }, '🔍 Review') : null,
+      w ? h('button.btn', { type: 'button', onclick: () => actions.goToDesk(w.deskId) }, t('boards.goToDesk', { name: w.name })) : null,
+      h('button.btn', { type: 'button', title: t('boards.askPullTitle'), onclick: () => actions.ask(pullContext(it), t('boards.askPullTask', { n: it.number })) }, t('boards.askWorker')),
+      isOpen ? h('button.btn', { type: 'button', onclick: () => actions.assign(reviewPrompt(it), t('boards.reviewTask', { n: it.number })) }, t('boards.review')) : null,
       isOpen
-        ? h('button.btn', { type: 'button', title: 'A few workers review it in the meeting room, each through its own lens, and the office posts one combined review', onclick: () => actions.meeting({ pattern: 'review', pr: it.number, title: `Review of PR #${it.number}`, prompt: officePrompt('pull.panel', pullVars(it)) }) }, '🤝 Review panel…')
+        ? h('button.btn', { type: 'button', title: t('boards.panelTitle'), onclick: () => actions.meeting({ pattern: 'review', pr: it.number, title: t('boards.panelTask', { n: it.number }), prompt: officePrompt('pull.panel', pullVars(it)) }) }, t('boards.panel'))
         : null,
       conflicts
-        ? h('button.btn.primary', { type: 'button', title: 'A new worker merges the base in, resolves the conflicts, gets the checks green, then merges', onclick: handToWorker }, '✨ Fix conflicts & merge')
+        ? h('button.btn.primary', { type: 'button', title: t('boards.fixConflictsTitle'), onclick: handToWorker }, t('boards.fixConflicts'))
         : isOpen
-          ? h('button.btn', { type: 'button', title: 'A worker addresses the review comments, gets the checks green, then merges', onclick: handToWorker }, '🤖 Fix comments & merge')
+          ? h('button.btn', { type: 'button', title: t('boards.fixCommentsTitle'), onclick: handToWorker }, t('boards.fixComments'))
           : null,
-      isOpen ? h('button.btn', { type: 'button', title: 'Close this pull request without merging it', onclick: () => openClose('pull', it, net, loadAll) }, '🚫 Close PR…') : null,
+      isOpen ? h('button.btn', { type: 'button', title: t('boards.closePrTitle'), onclick: () => openClose('pull', it, net, loadAll) }, t('boards.closePr')) : null,
       isOpen ? merge : null,
       ),
     );
@@ -747,14 +762,14 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
   };
 
   const renderConv = () => {
-    thread.replaceChildren(commentCard({ id: 'body', author: it.author, body: detail?.body ?? it.body, createdAt: it.createdAt, url: it.url }, itemUrl, 'opened this'));
+    thread.replaceChildren(commentCard({ id: 'body', author: it.author, body: detail?.body ?? it.body, createdAt: it.createdAt, url: it.url }, itemUrl, t('boards.openedThis')));
     if (detailError) return thread.append(errorBox(detailError, loadAll));
-    if (!detail) return thread.append(spinnerRow('Loading the conversation…'));
+    if (!detail) return thread.append(spinnerRow(t('boards.loadingConversation')));
     const d = detail;
     const replies = repliesOf(d.reviewComments);
     const items: { at: string; node: HTMLElement }[] = [
-      ...d.comments.map((c) => ({ at: c.createdAt, node: commentCard(c, itemUrl, 'commented') })),
-      ...d.reviews.map((r) => ({ at: r.createdAt, node: commentCard(r, itemUrl, '', REVIEW_BADGE[r.state ?? ''] ?? [r.state?.toLowerCase() ?? 'reviewed', '']) })),
+      ...d.comments.map((c) => ({ at: c.createdAt, node: commentCard(c, itemUrl, t('boards.commented')) })),
+      ...d.reviews.map((r) => ({ at: r.createdAt, node: commentCard(r, itemUrl, '', reviewBadge(r.state) ?? [r.state?.toLowerCase() ?? t('boards.reviewed'), '']) })),
       ...d.reviewComments
         .filter((c) => !c.replyTo)
         .map((c) => ({
@@ -767,22 +782,22 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
               {},
               h('span', {}, '💬'),
               h('code', { title: c.path }, `${c.path}${c.line ? `:${c.line}` : ''}`),
-              c.line == null ? h('span.gh-badge.muted', {}, 'outdated') : null,
+              c.line == null ? h('span.gh-badge.muted', {}, t('boards.outdated')) : null,
               h('span.grow'),
-              c.line != null ? h('button.btn', { type: 'button', onclick: () => showInDiff(c) }, 'Show in diff') : null,
+              c.line != null ? h('button.btn', { type: 'button', onclick: () => showInDiff(c) }, t('boards.showInDiff')) : null,
             ),
             renderThread(c, replies, itemUrl),
           ),
         })),
     ].sort((a, b) => a.at.localeCompare(b.at));
     thread.append(...items.map((x) => x.node));
-    if (!items.length) thread.append(h('p.gh-quiet', {}, 'No comments or reviews yet.'));
+    if (!items.length) thread.append(h('p.gh-quiet', {}, t('boards.noReviews')));
 
     const st = mergeStatus(d);
     const box = h('section.gh-mergebox', { class: st.cls }, h('div.gh-status', { class: st.cls }, h('span', {}, st.icon), st.text), d.checks.length ? checksList(d.checks) : null);
-    if (it.state === 'OPEN' && st.can) box.append(h('div.gh-mergebox-go', {}, h('button.btn.primary', { type: 'button', onclick: () => openMerge(it, d, net, handToWorker, loadAll) }, '🔀 Merge…')));
-    if (conflicted(d)) box.append(h('div.gh-mergebox-go', {}, h('button.btn.primary', { type: 'button', onclick: handToWorker }, '✨ New worker: fix conflicts & merge')));
-    else if (it.state === 'OPEN' && !st.can && !d.isDraft) box.append(h('div.gh-mergebox-go', {}, h('button.btn', { type: 'button', onclick: handToWorker }, '🤖 Have a worker fix it & merge')));
+    if (it.state === 'OPEN' && st.can) box.append(h('div.gh-mergebox-go', {}, h('button.btn.primary', { type: 'button', onclick: () => openMerge(it, d, net, handToWorker, loadAll) }, t('boards.mergeBtn'))));
+    if (conflicted(d)) box.append(h('div.gh-mergebox-go', {}, h('button.btn.primary', { type: 'button', onclick: handToWorker }, t('boards.fixConflictsWorker'))));
+    else if (it.state === 'OPEN' && !st.can && !d.isDraft) box.append(h('div.gh-mergebox-go', {}, h('button.btn', { type: 'button', onclick: handToWorker }, t('boards.haveWorkerFix'))));
     thread.append(box);
   };
 
@@ -818,7 +833,7 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
     // Big files and lock files wait for a click, so a huge PR doesn't lock up the window.
     if (s.big && !open.get(f.path)) {
       s.body.replaceChildren(
-        h('div.pd-big', {}, looksGenerated(f.path) ? 'Generated or lock file — not shown by default.' : `Large diff (${f.lines.length} lines) — not shown by default.`, h('button.btn', { type: 'button', onclick: () => (open.set(f.path, true), buildBody(f)) }, 'Show diff')),
+        h('div.pd-big', {}, looksGenerated(f.path) ? t('boards.generatedFile') : t('boards.largeDiff', { n: f.lines.length }), h('button.btn', { type: 'button', onclick: () => (open.set(f.path, true), buildBody(f)) }, t('boards.showDiff'))),
       );
       return;
     }
@@ -873,7 +888,7 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
 
   const side = h('aside.pd-side');
   const fileList = h('ul.pd-files', { role: 'tree' });
-  const filterInput = h('input', { type: 'text', placeholder: 'Filter files…', 'aria-label': 'Filter files' }) as HTMLInputElement;
+  const filterInput = h('input', { type: 'text', placeholder: t('boards.filterFiles'), 'aria-label': t('boards.filterFilesAria') }) as HTMLInputElement;
   filterInput.addEventListener('input', () => {
     filter = filterInput.value;
     renderFiles();
@@ -896,7 +911,7 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
       {
         type: 'button',
         class: mark,
-        title: mark === 'reviewed' ? 'Reviewed — click to unmark' : mark === 'stale' ? 'Changed since you reviewed it' : 'Mark as reviewed',
+        title: t(mark === 'reviewed' ? 'boards.tickReviewed' : mark === 'stale' ? 'boards.tickStale' : 'boards.tickMark'),
         'aria-pressed': String(mark === 'reviewed'),
         onclick: ((e: Event) => {
           e.stopPropagation();
@@ -916,11 +931,11 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
       'li.pd-row',
       { 'data-path': f.path, class: `${current === f.path ? 'on' : ''} ${reviewed.mark(f)}`, style: `--depth:${depth}`, role: 'treeitem', title: f.path, onclick: () => scrollToFile(f.path, true) },
       checkBtn(f),
-      h('span.pd-st', { class: f.status, title: STATUS_WORD[f.status] }, f.status),
+      h('span.pd-st', { class: f.status, title: statusWord(f.status) }, f.status),
       // The name first and its folder after, so a narrow sidebar cuts the folder, not the name.
       h('span.pd-path', {}, f.path.slice(slash + 1), mode === 'list' && slash >= 0 ? h('span.dir', {}, ` ${f.path.slice(0, slash)}`) : null),
-      n ? h('span.pd-c', { title: `${n} comment${n > 1 ? 's' : ''}` }, `💬${n}`) : null,
-      h('span.gh-pm', {}, f.binary ? h('span.bin', {}, 'bin') : h('span', {}, h('span.add', {}, `+${f.additions}`), ' ', h('span.del', {}, `−${f.deletions}`))),
+      n ? h('span.pd-c', { title: t('boards.nComments', { n }) }, `💬${n}`) : null,
+      h('span.gh-pm', {}, f.binary ? h('span.bin', {}, t('boards.bin')) : h('span', {}, h('span.add', {}, `+${f.additions}`), ' ', h('span.del', {}, `−${f.deletions}`))),
     );
   };
 
@@ -947,7 +962,7 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
           h('span.pd-caret', {}, shut ? '▸' : '▾'),
           h('span', {}, '📁'),
           h('span.pd-path', {}, sub.name),
-          all ? h('span.pd-done', { title: 'Everything in here is reviewed' }, '✓') : null,
+          all ? h('span.pd-done', { title: t('boards.dirReviewed') }, '✓') : null,
         ),
       );
       if (!shut) dirRows(sub, depth + 1, visible, out);
@@ -960,13 +975,13 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
     const rows: HTMLElement[] = [];
     if (mode === 'tree') dirRows(buildTree(files), 0, new Set(order), rows);
     else rows.push(...order.map((f) => fileRow(f, 0)));
-    if (!rows.length) rows.push(h('li.pd-none', {}, filter ? 'No files match.' : 'No files changed.'));
+    if (!rows.length) rows.push(h('li.pd-none', {}, t(filter ? 'boards.noFilesMatch' : 'boards.noFiles')));
     fileList.replaceChildren(...rows);
     const done = files.filter((f) => reviewed.mark(f) === 'reviewed').length;
     const bar = side.querySelector<HTMLElement>('.pd-bar i');
     if (bar) bar.style.width = `${files.length ? (100 * done) / files.length : 0}%`;
     const txt = side.querySelector<HTMLElement>('.pd-done-txt');
-    if (txt) txt.textContent = `${done} of ${files.length} file${files.length === 1 ? '' : 's'} reviewed`;
+    if (txt) txt.textContent = t('boards.filesReviewed', { done, n: files.length });
   };
 
   const renderFiles = () => {
@@ -975,7 +990,7 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
     const main = filesPane.querySelector<HTMLElement>('.pd-main');
     if (!main || !files) return;
     main.replaceChildren(...order.map((f) => sections.get(f.path)!.sec));
-    if (!order.length) main.append(h('div.pd-note', {}, 'No files match the filter.'));
+    if (!order.length) main.append(h('div.pd-note', {}, t('boards.noFilesFilter')));
   };
 
   const setupFiles = () => {
@@ -983,7 +998,7 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
     filesPane.replaceChildren();
     sections.clear();
     if (diffError) return filesPane.append(errorBox(diffError, loadAll));
-    if (!files) return filesPane.append(spinnerRow('Loading the diff…'));
+    if (!files) return filesPane.append(spinnerRow(t('boards.loadingDiff')));
     const modeBtn = (m: 'tree' | 'list', label: string) =>
       h(
         'button.btn',
@@ -1000,10 +1015,10 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
         label,
       );
     side.replaceChildren(
-      h('div.pd-side-head', {}, h('div.seg.pd-mode', {}, modeBtn('tree', '🌲 Tree'), modeBtn('list', '☰ List')), h('div.pd-bar', {}, h('i')), h('div.pd-done-txt')),
+      h('div.pd-side-head', {}, h('div.seg.pd-mode', {}, modeBtn('tree', t('boards.modeTree')), modeBtn('list', t('boards.modeList'))), h('div.pd-bar', {}, h('i')), h('div.pd-done-txt')),
       filterInput,
       fileList,
-      h('div.pd-keys', {}, h('span.key', {}, 'J'), h('span.key', {}, 'K'), 'next / previous file · ', h('span.key', {}, 'V'), 'reviewed'),
+      h('div.pd-keys', {}, h('span.key', {}, 'J'), h('span.key', {}, 'K'), t('boards.keysNext'), h('span.key', {}, 'V'), t('boards.keysReviewed')),
     );
     const main = h('div.pd-main', { tabindex: -1 });
     budget = 0;
@@ -1020,13 +1035,13 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
         h(
           'header.pd-fh',
           {},
-          h('button.pd-fold', { type: 'button', 'aria-label': 'Show or hide this file', onclick: () => (open.set(f.path, !isOpenFile(f)), syncSection(f)) }),
-          h('span.pd-st', { class: f.status, title: STATUS_WORD[f.status] }, f.status),
+          h('button.pd-fold', { type: 'button', 'aria-label': t('boards.foldFile'), onclick: () => (open.set(f.path, !isOpenFile(f)), syncSection(f)) }),
+          h('span.pd-st', { class: f.status, title: statusWord(f.status) }, f.status),
           h('span.pd-fpath', { title: f.path }, f.status === 'R' && f.oldPath ? `${f.oldPath} → ${f.path}` : f.path),
-          h('span.gh-pm', {}, f.binary ? h('span.bin', {}, 'binary') : h('span', {}, h('span.add', {}, `+${f.additions}`), ' ', h('span.del', {}, `−${f.deletions}`))),
+          h('span.gh-pm', {}, f.binary ? h('span.bin', {}, t('boards.binary')) : h('span', {}, h('span.add', {}, `+${f.additions}`), ' ', h('span.del', {}, `−${f.deletions}`))),
           n ? h('span.pd-c', {}, `💬 ${n}`) : null,
-          h('span.pd-stale.hidden', { title: 'The file changed after you marked it reviewed' }, 'changed since review'),
-          h('label.pd-viewed', { title: 'Mark as reviewed (V)' }, box, 'Reviewed'),
+          h('span.pd-stale.hidden', { title: t('boards.staleTitle') }, t('boards.stale')),
+          h('label.pd-viewed', { title: t('boards.viewedTitle') }, box, t('boards.viewed')),
         ),
         body,
       );
@@ -1062,8 +1077,8 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
 
   el.addEventListener('keydown', (e) => {
     if (tab !== 'files' || e.metaKey || e.ctrlKey || e.altKey) return;
-    const t = e.target as HTMLElement;
-    if (t.closest('input[type=text], textarea')) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('input[type=text], textarea')) return;
     if (e.key === 'j' || e.key === 'n') step(1);
     else if (e.key === 'k' || e.key === 'p') step(-1);
     else if (e.key === 'v') {
@@ -1073,11 +1088,11 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
     e.preventDefault();
   });
 
-  const setTab = (t: typeof tab) => {
-    tab = t;
-    savePref(TAB_KEY, t);
+  const setTab = (to: typeof tab) => {
+    tab = to;
+    savePref(TAB_KEY, to);
     renderFrame();
-    if (t === 'files') filesPane.querySelector<HTMLElement>('.pd-main')?.focus({ preventScroll: true });
+    if (to === 'files') filesPane.querySelector<HTMLElement>('.pd-main')?.focus({ preventScroll: true });
   };
   tabConv.addEventListener('click', () => setTab('conversation'));
   tabFiles.addEventListener('click', () => setTab('files'));
@@ -1121,7 +1136,7 @@ export function openPull(first: GhPull, net: Net, actions: BoardActions) {
     renderFrame();
   });
   const modal: Modal = openModal(el, {
-    doing: `🔀 reading PR #${it.number}`,
+    doing: t('boards.doingPull', { n: it.number }),
     onClose: () => {
       unsub();
       comment.dispose();
@@ -1141,7 +1156,7 @@ export function openIssue(first: GhIssue, net: Net, actions: BoardActions) {
   const itemUrl = it.url;
   let detail: GhIssueDetail | null = null;
   let error = '';
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
+  const close = h('button.btn.close', { 'aria-label': t('boards.close') }, '✕');
   const pill = h('span.pill');
   const conv = h('div.gh-conv');
   const thread = h('div.gh-items');
@@ -1153,33 +1168,33 @@ export function openIssue(first: GhIssue, net: Net, actions: BoardActions) {
   conv.append(h('div.gh-col', {}, thread, comment.el));
   // The footer stays put and renderFrame only shows, hides and relabels, so a board refresh never
   // pulls focus out of the provider picker.
-  const closeIssue = h('button.btn', { type: 'button', title: 'Close this issue on GitHub', onclick: () => openClose('issue', it, net, load) }, '✔️ Close issue…');
-  const queueProvider = providerPicker(store.project, `issue-provider-${it.number}`, 'Queue on');
+  const closeIssue = h('button.btn', { type: 'button', title: t('boards.closeIssueTitle'), onclick: () => openClose('issue', it, net, load) }, t('boards.closeIssue'));
+  const queueProvider = providerPicker(store.project, `issue-provider-${it.number}`, t('boards.queueOn'));
   const addIssueToQueue = () => {
     if (!queueProvider.valid()) return;
     modal.close();
     actions.queue(issuePrompt(it), `#${it.number} ${it.title}`, it.number, queueProvider.value(), queueProvider.model(), queueProvider.effort());
   };
   const queue = h('button.btn', { type: 'button', onclick: addIssueToQueue }) as HTMLButtonElement;
-  const pickUp = h('button.btn', { type: 'button', title: 'Carry its card to an empty desk, a worker or the queue board, and press E there', onclick: () => actions.pickUp(it) }, '✋ Pick it up');
+  const pickUp = h('button.btn', { type: 'button', title: t('boards.pickUpTitle'), onclick: () => actions.pickUp(it) }, t('boards.pickUp'));
   const meta = h('div.gh-meta');
   const el = h(
     'div.modal.gh-window.issue',
-    { role: 'dialog', 'aria-label': `Issue #${it.number}` },
+    { role: 'dialog', 'aria-label': t('boards.issueAria', { n: it.number }) },
     h('header', {}, pill, h('h2', { title: it.title }, `#${it.number} ${it.title}`), close),
     meta,
     h('div.gh-body', {}, conv),
     h(
       'footer',
       {},
-      h('a.grow', { href: it.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open on GitHub ↗'),
-      h('button.btn', { type: 'button', title: 'Send a worker your own prompt about this issue', onclick: () => actions.ask(issueContext(it), `Ask about issue #${it.number}`) }, '✍️ Ask a worker…'),
-      h('button.btn', { type: 'button', title: 'Workers take it on together in the meeting room: a debate, lead & team, map-reduce or red / blue', onclick: () => actions.meeting(issueMeeting(it.number, it.title)) }, '🤝 Meeting…'),
+      h('a.grow', { href: it.url, target: '_blank', rel: 'noopener noreferrer' }, t('boards.openOnGithub')),
+      h('button.btn', { type: 'button', title: t('boards.askIssueTitle'), onclick: () => actions.ask(issueContext(it), t('boards.askIssueTask', { n: it.number })) }, t('boards.askWorker')),
+      h('button.btn', { type: 'button', title: t('boards.meetingTitle'), onclick: () => actions.meeting(issueMeeting(it.number, it.title)) }, t('boards.meeting')),
       closeIssue,
       queueProvider.element,
       queue,
       pickUp,
-      h('button.btn.primary', { type: 'button', onclick: () => actions.assign(issuePrompt(it), `Hand issue #${it.number} to a worker`) }, '🤖 Hand to a worker'),
+      h('button.btn.primary', { type: 'button', onclick: () => actions.assign(issuePrompt(it), t('boards.handIssueTask', { n: it.number })) }, t('boards.handToWorker')),
     ),
   );
   const renderFrame = () => {
@@ -1188,14 +1203,14 @@ export function openIssue(first: GhIssue, net: Net, actions: BoardActions) {
       ...nodes(
         avatar(it.author),
         h('b', {}, it.author),
-        h('span', {}, `opened this ${timeAgo(it.createdAt)}`),
+        h('span', {}, t('boards.openedAgo', { ago: timeAgo(it.createdAt) })),
         it.assignees.length ? h('span', {}, `· 👤 ${it.assignees.join(', ')}`) : null,
         ...it.labels.map(labelChip),
         labelButton('issue', () => it, net, (labels) => ((it = { ...it, labels }), renderFrame())),
       ),
     );
     pill.className = `pill ${isOpen ? 'done' : 'offline'}`;
-    pill.textContent = isOpen ? 'open' : 'closed';
+    pill.textContent = t(isOpen ? 'boards.pillOpen' : 'boards.pillClosed');
     const task = store.taskForIssue(it.number);
     const onQueue = !!task && task.status !== 'done';
     closeIssue.classList.toggle('hidden', !isOpen);
@@ -1203,15 +1218,15 @@ export function openIssue(first: GhIssue, net: Net, actions: BoardActions) {
     queueProvider.element.classList.toggle('hidden', !isOpen || onQueue);
     queue.classList.toggle('hidden', !isOpen);
     queue.disabled = onQueue;
-    queue.title = onQueue ? '' : 'A worker picks it up by itself when a desk is free and there is room under the worker limit';
-    queue.textContent = onQueue ? (task!.status === 'running' ? `🤖 ${task!.workerName ?? 'A worker'} is on it` : '📋 On the queue') : '📋 Add to queue';
+    queue.title = onQueue ? '' : t('boards.queueIssueTitle');
+    queue.textContent = onQueue ? (task!.status === 'running' ? t('boards.workerOnIt', { name: task!.workerName ?? t('boards.aWorkerCap') }) : t('boards.onQueue')) : t('boards.addToQueueBtn');
   };
   const render = () => {
-    thread.replaceChildren(commentCard({ id: 'body', author: it.author, body: detail?.body ?? it.body, createdAt: it.createdAt, url: it.url }, itemUrl, 'opened this'));
+    thread.replaceChildren(commentCard({ id: 'body', author: it.author, body: detail?.body ?? it.body, createdAt: it.createdAt, url: it.url }, itemUrl, t('boards.openedThis')));
     if (error) thread.append(errorBox(error, load));
-    else if (!detail) thread.append(spinnerRow('Loading comments…'));
-    else if (!detail.comments.length) thread.append(h('p.gh-quiet', {}, 'No comments yet.'));
-    else thread.append(...detail.comments.map((c) => commentCard(c, itemUrl, 'commented')));
+    else if (!detail) thread.append(spinnerRow(t('boards.loadingComments')));
+    else if (!detail.comments.length) thread.append(h('p.gh-quiet', {}, t('boards.noComments')));
+    else thread.append(...detail.comments.map((c) => commentCard(c, itemUrl, t('boards.commented'))));
   };
   let generation = 0;
   function load() {
@@ -1239,7 +1254,7 @@ export function openIssue(first: GhIssue, net: Net, actions: BoardActions) {
     store.on('queue', renderFrame),
   ];
   const modal = openModal(el, {
-    doing: `📋 reading issue #${it.number}`,
+    doing: t('boards.doingIssue', { n: it.number }),
     onClose: () => {
       comment.dispose();
       unsubs.forEach((u) => u());
