@@ -5,8 +5,12 @@ const REFRESH_MS = 90_000;
 /** How long the repo's list of labels is kept before the label picker asks GitHub again. */
 const LABELS_MS = 60_000;
 
+/** What the issues board says when the repository has GitHub issues turned off. */
+export const ISSUES_OFF = 'Issues are turned off for this repository. Turn them on in its GitHub settings to use this board.';
+
 /** Turns gh's stderr into something a person standing at the board can act on. */
-function friendly(raw: string): string {
+export function friendly(raw: string): string {
+  if (/has disabled issues/i.test(raw)) return ISSUES_OFF;
   if (/no git remotes found|none of the git remotes/i.test(raw)) return 'This project has no GitHub remote yet. Push it to GitHub (git remote add origin <url>) to fill the boards.';
   if (/not a git repository/i.test(raw)) return "This folder isn't a git repository";
   if (/auth login|not logged in|authentication/i.test(raw)) return "gh isn't logged in on the server — run `gh auth login`";
@@ -381,7 +385,8 @@ export class GitHub {
       const items = this.relabel('issue', fetched, asked);
       this.issues = { items, fetchedAt: Date.now(), loading: false };
     } catch (err) {
-      this.issues = { ...this.issues, loading: false, error: (err as Error).message, fetchedAt: Date.now() };
+      const msg = (err as Error).message;
+      this.issues = msg === ISSUES_OFF ? { items: [], off: 'issues-disabled', fetchedAt: Date.now(), loading: false } : { ...this.issues, loading: false, error: msg, fetchedAt: Date.now() };
     }
     this.onIssues(this.issues);
   }

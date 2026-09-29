@@ -250,6 +250,10 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
     const active = document.activeElement;
     const focused = active && body.contains(active) ? active.getAttribute('data-focus') : null;
     body.replaceChildren();
+    if (st.off) {
+      body.append(h('div.board-error', {}, t('boards.issuesOff')));
+      return;
+    }
     if (st.error && !st.items.length) {
       body.append(h('div.board-error', {}, t('boards.loadError', { error: st.error }), h('br'), h('small', {}, t('boards.ghHint'))));
       return;
