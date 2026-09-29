@@ -200,7 +200,7 @@ export function openTerminal(net: Net, workerId: string, onChanges?: () => void,
   const jumpTo = (f: TerminalFind) => {
     const buf = term.buffer.active;
     const row = findLine(buf, f.needle, f.fromEnd);
-    if (row === undefined) return toast('That line has scrolled out of the terminal since', 'warn');
+    if (row === undefined) return toast(t('notices.lineScrolledOut'), 'warn');
     let end = row;
     while (buf.getLine(end + 1)?.isWrapped) end++;
     // A marker follows the line when the terminal reflows, which it does as the window settles.

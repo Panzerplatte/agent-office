@@ -5,6 +5,7 @@ import { isAgentEffort, isAgentProvider, isClaudeModel, type AgentChoice, type A
 import { DESK_BY_ID, SEATS, nextFreeSeat } from '../shared/layout.js';
 import { isValidOpenCodeModel, validateWorkerEffort, validateWorkerModel } from './agents.js';
 import { PROMPTS } from '../shared/prompts.js';
+import { notice, type Notice } from '../shared/notices.js';
 
 /** What the queue needs from the worker manager. Narrow on purpose, so a smoke test can fake it. */
 export interface QueueWorkers {
@@ -15,12 +16,12 @@ export interface QueueWorkers {
   deskOccupied(deskId: string): boolean;
   spawn(deskId: string, by: string, prompt: string, worktree: boolean, kind: 'agent', provider: AgentProvider, model?: string, effort?: AgentEffort): WorkerInfo | string;
   /** Resolves with a line about what became of the worker's worktree. */
-  kill(id: string): Promise<{ note?: string; error?: string }>;
+  kill(id: string): Promise<{ note?: Notice; error?: Notice }>;
 }
 
 export interface QueueEvents {
   update(state: QueueState): void;
-  toast(text: string, level: 'info' | 'warn' | 'error'): void;
+  toast(text: string | Notice, level: 'info' | 'warn' | 'error'): void;
   /** Mark the issue as taken on GitHub, so the board moves it to In progress. Resolves to an error message when it can't. */
   claimIssue(issue: number): Promise<string | undefined>;
   /** Ask GitHub for fresh pull requests, to pick up the one a worker just opened. */
@@ -251,10 +252,10 @@ export class TaskQueue {
     t.finishedAt = Date.now();
     const who = t.workerName ?? 'Its worker';
     if (outcome === 'done') {
-      this.events.toast(`📋 ${who} finished ${label(t)}`, 'info');
+      this.events.toast(notice('queue.finished', { who, task: label(t) }), 'info');
       // The worker most likely just opened the PR; go and link it.
       this.events.refreshGitHub();
-    } else if (outcome === 'exited') this.events.toast(`📋 ${who} stopped before finishing ${label(t)} — requeue it from the queue board`, 'warn');
+    } else if (outcome === 'exited') this.events.toast(notice('queue.stopped', { who, task: label(t) }), 'warn');
     return outcome === 'done';
   }
 
@@ -287,7 +288,7 @@ export class TaskQueue {
     const pick = candidates[0];
     if (!pick) return undefined;
     const done = this.workers.kill(pick.w.id);
-    this.events.toast(`📋 ${pick.w.name} went home after ${label(pick.t)} to make room for the next task`, 'info');
+    this.events.toast(notice('queue.madeRoom', { name: pick.w.name, task: label(pick.t) }), 'info');
     void done.then(({ note, error }) => {
       if (note) this.events.toast(note, 'info');
       if (error) this.events.toast(error, 'warn');
@@ -316,7 +317,7 @@ export class TaskQueue {
         t.outcome = 'failed';
         t.error = r;
         t.finishedAt = Date.now();
-        this.events.toast(`📋 Couldn't start ${label(t)}: ${r}`, 'error');
+        this.events.toast(notice('queue.startFailed', { task: label(t), error: r }), 'error');
         continue;
       }
       t.status = 'running';
@@ -326,11 +327,11 @@ export class TaskQueue {
       t.startedAt = Date.now();
       t.error = undefined;
       this.lastStatus.set(r.id, r.status);
-      this.events.toast(`📋 ${r.name} sat down at ${DESK_BY_ID.get(desk)?.label ?? 'a desk'} to work on ${label(t)}`, 'info');
+      this.events.toast(notice('queue.satDown', { name: r.name, desk: DESK_BY_ID.get(desk)?.label ?? 'a desk', task: label(t) }), 'info');
       if (t.issue !== undefined) {
         const issue = t.issue;
         void this.events.claimIssue(issue).then((err) => {
-          if (err) this.events.toast(`Couldn't assign issue #${issue} on GitHub: ${err}`, 'warn');
+          if (err) this.events.toast(notice('issue.claimFailed', { issue, error: err }), 'warn');
         });
       }
     }

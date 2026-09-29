@@ -83,5 +83,10 @@ export function t(key: Key, vars: Vars = {}): string {
   return typeof text === 'function' ? text(vars) : format(text, vars);
 }
 
+/** A toast the server sent, in your language: by its key when this page knows it, else the English it came with. */
+export function noticeText(n: { text: string; key?: string; params?: Vars }): string {
+  return n.key && Object.hasOwn(TABLES.notices.en, n.key) ? t(`notices.${n.key}` as Key, n.params) : n.text;
+}
+
 /** Every table, for the tests that check each language has every text. */
 export const tables: Record<string, { en: Table; de: Table }> = TABLES;

@@ -79,7 +79,7 @@ function upload(f: BinaryFileData): Promise<boolean> {
         return true;
       }
       const { error } = (await res.json().catch(() => ({}))) as { error?: string };
-      toast(error ?? "Couldn't put that picture on the whiteboard", 'warn');
+      toast(error ?? t('notices.whiteboardImage'), 'warn');
       return false;
     })
     .catch(() => {
@@ -211,7 +211,7 @@ export function mountWhiteboard(host: HTMLElement, send: (msg: ClientMsg) => voi
       const n = JSON.stringify(el).length;
       // The office would refuse it (or drop the connection over it), so it stays on your screen only.
       if (n > WB_MAX_ELEMENT_BYTES) {
-        if (!tooBig.has(el.id)) toast("That's too big for the whiteboard, so only you can see it. Try it in smaller pieces.", 'warn');
+        if (!tooBig.has(el.id)) toast(t('notices.whiteboardTooBig'), 'warn');
         tooBig.add(el.id);
         continue;
       }

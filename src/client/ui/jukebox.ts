@@ -1,5 +1,5 @@
 import { JUKEBOX_TUNES, STREAM, checkStreamUrl, trackTitle, tuneById } from '../../shared/jukebox';
-import { t } from '../i18n';
+import { noticeText, t } from '../i18n';
 import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, toast } from './dom';
@@ -82,7 +82,7 @@ export function openJukebox(net: Net, openVolume: () => void) {
   const play = () => {
     const u = checkStreamUrl(url.value);
     if ('error' in u) {
-      toast(u.error, 'warn');
+      toast(noticeText(u.error), 'warn');
       return url.focus();
     }
     net.send({ t: 'jukebox.play', url: u.url });

@@ -1,6 +1,8 @@
 // The lounge jukebox: the tunes it has and what it's playing, shared by the server (which keeps one
 // per floor) and the browser (which synthesizes the tunes, see client/music.ts).
 
+import { notice, type Notice } from './notices.js';
+
 export interface JukeboxTune {
   id: string;
   title: string;
@@ -46,16 +48,16 @@ export function trackTitle(s: Pick<JukeboxState, 'track' | 'url'>): string {
   }
 }
 
-export function checkStreamUrl(raw: unknown): { url: string } | { error: string } {
+export function checkStreamUrl(raw: unknown): { url: string } | { error: Notice } {
   const s = typeof raw === 'string' ? raw.trim() : '';
-  if (!s) return { error: 'Paste a link to a stream or an audio file' };
-  if (s.length > 2048) return { error: 'That link is too long' };
+  if (!s) return { error: notice('jukebox.noLink') };
+  if (s.length > 2048) return { error: notice('jukebox.longLink') };
   let u: URL;
   try {
     u = new URL(s);
   } catch {
-    return { error: "That isn't a web link. Paste an address that starts with https://" };
+    return { error: notice('jukebox.notLink') };
   }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return { error: 'Only http and https links can play on the jukebox' };
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return { error: notice('jukebox.notHttp') };
   return { url: u.href };
 }

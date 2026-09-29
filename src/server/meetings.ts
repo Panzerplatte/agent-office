@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { MEETING_SEATS } from '../shared/layout.js';
 import { MAX_MEETING_BUDGET, MEETING_NOTES_DIR, MEETING_PATTERNS, TOKENS_PER_SEAT, isMeetingPattern, meetingRecord, outputProblem, slugify } from '../shared/meetings.js';
 import { fmtTokens, isAgentEffort, isAgentProvider, tokensOf, type AgentChoice, type AgentEffort, type AgentProvider, type Meeting, type MeetingRecord, type MeetingRequest, type MeetingState, type MeetingTurn, type WorkerInfo, type WorkerStatus } from '../shared/protocol.js';
+import { notice, type Notice } from '../shared/notices.js';
 import { validateWorkerEffort, validateWorkerModel } from './agents.js';
 import { gitError, type WorktreeRef, type WorktreeState } from './worktrees.js';
 import { PROMPTS, fillPrompt, type PromptId, type PromptVars } from '../shared/prompts.js';
@@ -23,7 +24,7 @@ export interface MeetingWorkers {
   prompt(id: string, text: string, by?: string): string | undefined;
   /** Keys into its terminal: Esc, to stop what it's doing. */
   write(id: string, data: string, by: string): void;
-  kill(id: string): Promise<{ note?: string; error?: string }>;
+  kill(id: string): Promise<{ note?: Notice; error?: Notice }>;
 }
 
 /** Git for the meeting's own worktree: made when it starts, tidied away once everyone has gone home. */
@@ -35,7 +36,7 @@ export interface MeetingTrees {
 
 export interface MeetingEvents {
   update(state: MeetingState): void;
-  toast(text: string, level: 'info' | 'warn' | 'error'): void;
+  toast(text: string | Notice, level: 'info' | 'warn' | 'error'): void;
   /** Why nobody may be hired right now (today's budget is spent), if that's so. */
   hiringPaused(): string | undefined;
   /** Posts the review panel's review on its pull request. Resolves to the review's URL. */
@@ -211,7 +212,7 @@ export class MeetingRoom {
     if (last) this.archive(last);
     this.current = m;
     this.changed();
-    this.events.toast(`🤝 ${by} called a ${pattern.label} meeting: “${title}” (${count} workers, ${rounds} round${rounds === 1 ? '' : 's'} at most, ${fmtTokens(budget)} tokens)`, 'info');
+    this.events.toast(notice('meeting.called', { by, pattern: m.pattern, label: pattern.label, title, count, rounds, tokens: fmtTokens(budget) }), 'info');
     return undefined;
   }
 
@@ -228,7 +229,7 @@ export class MeetingRoom {
     const m = this.current;
     if (!m) return 'Nobody is in the meeting room';
     if (m.status === 'running') return 'The meeting is still on: stop it first';
-    this.events.toast(`🤝 ${by} cleared the meeting room`, 'info');
+    this.events.toast(notice('meeting.cleared', { by }), 'info');
     void this.dismiss(m);
     this.archive(m);
     this.current = null;
@@ -400,19 +401,20 @@ export class MeetingRoom {
     this.readPreview(m);
     this.keepNotes(m);
     const p = MEETING_PATTERNS[m.pattern];
-    this.events.toast(`🤝 The ${p.label} meeting on “${m.title}” is done: it wrote ${m.output}`, 'info');
+    this.events.toast(notice('meeting.done', { pattern: m.pattern, label: p.label, title: m.title, output: m.output }), 'info');
     const cwd = this.cwd(m);
     if (m.pattern === 'review' && m.pr !== undefined) {
       const pr = m.pr;
       void this.events.postReview(pr, path.join(cwd, m.output)).then(
         (url) => {
           m.review = { url };
-          this.events.toast(`🔍 Posted the panel's review on PR #${pr}`, 'info');
+          this.events.toast(notice('meeting.reviewPosted', { pr }), 'info');
           this.changed();
         },
         (err) => {
-          m.review = { error: (err as Error).message };
-          this.events.toast(`Couldn't post the panel's review on PR #${pr}: ${m.review.error}`, 'warn');
+          const error = (err as Error).message;
+          m.review = { error };
+          this.events.toast(notice('meeting.reviewFailed', { pr, error }), 'warn');
           this.changed();
         },
       );
@@ -423,7 +425,7 @@ export class MeetingRoom {
           this.changed();
         },
         (err) => {
-          this.events.toast(`Couldn't commit ${m.output} on ${m.worktree!.branch}: ${gitError(err)}`, 'warn');
+          this.events.toast(notice('meeting.commitFailed', { output: m.output, branch: m.worktree!.branch, error: gitError(err) }), 'warn');
           this.changed();
         },
       );
@@ -440,7 +442,7 @@ export class MeetingRoom {
     for (const s of m.seats) if (s.workerId && busy.has(s.workerId)) this.workers.write(s.workerId, '\x1b', BY);
     this.readPreview(m);
     this.keepNotes(m);
-    this.events.toast(`⛔ The meeting on “${m.title}” stopped in round ${m.round}: ${reason}`, 'warn');
+    this.events.toast(notice('meeting.stopped', { title: m.title, round: m.round, reason }), 'warn');
     this.changed();
   }
 
@@ -465,10 +467,10 @@ export class MeetingRoom {
     }
     const state = await this.trees.inspect(wt);
     if (state.error || state.dirty) {
-      this.events.toast(`Kept the “${m.title}” meeting's worktree and branch ${wt.branch}: ${state.error ?? `${state.dirty} uncommitted change${state.dirty === 1 ? '' : 's'}`}`, 'info');
+      this.events.toast(notice('meeting.keptWorktree', { title: m.title, branch: wt.branch, ...(state.error ? { error: state.error } : { dirty: state.dirty }) }), 'info');
     } else {
       const err = await this.trees.remove(wt, state.ahead ? 'worktree' : 'all');
-      if (err) this.events.toast(`Couldn't tidy away the meeting's worktree: ${err}`, 'warn');
+      if (err) this.events.toast(notice('meeting.tidyFailed', { error: err }), 'warn');
     }
     this.persist();
   }

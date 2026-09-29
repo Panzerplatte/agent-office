@@ -7,6 +7,7 @@ import type { DogState } from './dog.js';
 import type { EmoteId } from './emotes.js';
 import type { BallState } from './hoop.js';
 import type { JukeboxState } from './jukebox.js';
+import type { NoticeParams } from './notices.js';
 import type { PromptId } from './prompts.js';
 import type { DrinkId } from './rooftop.js';
 import type { WbElement, WbPointer, WhiteboardView } from './whiteboard.js';
@@ -1196,7 +1197,11 @@ export type ServerMsg =
   | { t: 'gh.labeled'; kind: 'issue' | 'pull'; number: number; labels?: GhLabel[]; error?: string }
   | { t: 'rtc'; from: string; data: unknown }
   | ({ t: 'chat' } & ChatLine)
-  | { t: 'toast'; text: string; level: 'info' | 'warn' | 'error' }
+  /**
+   * A line for the team. `text` is in English; `key` and `params` (from shared/notices) let the browser
+   * say it in your language, and a browser that doesn't know the key shows the text.
+   */
+  | { t: 'toast'; text: string; level: 'info' | 'warn' | 'error'; key?: string; params?: NoticeParams }
   | { t: 'team'; state: TeamState }
   | { t: 'upgrade'; state: UpgradeState }
   | { t: 'services'; state: ServicesState }

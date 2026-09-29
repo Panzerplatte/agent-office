@@ -39,7 +39,7 @@ let redrawBoard = () => {};
 export function openWhiteboard(net: Net) {
   if (open) return;
   const floor = store.floor;
-  if (!floor) return toast('Take the elevator to a floor first', 'warn');
+  if (!floor) return toast(t('notices.pickFloor'), 'warn');
   const people = h('div.wb-people');
   const close = h('button.btn.close', { 'aria-label': t('windows.common.close'), title: t('windows.common.closeEsc') }, '✕');
   const host = h('div.wb-host', {}, h('div.wb-loading', {}, t('windows.whiteboard.loading')));

@@ -296,7 +296,7 @@ export function openBookshelf(deps: ShelfDeps) {
       doc = await getJson<DocText>(`/api/docs/file?${q({ path })}`);
     } catch (err) {
       if (mine !== opening) return;
-      toast(`📚 Couldn't open ${nameOf(path)}: ${(err as Error).message}`, 'warn');
+      toast(t('notices.bookFailed', { name: nameOf(path), error: (err as Error).message }), 'warn');
       if (!current) page.replaceChildren(h('div.bs-empty', {}, t('windows.bookshelf.openFailed', { path })));
       return;
     }

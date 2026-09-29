@@ -158,12 +158,13 @@ export function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/** A worker's status in words, in your language (it's picked before the page loads, and switching reloads it). */
 export const STATUS_LABEL: Record<string, string> = {
-  starting: 'starting',
-  idle: 'ready',
-  working: 'working',
-  needs_input: 'needs input',
-  done: 'done',
-  exited: 'exited',
-  offline: 'asleep',
+  starting: t('notices.status.starting'),
+  idle: t('notices.status.idle'),
+  working: t('notices.status.working'),
+  needs_input: t('notices.status.needs_input'),
+  done: t('notices.status.done'),
+  exited: t('notices.status.exited'),
+  offline: t('notices.status.offline'),
 };

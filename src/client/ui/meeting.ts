@@ -245,7 +245,7 @@ function meetingForm(net: Net, preset: MeetingPreset | undefined, done: () => vo
     if (def().needs === 'pr' && !pr()) return prSel.focus();
     const parts = partsIn.value.split('\n').map((l) => l.trim()).filter(Boolean);
     if (def().needs === 'parts' && parts.length < roles.length - 1) {
-      toast(`List at least ${roles.length - 1} parts, one per line, or seat fewer workers`, 'warn');
+      toast(t('notices.meetingParts', { n: roles.length - 1 }), 'warn');
       return partsIn.focus();
     }
     const output = outputIn.value.trim();
@@ -267,7 +267,7 @@ function meetingForm(net: Net, preset: MeetingPreset | undefined, done: () => vo
       model: provider.model(),
       effort: provider.effort(),
     });
-    toast(`🤝 Calling the ${def().label} meeting: the workers are heading for the meeting room`);
+    toast(t('notices.meetingCalling', { label: def().label }));
     done();
   };
   bodyEl.addEventListener('submit', (e) => {

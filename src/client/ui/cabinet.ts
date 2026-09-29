@@ -297,13 +297,13 @@ export class Cabinet {
         // It can't follow the old game on from where it was, so a new one for the new game it started.
         if (lostGame(this.asked, p.game)) {
           this.newGame();
-          toast("🕹️ The office lost track of your game, so here's a new one");
+          toast(t('notices.arcadeLostGame'));
         }
         this.asked = '';
         this.game.id = p.game;
       }
     } else if (this.mode === 'watch' && (!p || p.id === store.you || p.name !== this.watching)) {
-      if (!p) toast(`${this.watching} stepped away from the arcade`);
+      if (!p) toast(t('notices.arcadeLeft', { name: this.watching }));
       this.modal?.close();
     }
     this.dirty = true;

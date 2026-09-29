@@ -3,6 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ImageResult } from './decor.js';
 import { changedImageType, type ChangedFile, type ChangeStatus, type ChangesState } from '../shared/protocol.js';
+import { notice, type Notice } from '../shared/notices.js';
 
 // What a worker changed, for the Changes window at its desk: the files it touched and their diff,
 // against the branch the office was opened on. While anyone has the window open, the office polls
@@ -30,7 +31,7 @@ export interface ChangesTarget {
 
 export interface ChangesEvents {
   state(state: ChangesState, clients: string[]): void;
-  toast(text: string, level: 'info' | 'warn' | 'error'): void;
+  toast(text: string | Notice, level: 'info' | 'warn' | 'error'): void;
   /** Something changed on GitHub (a PR was opened): refresh the boards. */
   refreshGitHub(): void;
 }
@@ -273,7 +274,7 @@ export class Changes {
       await git(['add', '-A'], t.cwd);
       await git(['commit', '-q', '-m', msg], t.cwd, 120_000);
       const subject = msg.split('\n')[0];
-      this.events.toast(`${who} committed “${subject.length > 60 ? `${subject.slice(0, 59)}…` : subject}” at ${t.name}'s desk`, 'info');
+      this.events.toast(notice('changes.committed', { who, subject: subject.length > 60 ? `${subject.slice(0, 59)}…` : subject, name: t.name }), 'info');
     });
   }
 
@@ -285,12 +286,12 @@ export class Changes {
         if (!file?.uncommitted) return 'That file has no uncommitted changes';
         if (file.status === '?') await git(['clean', '-f', '--', file.path], t.cwd);
         else await git(['restore', '--source=HEAD', '--staged', '--worktree', '--', ...(file.from ? [file.from] : []), file.path], t.cwd);
-        this.events.toast(`${who} discarded the changes to ${path.basename(file.path)} at ${t.name}'s desk`, 'info');
+        this.events.toast(notice('changes.discardedFile', { who, file: path.basename(file.path), name: t.name }), 'info');
       } else {
         const n = w.last?.files.filter((f) => f.uncommitted).length ?? 0;
         await git(['reset', '-q', '--hard'], t.cwd);
         await git(['clean', '-fd'], t.cwd);
-        this.events.toast(`${who} discarded ${n ? `${n} uncommitted change${n > 1 ? 's' : ''}` : 'the uncommitted changes'} at ${t.name}'s desk`, 'info');
+        this.events.toast(n ? notice('changes.discarded', { who, n, name: t.name }) : notice('changes.discardedAll', { who, name: t.name }), 'info');
       }
       return undefined;
     });
@@ -314,7 +315,7 @@ export class Changes {
       if (r.code !== 0 || !/^https?:\/\//.test(url)) throw new GitError(reason(r, url || 'gh pr create failed'));
       const number = Number(/\/(\d+)$/.exec(url)?.[1] ?? 0);
       this.opened.set(s.branch, { number, url });
-      this.events.toast(`${who} opened a pull request for ${t.name}: ${url}`, 'info');
+      this.events.toast(notice('changes.prOpened', { who, name: t.name, url }), 'info');
       this.events.refreshGitHub();
       return undefined;
     });
