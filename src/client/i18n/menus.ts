@@ -158,6 +158,21 @@ export default strings(
     barCutOff: "🙅 The bartender thinks you've had enough. Water's on the house.",
     barFoot: 'Drinks go to your head for a minute or so, and the view goes with them. Everything is on the house.',
 
+    // The ashtray's joint menu (F on the balcony)
+    ashtray: 'Ashtray',
+    ashtrayTitle: '🌿 Roll one',
+    strainMild: 'Office Mellow',
+    strainMildBlurb: 'A little something for the afternoon slump',
+    strainHouse: 'Balcony Blend',
+    strainHouseBlurb: 'The house roll. Colors get interesting',
+    strainStrong: 'Deadline Destroyer',
+    strainStrongBlurb: 'Nothing is due. Nothing was ever due',
+    strainKickLight: '🌀 light',
+    strainKickMedium: '🌀🌀 properly high',
+    strainKickStrong: '🌀🌀🌀 very, very high',
+    strainLight: 'Spark up some {strain}',
+    ashtrayFoot: 'It kicks in over a few seconds and hangs about for a minute after you stub it out. The view goes with it. E or F stubs it out.',
+
     // Controls (H)
     helpTitle: '🎮 Controls',
     keySpace: 'Space',
@@ -185,7 +200,7 @@ export default strings(
     helpShell: 'Open a shared shell (dev servers, git, tests) at an empty desk',
     helpResume: 'Resume a sleeping worker',
     helpHome: 'Send a worker home (frees the desk)',
-    helpPicture: 'Hang a picture from the web on a wall. Look at a picture and press E to move, edit or take it down. At the ashtray on the balcony, F smokes a joint instead',
+    helpPicture: 'Hang a picture from the web on a wall. Look at a picture and press E to move, edit or take it down. At the ashtray on the balcony, F rolls a joint instead',
     helpPutBack: 'Put back the issue card in your hands (E at a note on the issues board, or ✋ Pick it up in an issue; then E at an empty desk, a worker or the queue board), or drop the basketball',
     helpDog: 'Walk up to the office dog and press E to pet it. When a worker needs input, it runs to that desk and barks. Name it in ⚙️ Settings',
     helpPr: 'Open a pull request for a worker on its own branch, or see the one it has',
@@ -353,6 +368,21 @@ export default strings(
     barCutOff: '🙅 Der Barkeeper findet, du hattest genug. Wasser geht aufs Haus.',
     barFoot: 'Drinks steigen dir für etwa eine Minute zu Kopf, und die Aussicht mit ihnen. Alles geht aufs Haus.',
 
+    // Das Joint-Menü am Aschenbecher (F auf dem Balkon)
+    ashtray: 'Aschenbecher',
+    ashtrayTitle: '🌿 Einen drehen',
+    strainMild: 'Office Mellow',
+    strainMildBlurb: 'Ein bisschen was gegen das Nachmittagstief',
+    strainHouse: 'Balcony Blend',
+    strainHouseBlurb: 'Die Hausmischung. Die Farben werden interessant',
+    strainStrong: 'Deadline Destroyer',
+    strainStrongBlurb: 'Nichts ist fällig. Nie war etwas fällig',
+    strainKickLight: '🌀 leicht',
+    strainKickMedium: '🌀🌀 richtig high',
+    strainKickStrong: '🌀🌀🌀 sehr, sehr high',
+    strainLight: 'Etwas {strain} anzünden',
+    ashtrayFoot: 'Wirkt nach ein paar Sekunden und hält noch etwa eine Minute an, nachdem du ihn ausgedrückt hast. Die Aussicht geht mit. E oder F drückt ihn aus.',
+
     // Steuerung (H)
     helpTitle: '🎮 Steuerung',
     keySpace: 'Leertaste',
@@ -380,7 +410,7 @@ export default strings(
     helpShell: 'An einem freien Schreibtisch eine gemeinsame Shell öffnen (Dev-Server, Git, Tests)',
     helpResume: 'Einen schlafenden Worker wecken',
     helpHome: 'Einen Worker nach Hause schicken (macht den Schreibtisch frei)',
-    helpPicture: 'Ein Bild aus dem Web an eine Wand hängen. Sieh ein Bild an und drück E, um es zu verschieben, zu bearbeiten oder abzunehmen. Am Aschenbecher auf dem Balkon rauchst du mit F stattdessen einen Joint',
+    helpPicture: 'Ein Bild aus dem Web an eine Wand hängen. Sieh ein Bild an und drück E, um es zu verschieben, zu bearbeiten oder abzunehmen. Am Aschenbecher auf dem Balkon drehst du mit F stattdessen einen Joint',
     helpPutBack: 'Die Issue-Karte in deinen Händen zurücklegen (E an einer Notiz am Issue-Board oder ✋ Aufnehmen in einem Issue; dann E an einem freien Schreibtisch, einem Worker oder dem Warteschlangen-Board), oder den Basketball fallen lassen',
     helpDog: 'Geh zum Bürohund und drück E, um ihn zu streicheln. Braucht ein Worker eine Eingabe, rennt er zu dem Schreibtisch und bellt. Gib ihm in ⚙️ Einstellungen einen Namen',
     helpPr: 'Einen Pull Request für einen Worker auf seinem eigenen Branch öffnen, oder den ansehen, den er hat',

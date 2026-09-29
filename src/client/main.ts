@@ -18,6 +18,7 @@ import { DrunkVision } from './world/drunk';
 import { Booze, type Stage as Feeling } from './booze';
 import { djFrame, djTime } from './dnb';
 import { openBar } from './ui/bar';
+import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, type Flight, type Hit, type Shot } from './world/golf';
@@ -1688,7 +1689,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   // A note on the issues board: E takes it straight off the cork, O opens it to read first.
   if (note && key === 'E') return pickUp(note);
   if (note && key === 'O') return openIssue(note, net, boardActions());
-  if (key === 'F' && target.kind === 'smoke') return lightUp('joint');
+  if (key === 'F' && target.kind === 'smoke') return rollJoint();
   if (key !== 'E') return;
   if (target.kind === 'elevator') showElevator();
   else if (target.kind === 'issues' || target.kind === 'pulls') openBoard(target.kind, net, boardActions());
@@ -1701,7 +1702,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'seat' && target.seatId) useSeat(target.seatId);
   else if (target.kind === 'dog') net.send({ t: 'dog.pet' });
   else if (target.kind === 'coffee') drinkCoffee();
-  else if (target.kind === 'smoke') lightUp('cigarette');
+  else if (target.kind === 'smoke') lightUp();
   else if (target.kind === 'gong') hitGong();
   else if (target.kind === 'whiteboard') openWhiteboard(net);
   else if (target.kind === 'cabinet') cabinet.play();
@@ -1830,15 +1831,53 @@ function setSmoking(what: Smokable | false) {
   net.send({ t: 'act', smoke: what });
 }
 
-/** E (a cigarette) or F (a joint) at the ashtray: light up, or stub out whatever you have going. */
-function lightUp(what: Smokable) {
-  if (smoking) {
-    setSmoking(false);
-    toast(t('notices.smokeStubbed'));
-  } else {
-    setSmoking(what);
-    toast(t(what === 'joint' ? 'notices.jointLit' : 'notices.smokeBreak'));
+/** How high you are (0–1, see world/drunk.ts), and how high the joint you last lit gets you. */
+let high = 0;
+let highPeak = 0;
+/** Said "the colors are really something" for this joint yet. */
+let highFelt = false;
+
+/** E at the ashtray: light a cigarette, or stub out whatever you have going. */
+function lightUp() {
+  if (smoking) return stubOut();
+  setSmoking('cigarette');
+  toast(t('notices.smokeBreak'));
+}
+
+function stubOut() {
+  setSmoking(false);
+  toast(t('notices.smokeStubbed'));
+}
+
+/** F at the ashtray: pick what to roll and spark it up, or stub out whatever you have going. */
+function rollJoint() {
+  if (smoking) return stubOut();
+  openAshtray((s) => {
+    // Wandered off (or lit up some other way) while choosing.
+    if (smoking || !onBalcony()) return;
+    // Another one on top of the last: it doesn't get any gentler.
+    highPeak = Math.max(s.strength, high);
+    highFelt = false;
+    setSmoking('joint');
+    toast(t('notices.jointLit', { emoji: s.emoji, strain: strainName(s) }));
+  });
+}
+
+/**
+ * Every frame: how high you are. It comes on over ten seconds or so while the joint's going, then
+ * fades with the mellow minute after you put it out.
+ */
+function getHigh(now: number, dt: number): number {
+  let target = 0;
+  if (smoking === 'joint') target = highPeak;
+  else if (mellowUntil > now) target = (highPeak * (mellowUntil - now)) / MELLOW_MS;
+  high = target > high ? high + (target - high) * (1 - Math.exp(-dt / 4)) : Math.max(target, high - dt * 0.5);
+  if (high < 0.001) high = 0;
+  if (smoking === 'joint' && !highFelt && high > 0.3) {
+    highFelt = true;
+    toast(t('notices.highKicksIn'));
   }
+  return high;
 }
 
 /** Every frame: a little slower on your feet while a joint is going and for a minute after. */
@@ -3414,8 +3453,9 @@ function frame(ts?: number) {
     for (const p of store.peers.values()) if (p.id !== store.you && !store.onMyFloor(p)) voice.setVolume(p.id, 0);
   }
 
-  // A few drinks in, the frame goes to the screen through the drunk vision (see world/drunk.ts).
-  const blurry = drunk > 0.01;
+  // A few drinks in, or a joint, the frame goes to the screen through the drunk vision (see world/drunk.ts).
+  const stoned = getHigh(now, dt);
+  const blurry = drunk > 0.01 || stoned > 0;
   if (blurry) drunkVision.begin();
   else if (drunkVisionOn) drunkVision.release();
   drunkVisionOn = blurry;
@@ -3431,7 +3471,7 @@ function frame(ts?: number) {
     effect.render(hands.scene, hands.camera);
     sky.shading(true);
   }
-  if (blurry) drunkVision.end(drunk, t, !reduceMotion.matches);
+  if (blurry) drunkVision.end(drunk, stoned, t, !reduceMotion.matches);
   requestAnimationFrame(frame);
 }
 
