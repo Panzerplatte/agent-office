@@ -4,7 +4,7 @@ import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { sameLook } from '../shared/avatar';
 import { BALCONY, DESK_BY_ID, DESKS, ELEVATOR, ELEVATOR_CAR, FLOOR, GOLF_HOLE, LADDER, LOFT, POLE, POLES, SEATING_BY_ID, SLAB, STATIONS, STATION_AGENT, STOREY, WALL_HEIGHT, beanbagsOut, deskSeat, inElevator, nextFreeSeat, roofDrop, seatAt, seatPlace, streetBelow, vacantSeats, type DeskDef, type SeatDef, type SeatPlace, type StationKind } from '../shared/layout';
 import { floorPalette } from '../shared/floors';
-import type { AgentEffort, AgentProvider, CarriedIssue, FloorInfo, GhIssue, GongWhy, PeerInfo, WorkerInfo, WorkerTask } from '../shared/protocol';
+import type { AgentEffort, AgentProvider, CarriedIssue, FloorInfo, GhIssue, GongWhy, PeerInfo, Smokable, WorkerInfo, WorkerTask } from '../shared/protocol';
 import { MEETING_PATTERNS } from '../shared/meetings';
 import { isAsleep, isBusy, workerPr } from '../shared/status';
 import { Net } from './net';
@@ -298,16 +298,17 @@ const hands = new Hands(store.profile.color, me.skinColor);
 const caffeine = new Caffeine();
 /** No shaking the view for the coffee jitters when the system asks for less motion. */
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-// Cigarette smoke, from anyone on a smoke break.
+// Smoke from anyone on a smoke break: a joint's is thicker.
 const smoke = new Smoke();
 scene.add(smoke.group);
-const puff = (kind: 'wisp' | 'exhale', at: THREE.Vector3, dir: THREE.Vector3) => (kind === 'wisp' ? smoke.wisp(at) : smoke.exhale(at, dir));
+const puff = (kind: 'wisp' | 'exhale', at: THREE.Vector3, dir: THREE.Vector3, what: Smokable) =>
+  kind === 'wisp' ? smoke.wisp(at, what === 'joint') : smoke.exhale(at, dir, what === 'joint');
 const camLocal = new THREE.Vector3();
-// In first person yours comes off the cigarette in your hand and out in front of the camera.
-me.onSmoke = (kind, at, dir) => {
-  if (player.view !== 'first') return puff(kind, at, dir);
-  if (kind === 'wisp') return smoke.wisp(camera.localToWorld(hands.cigTip(camLocal)));
-  smoke.exhale(camera.localToWorld(camLocal.set(0, -0.14, -0.3)), camera.getWorldDirection(camLocal).setY(0.1).normalize());
+// In first person yours comes off the cigarette (or joint) in your hand and out in front of the camera.
+me.onSmoke = (kind, at, dir, what) => {
+  if (player.view !== 'first') return puff(kind, at, dir, what);
+  if (kind === 'wisp') return smoke.wisp(camera.localToWorld(hands.cigTip(camLocal)), what === 'joint');
+  smoke.exhale(camera.localToWorld(camLocal.set(0, -0.14, -0.3)), camera.getWorldDirection(camLocal).setY(0.1).normalize(), what === 'joint');
 };
 const sound = new OfficeSound();
 sound.setVolume(settings.volume, settings.muted);
@@ -711,7 +712,8 @@ net.onMessage((msg) => {
         break;
       }
       const p = store.peers.get(msg.id);
-      if (p) p.smoking = msg.smoke;
+      if (p && msg.smoke) p.smoking = msg.smoke;
+      else if (p) delete p.smoking;
       r?.person.setSmoking(msg.smoke);
       break;
     }
@@ -1016,7 +1018,7 @@ function syncPeers() {
       r.person.setLook(peer.look);
       noOutline(r.person.root);
     }
-    r.person.setSmoking(!!peer.smoking);
+    r.person.setSmoking(peer.smoking ?? false);
     r.person.setGolf(!!peer.golfing);
     r.person.holdDrink(peer.drink ? (DRINK_BY_ID.get(peer.drink) ?? null) : null);
     r.person.carry(peer.carrying);
@@ -1677,6 +1679,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   // A note on the issues board: E takes it straight off the cork, O opens it to read first.
   if (note && key === 'E') return pickUp(note);
   if (note && key === 'O') return openIssue(note, net, boardActions());
+  if (key === 'F' && target.kind === 'smoke') return lightUp('joint');
   if (key !== 'E') return;
   if (target.kind === 'elevator') showElevator();
   else if (target.kind === 'issues' || target.kind === 'pulls') openBoard(target.kind, net, boardActions());
@@ -1689,15 +1692,8 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'seat' && target.seatId) useSeat(target.seatId);
   else if (target.kind === 'dog') net.send({ t: 'dog.pet' });
   else if (target.kind === 'coffee') drinkCoffee();
-  else if (target.kind === 'smoke') {
-    if (smokeBreakUntil) {
-      setSmoking(false);
-      toast('You stub it out in the ashtray');
-    } else {
-      setSmoking(true);
-      toast('🚬 Smoke break');
-    }
-  } else if (target.kind === 'gong') hitGong();
+  else if (target.kind === 'smoke') lightUp('cigarette');
+  else if (target.kind === 'gong') hitGong();
   else if (target.kind === 'whiteboard') openWhiteboard(net);
   else if (target.kind === 'cabinet') cabinet.play();
   else if (target.kind === 'ladder') grabLadder();
@@ -1806,14 +1802,44 @@ function drinkCoffee() {
 // ---- Smoke breaks ------------------------------------------------------------------------------------
 /** When your smoke break ends by itself (performance.now()), or 0 when you're not on one. */
 let smokeBreakUntil = 0;
-const SMOKE_BREAK_MS = 90_000;
+/** What you're smoking, if you're on a break. */
+let smoking: Smokable | false = false;
+const SMOKE_BREAK_MS: Record<Smokable, number> = { cigarette: 90_000, joint: 120_000 };
+/** After a joint you're mellow for a while: you amble about (performance.now(), 0 when you're not). */
+let mellowUntil = 0;
+const MELLOW_MS = 60_000;
+/** How fast you walk while mellow. */
+const MELLOW_SPEED = 0.75;
 
-function setSmoking(on: boolean) {
-  if (on === smokeBreakUntil > 0) return;
-  smokeBreakUntil = on ? performance.now() + SMOKE_BREAK_MS : 0;
-  me.setSmoking(on);
-  hands.setSmoking(on);
-  net.send({ t: 'act', smoke: on });
+function setSmoking(what: Smokable | false) {
+  if (what === smoking) return;
+  if (smoking === 'joint') mellowUntil = performance.now() + MELLOW_MS;
+  smoking = what;
+  smokeBreakUntil = what ? performance.now() + SMOKE_BREAK_MS[what] : 0;
+  me.setSmoking(what);
+  hands.setSmoking(what);
+  net.send({ t: 'act', smoke: what });
+}
+
+/** E (a cigarette) or F (a joint) at the ashtray: light up, or stub out whatever you have going. */
+function lightUp(what: Smokable) {
+  if (smoking) {
+    setSmoking(false);
+    toast('You stub it out in the ashtray');
+  } else {
+    setSmoking(what);
+    toast(what === 'joint' ? '🌿 You spark up a joint. Puff, puff, pass' : '🚬 Smoke break');
+  }
+}
+
+/** Every frame: a little slower on your feet while a joint is going and for a minute after. */
+function mellowSpeed(now: number): number {
+  if (smoking === 'joint') return MELLOW_SPEED;
+  if (!mellowUntil) return 1;
+  if (now < mellowUntil) return MELLOW_SPEED;
+  mellowUntil = 0;
+  toast('😌 The haze lifts. Back to work!');
+  return 1;
 }
 
 /** Out on the balcony (a little slack at the door), where smoking is allowed. */
@@ -1829,8 +1855,9 @@ function checkSmokeBreak(now: number) {
     setSmoking(false);
     toast('🚭 No smoking inside, so you put it out');
   } else if (now > smokeBreakUntil) {
+    const was = smoking;
     setSmoking(false);
-    toast("That one's done. Back to work!");
+    toast(was === 'joint' ? "🌿 That's the roach. Everything feels sooo chill…" : "That one's done. Back to work!");
   }
 }
 
@@ -2361,7 +2388,9 @@ function hintFor(it: Interactable): Hint {
       return { k: String(buzzed), parts: [title('☕ Coffee machine'), key('E', buzzed ? 'Another cup' : 'Grab a cup')] };
     }
     case 'smoke':
-      return { k: String(smokeBreakUntil > 0), parts: [title('🚬 Ashtray'), key('E', smokeBreakUntil ? 'Stub it out' : 'Take a smoke break')] };
+      return smoking
+        ? { k: smoking, parts: [title('🚬 Ashtray'), key('E', 'Stub it out')] }
+        : { k: '', parts: [title('🚬 Ashtray'), key('E', 'Take a smoke break'), key('F', 'Smoke a joint')] };
     case 'gong':
       return { k: '', parts: [title('🎉 Merge gong'), aside('rings when a PR merges'), key('E', 'Bang it')] };
     case 'golf': {
@@ -2690,7 +2719,8 @@ function emoteKey(e: KeyboardEvent): boolean {
 
 /** Keys that use what you're facing: at a desk, each does something else (see interact). */
 const DESK_KEYS = { KeyE: 'E', KeyP: 'P', KeyR: 'R', KeyX: 'X', KeyB: 'B', KeyC: 'C', KeyO: 'O' } as const;
-type DeskKey = (typeof DESK_KEYS)[keyof typeof DESK_KEYS];
+/** F is only a use key at the ashtray (see officeKey); anywhere else it hangs a picture. */
+type DeskKey = (typeof DESK_KEYS)[keyof typeof DESK_KEYS] | 'F';
 
 function use(it: Interactable | null, key: DeskKey, note = aimedNote) {
   if (!it) return;
@@ -2774,7 +2804,9 @@ function officeKey(e: KeyboardEvent): boolean {
       openHelp();
       return true;
     case 'KeyF':
-      startHanging();
+      // At the ashtray, F rolls a joint instead.
+      if (target?.kind === 'smoke' && !carrying) use(target, 'F');
+      else startHanging();
       return true;
     case 'KeyN':
       goToNextWaiting();
@@ -3204,7 +3236,7 @@ function frame(ts?: number) {
 
   // Coffee: quicker feet, higher jumps, a mug in hand, and maybe the jitters.
   const secs = now / 1000;
-  player.speedBoost = caffeine.speed(secs);
+  player.speedBoost = caffeine.speed(secs) * mellowSpeed(now);
   player.jumpBoost = caffeine.jump(secs);
   thud = Math.max(0, thud - dt * 2.5);
   player.jitter = reduceMotion.matches ? 0 : Math.max(caffeine.jitter(secs), thud);

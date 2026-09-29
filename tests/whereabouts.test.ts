@@ -21,3 +21,8 @@ test('up on the roof, the dance floor and the bar have their own words, and the 
   assert.equal(whereabouts(peer(0, 3, ROOF)), undefined);
   assert.equal(whereabouts({ ...peer(12, 0, ROOF), seat: 'roof-stool-3:0' }), '🪑 on the bar stool');
 });
+
+test('a smoke break says whether it is a cigarette or a joint', () => {
+  assert.equal(whereabouts({ ...peer(-8, 9), smoking: 'cigarette' }), '🚬 on a smoke break');
+  assert.equal(whereabouts({ ...peer(-8, 9), smoking: 'joint' }), '🌿 smoking a joint');
+});

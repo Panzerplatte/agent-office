@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from '../../shared/avatar';
 import { EMOTE_BY_ID, type Emote, type EmoteId } from '../../shared/emotes';
-import type { CarriedIssue, Theme, WorkerAction, WorkerStatus, WorkerTask } from '../../shared/protocol';
+import type { CarriedIssue, Smokable, Theme, WorkerAction, WorkerStatus, WorkerTask } from '../../shared/protocol';
 import type { Drink } from '../../shared/rooftop';
 import { isAsleep, type WorkerPr } from '../../shared/status';
 import { HIPS } from '../player';
@@ -196,6 +196,52 @@ export function cigarette(): { group: THREE.Group; ember: THREE.MeshToonMaterial
   return { group, ember };
 }
 
+/** A joint, lit end toward +z like the cigarette's: a paper cone, fatter at the lit end, on a card crutch. */
+export function joint(): { group: THREE.Group; ember: THREE.MeshToonMaterial } {
+  const group = new THREE.Group();
+  group.add(mesh(new THREE.CylinderGeometry(0.022, 0.013, 0.15, 8).rotateX(Math.PI / 2), toon('#f4efe2'), 0, 0, 0, false));
+  group.add(mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.03, 8).rotateX(Math.PI / 2), toon('#d9c9a3'), 0, 0, -0.09, false));
+  const ember = toonUnique('#ff6a2b');
+  ember.emissive = new THREE.Color('#ff3b00');
+  ember.emissiveIntensity = 0.3;
+  group.add(mesh(new THREE.CylinderGeometry(0.02, 0.022, 0.02, 8).rotateX(Math.PI / 2), ember, 0, 0, 0.085, false));
+  return { group, ember };
+}
+
+/** What's in a smoker's hand: a cigarette or a joint (see show), lit end toward +z, where `tip` is. */
+export class HandSmoke {
+  readonly group = new THREE.Group();
+  readonly tip = new THREE.Vector3(0, 0, 0.09);
+  private made = { cigarette: cigarette(), joint: joint() };
+  private lit: Smokable | false = false;
+
+  constructor() {
+    for (const m of Object.values(this.made)) {
+      m.group.visible = false;
+      this.group.add(m.group);
+    }
+    this.group.visible = false;
+  }
+
+  get smoking(): Smokable | false {
+    return this.lit;
+  }
+
+  /** Puts `what` in the hand, or nothing (false). */
+  show(what: Smokable | false) {
+    this.lit = what;
+    this.group.visible = !!what;
+    for (const [k, m] of Object.entries(this.made)) m.group.visible = k === what;
+  }
+
+  /** The lit end glows up (1.4) mid-drag and dies back down (0.3) after. */
+  glow(to: number, dt: number) {
+    if (!this.lit) return;
+    const ember = this.made[this.lit].ember;
+    ember.emissiveIntensity += (to - ember.emissiveIntensity) * Math.min(1, dt * 6);
+  }
+}
+
 /**
  * An open cardboard box with someone's desk things in it: a plant, a photo, a mug, a rubber duck and
  * some papers. It stands on y = 0 with its front toward +z.
@@ -334,13 +380,12 @@ export class Person {
   private ball = false;
   private shootT = -1;
   pose: Pose = 'stand';
-  private cig: THREE.Group;
-  private ember: THREE.MeshToonMaterial;
+  private cig = new HandSmoke();
   /** Seconds into a smoke break, or -1 when not on one. */
   private smokeT = -1;
   private wispIn = 0;
-  /** Where smoke comes off: the lit end (a wisp) or the mouth, blowing it out along `dir`. */
-  onSmoke: ((kind: 'wisp' | 'exhale', at: THREE.Vector3, dir: THREE.Vector3) => void) | null = null;
+  /** Where smoke comes off: the lit end (a wisp) or the mouth, blowing it out along `dir`; a joint's is thicker. */
+  onSmoke: ((kind: 'wisp' | 'exhale', at: THREE.Vector3, dir: THREE.Vector3, what: Smokable) => void) | null = null;
   /** The emote being played, how far into it (seconds), and its emoji over their head. */
   private emoting: { emote: Emote; t: number; pop: THREE.Sprite; size: THREE.Vector2 } | null = null;
   /** A thumb up and a pointing finger on the right hand, out only for those emotes. */
@@ -426,14 +471,10 @@ export class Person {
     this.armR.add(this.mug);
     // For smoke breaks: a cigarette sticking out of the right fist (the arm on -x, see reach), lit end
     // pointing down at your side and up and away when it's at your mouth.
-    const cig = cigarette();
-    this.cig = cig.group;
-    this.ember = cig.ember;
     const along = new THREE.Vector3(0, -0.9, -0.44).normalize();
-    this.cig.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), along);
-    this.cig.position.set(0, -0.38, 0).addScaledVector(along, 0.07);
-    this.cig.visible = false;
-    this.armL.add(this.cig);
+    this.cig.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), along);
+    this.cig.group.position.set(0, -0.38, 0).addScaledVector(along, 0.07);
+    this.armL.add(this.cig.group);
     // Between the hands when both arms are out in front (see update), its front to whoever they walk up to.
     const holder = this.cardHolder;
     holder.position.set(0, 0.8, 0.36);
@@ -788,15 +829,15 @@ export class Person {
     e.pop.material.opacity = THREE.MathUtils.clamp((seconds - u) / 0.4, 0, 1);
   }
 
-  get smoking(): boolean {
-    return this.smokeT >= 0;
+  get smoking(): Smokable | false {
+    return this.cig.smoking;
   }
 
-  /** Lights a cigarette (or puts it out): it's in their right hand, and they take a drag every few seconds. */
-  setSmoking(on: boolean) {
-    if (on === this.smoking) return;
-    this.smokeT = on ? 0 : -1;
-    this.cig.visible = on;
+  /** Lights a cigarette or a joint (or puts it out): it's in their right hand, and they take a drag every few seconds. */
+  setSmoking(what: Smokable | false) {
+    if (what === this.smoking) return;
+    if (!what || !this.smoking) this.smokeT = what ? 0 : -1;
+    this.cig.show(what);
   }
 
   /** A drag: up to the mouth, hold while the tip glows, back down, then blow the smoke out. */
@@ -809,20 +850,20 @@ export class Person {
       this.armL.rotation.x = THREE.MathUtils.lerp(-0.9, -2.6, k);
       this.armL.rotation.z = THREE.MathUtils.lerp(0.15, 0.6, k);
     }
-    const glow = k > 0.9 ? 1.4 : 0.3;
-    this.ember.emissiveIntensity += (glow - this.ember.emissiveIntensity) * Math.min(1, dt * 6);
-    if (!this.onSmoke) return;
+    this.cig.glow(k > 0.9 ? 1.4 : 0.3, dt);
+    const what = this.cig.smoking;
+    if (!this.onSmoke || !what) return;
     this.wispIn -= dt;
     const exhale = prev < EXHALE_AT && c >= EXHALE_AT;
     if (this.wispIn > 0 && !exhale) return;
     this.root.updateMatrixWorld(true);
     if (this.wispIn <= 0) {
       this.wispIn = 0.16 + Math.random() * 0.12;
-      this.onSmoke('wisp', this.cig.localToWorld(v1.set(0, 0, 0.09)), v2.set(0, 1, 0));
+      this.onSmoke('wisp', this.cig.group.localToWorld(v1.copy(this.cig.tip)), v2.set(0, 1, 0), what);
     }
     if (exhale) {
       const dir = v2.set(0, 0.25, 1).applyQuaternion(this.root.quaternion).normalize();
-      this.onSmoke('exhale', this.head.localToWorld(v1.set(0, -0.1, 0.36)), dir);
+      this.onSmoke('exhale', this.head.localToWorld(v1.set(0, -0.1, 0.36)), dir, what);
     }
   }
 
