@@ -4,10 +4,10 @@
 import type { ServerMsg } from '../../shared/protocol';
 import { byIndex } from '../../shared/whiteboard';
 import type { Net } from '../net';
+import { t } from '../i18n';
 import { store } from '../state';
 import { h, openModal, toast, type Modal } from './dom';
 import type { WhiteboardApp } from './whiteboard-app';
-import { t } from '../i18n';
 
 declare const __EXCALIDRAW_ASSETS__: string;
 
@@ -41,9 +41,9 @@ export function openWhiteboard(net: Net) {
   const floor = store.floor;
   if (!floor) return toast(t('notices.pickFloor'), 'warn');
   const people = h('div.wb-people');
-  const close = h('button.btn.close', { 'aria-label': 'Close', title: 'Close (Esc)' }, '✕');
-  const host = h('div.wb-host', {}, h('div.wb-loading', {}, '✏️ Getting the markers out…'));
-  const el = h('div.wb-window', { role: 'dialog', 'aria-label': 'Whiteboard' }, h('header', {}, h('h2', {}, '📝 Whiteboard'), people, close), host);
+  const close = h('button.btn.close', { 'aria-label': t('windows.common.close'), title: t('windows.common.closeEsc') }, '✕');
+  const host = h('div.wb-host', {}, h('div.wb-loading', {}, t('windows.whiteboard.loading')));
+  const el = h('div.wb-window', { role: 'dialog', 'aria-label': t('windows.whiteboard.label') }, h('header', {}, h('h2', {}, t('windows.whiteboard.title')), people, close), host);
   // Esc first gets you out of whatever you're doing in Excalidraw (typing, drawing, a menu, a tool),
   // then lets go of what's selected, and once there's nothing left, closes the window.
   const onKey = (e: KeyboardEvent) => {
@@ -78,9 +78,9 @@ export function openWhiteboard(net: Net) {
     (m) => {
       if (open !== board) return;
       host.replaceChildren();
-      board.app = m.mountWhiteboard(host, (msg) => net.send(msg), `${store.project?.name ?? 'office'} whiteboard`);
+      board.app = m.mountWhiteboard(host, (msg) => net.send(msg), t('windows.whiteboard.fileName', { project: store.project?.name ?? t('windows.whiteboard.office') }));
     },
-    () => host.replaceChildren(h('div.wb-loading', {}, "Couldn't load the whiteboard. Check your connection and open it again.")),
+    () => host.replaceChildren(h('div.wb-loading', {}, t('windows.whiteboard.loadFailed'))),
   );
 }
 
@@ -90,8 +90,8 @@ function renderPeople() {
   const others = store.drawing.filter((id) => id !== store.you).flatMap((id) => store.peers.get(id) ?? []);
   open.people.replaceChildren(
     ...(others.length
-      ? [h('span.wb-live', {}, 'LIVE'), ...others.map((p) => h('span.wb-person', { title: `${p.name} is drawing` }, h('span.dot', { style: `background:${p.color}` }), p.name))]
-      : [h('span.wb-alone', {}, 'Just you for now. Anyone on this floor can join in.')]),
+      ? [h('span.wb-live', {}, t('windows.whiteboard.live')), ...others.map((p) => h('span.wb-person', { title: t('windows.whiteboard.isDrawing', { name: p.name }) }, h('span.dot', { style: `background:${p.color}` }), p.name))]
+      : [h('span.wb-alone', {}, t('windows.whiteboard.alone'))]),
   );
 }
 

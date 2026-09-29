@@ -30,7 +30,7 @@ import { RELAY_LOGIN, relayRequest, relayUpgrade, signInPage, stoppedPage, tunne
 import { ChatLog } from './history.js';
 import { Arcade, HighScores } from './cabinet.js';
 import type { ChatLine, ClientMsg, FloorInfo, FloorView, Me, MeetingRequest, PeerInfo, SearchResults, ServerMsg, ServicesState } from '../shared/protocol.js';
-import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider } from '../shared/protocol.js';
+import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider, isSmokable } from '../shared/protocol.js';
 import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layout.js';
 import { JUKEBOX_TUNES, STREAM } from '../shared/jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
@@ -1153,9 +1153,10 @@ export async function startServer(cfg: Config) {
           broadcast({ t: 'peer.act', id: c.id, drink: drink ?? null }, c.id, true);
           break;
         }
-        if (typeof msg.smoke === 'boolean') {
-          if (msg.smoke === !!c.peer.smoking) break;
-          c.peer.smoking = msg.smoke;
+        if (msg.smoke === false || isSmokable(msg.smoke)) {
+          if (msg.smoke === (c.peer.smoking ?? false)) break;
+          if (msg.smoke) c.peer.smoking = msg.smoke;
+          else delete c.peer.smoking;
           broadcast({ t: 'peer.act', id: c.id, smoke: msg.smoke }, c.id, true);
           break;
         }

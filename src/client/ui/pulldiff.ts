@@ -1,6 +1,7 @@
 import type { GhReviewComment } from '../../shared/protocol';
 import { h, timeAgo } from './dom';
 import { markdown } from './markdown';
+import { locale, t, type Key } from '../i18n';
 
 // A PR's unified diff (`gh pr diff`), split into files, and the pieces the Files tab draws with it:
 // each file's lines with inline review comments, the file list/tree, and which files you've reviewed.
@@ -147,7 +148,12 @@ export class Reviewed {
 
 // ---- Drawing a file's diff ------------------------------------------------------------------------
 
-export const STATUS_WORD: Record<DiffFile['status'], string> = { A: 'added', D: 'deleted', M: 'modified', R: 'renamed' };
+const STATUS_WORD: Record<DiffFile['status'], Key> = { A: 'boards.fileAdded', D: 'boards.fileDeleted', M: 'boards.fileModified', R: 'boards.fileRenamed' };
+
+/** What happened to a file, in a word: added, deleted, modified or renamed. */
+export function statusWord(status: DiffFile['status']): string {
+  return t(STATUS_WORD[status]);
+}
 
 /** Lock files and build output: collapsed until asked for, like GitHub does. */
 export function looksGenerated(path: string): boolean {
@@ -164,7 +170,7 @@ export function renderThread(root: GhReviewComment, replies: Map<number, GhRevie
       h(
         'div.pd-comment',
         {},
-        h('div.pd-comment-head', {}, h('b', {}, c.author), h('a', { href: c.url, target: '_blank', rel: 'noopener noreferrer', title: new Date(c.createdAt).toLocaleString() }, timeAgo(c.createdAt))),
+        h('div.pd-comment-head', {}, h('b', {}, c.author), h('a', { href: c.url, target: '_blank', rel: 'noopener noreferrer', title: new Date(c.createdAt).toLocaleString(locale()) }, timeAgo(c.createdAt))),
         markdown(c.body, itemUrl),
       ),
     ),
@@ -192,11 +198,11 @@ export function repliesOf(comments: GhReviewComment[]): Map<number, GhReviewComm
 export function renderFileDiff(f: DiffFile, comments: GhReviewComment[], itemUrl: string): HTMLElement {
   const out = h('div.pd-lines');
   if (f.binary) {
-    out.append(h('div.pd-note', {}, 'Binary file — not shown.'));
+    out.append(h('div.pd-note', {}, t('boards.binaryNotShown')));
     return out;
   }
   if (!f.lines.length) {
-    out.append(h('div.pd-note', {}, f.status === 'R' ? 'Renamed without changes.' : 'No changes to show (file mode or empty file).'));
+    out.append(h('div.pd-note', {}, t(f.status === 'R' ? 'boards.renamedNoChanges' : 'boards.noChangesShown')));
     return out;
   }
   const threads = threadsByLine(comments, f.path);
