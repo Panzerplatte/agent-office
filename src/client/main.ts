@@ -42,6 +42,7 @@ import { DesktopNotifier, askNotifyPermission, notifyPermission, waitingOnSomeon
 import { NextUp, waitingInOrder, waitingLabel } from './nextup';
 import { $, h, clip, closeAllModals, doingNow, modalOpen, onDoingChange, onModalChange, openModal, readingNow, toast, STATUS_LABEL } from './ui/dom';
 import { noticeText, t } from './i18n';
+import { deskLabel, deskLabelOf, drinkName, patternLabel, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
 import { openTerminal, openTerminalFor, routeTerminalMessage, type TerminalFind } from './ui/terminal';
 import { openSearch } from './ui/search';
 import { openChanges, openChangesFor, routeChangesMessage } from './ui/changes';
@@ -144,7 +145,7 @@ const STATION_INFO: Record<StationKind, { icon: string; offer: string; about: st
 const idleAgents = STATIONS.map((def) => {
   const kind = def.station!;
   const agent = STATION_AGENT[kind];
-  const model = new Worker(agent.name, agent.color);
+  const model = new Worker(stationAgentName(kind), agent.color);
   model.setStatus('idle', false);
   model.setTask({ name: STATION_INFO[kind].offer, summary: STATION_INFO[kind].does });
   const view = office.desks.get(def.id)!;
@@ -1222,7 +1223,7 @@ function meetingCard(w: WorkerInfo): WorkerTask | undefined {
   if (i < 0) return undefined;
   const role = m.seats[i].role;
   const p = MEETING_PATTERNS[m.pattern];
-  if (m.status !== 'running') return { name: `${role} · ${p.icon} ${p.label}`, summary: m.status === 'done' ? t('main.meetingWrote', { output: String(m.output) }) : t('main.meetingStopped', { reason: m.reason ?? t('main.stopped') }) };
+  if (m.status !== 'running') return { name: `${role} · ${p.icon} ${patternLabel(m.pattern)}`, summary: m.status === 'done' ? t('main.meetingWrote', { output: String(m.output) }) : t('main.meetingStopped', { reason: m.reason ?? t('main.stopped') }) };
   const turn = m.turns.find((x) => x.seat === i);
   const round = t('main.meetingRound', { role, round: m.round, rounds: m.rounds });
   if (!turn || turn.state === 'done') return { name: `👂 ${round}`, summary: t(turn ? 'main.partWritten' : 'main.listening') };
@@ -1324,7 +1325,7 @@ function promptAtDesk(deskId: string) {
   if (!w) {
     if (officeIsFull()) return;
     openPrompt({
-      title: t('main.newTaskTitle', { desk: desk.label }),
+      title: t('main.newTaskTitle', { desk: deskLabel(desk) }),
       subtitle: t('main.newTaskNote'),
       warning: pressureNote(store.machine),
       submitLabel: t('main.hireStart'),
@@ -1355,7 +1356,7 @@ function hireAtDesk(deskId: string) {
   const desk = DESK_BY_ID.get(deskId)!;
   if (officeIsFull()) return;
   openPrompt({
-    title: t('main.hireTitle', { desk: desk.label }),
+    title: t('main.hireTitle', { desk: deskLabel(desk) }),
     subtitle: t('main.hireNote'),
     warning: pressureNote(store.machine),
     placeholder: t('main.hirePlaceholder'),
@@ -1370,7 +1371,7 @@ function hireAtDesk(deskId: string) {
 function killWorker(id: string) {
   const w = store.workers.get(id);
   if (!w) return;
-  const where = DESK_BY_ID.get(w.deskId)?.label ?? t('main.theDesk');
+  const where = deskLabelOf(w.deskId) ?? t('main.theDesk');
   const session = w.kind === 'shell' ? t('main.sharedShell') : t('main.session', { provider: providerLabel(w.provider, store.project) });
   if (w.meeting) {
     // The meeting's worktree is the whole table's: it's tidied away once they've all gone.
@@ -1402,7 +1403,7 @@ function askStation(deskId: string) {
   const kind = DESK_BY_ID.get(deskId)?.station;
   if (!kind) return;
   const w = store.workerAtDesk(deskId);
-  const name = STATION_AGENT[kind].name;
+  const name = stationAgentName(kind);
   const info = STATION_INFO[kind];
   // A prompt typed into a question it's asking would answer it.
   if (w?.status === 'needs_input') {
@@ -1460,7 +1461,7 @@ function goToDesk(deskId: string) {
   closeAllModals();
   standAt(desk);
   const w = store.workerAtDesk(deskId);
-  toast(w ? t('notices.atWorkerDesk', { desk: desk.label, name: w.name }) : t('notices.atDesk', { desk: desk.label }));
+  toast(w ? t('notices.atWorkerDesk', { desk: deskLabel(desk), name: w.name }) : t('notices.atDesk', { desk: deskLabel(desk) }));
 }
 
 /** Behind the worker, looking over their shoulder at the laptop (or in front of a board agent's kiosk). */
@@ -1619,7 +1620,7 @@ function sendToWorker(title: string, text: { context?: string; initial?: string 
   openAsk({
     title,
     ...text,
-    newDesk: desk ? DESK_BY_ID.get(desk)!.label : undefined,
+    newDesk: desk ? deskLabel(DESK_BY_ID.get(desk)!) : undefined,
     workers: awake.map((w) => ({ id: w.id, name: w.name, color: w.color, status: w.status })),
     worktreeOption: !!store.project?.branch,
     providerOption: true,
@@ -1744,7 +1745,7 @@ function orderDrink(d: Drink) {
     booze.drink(drink, performance.now() / 1000);
     reach();
     if (player.view === 'first') hands.sip();
-    if (!cut) toast(t('notices.barDrink', { emoji: drink.emoji, drink: drink.name, cheers: CHEERS[drink.id]?.() ?? t('notices.cheers') }));
+    if (!cut) toast(t('notices.barDrink', { emoji: drink.emoji, drink: drinkName(drink), cheers: CHEERS[drink.id]?.() ?? t('notices.cheers') }));
   }, 1500);
 }
 
@@ -2200,7 +2201,7 @@ function useSeat(seatId: string) {
   }
   const place = freePlace(seat);
   if (!place) {
-    toast(t('notices.noRoomOnSeat', { seat: seat.label.replace(/^\S+ /, '').toLowerCase() }), 'warn');
+    toast(t('notices.noRoomOnSeat', { seat: seatNoun(seat) }), 'warn');
     return;
   }
   player.sit(place);
@@ -2436,7 +2437,7 @@ function hintFor(it: Interactable): Hint {
     case 'meeting': {
       const m = store.meeting.current;
       const p = m && MEETING_PATTERNS[m.pattern];
-      const what = !m || !p ? t('main.free') : m.status === 'running' ? `${p.icon} ${p.label} · ${meetingStage(m)}` : `${p.icon} ${p.label} ${t(m.status === 'done' ? 'main.meetingDone' : 'main.meetingHalted')}`;
+      const what = !m || !p ? t('main.free') : m.status === 'running' ? `${p.icon} ${patternLabel(m.pattern)} · ${meetingStage(m)}` : `${p.icon} ${patternLabel(m.pattern)} ${t(m.status === 'done' ? 'main.meetingDone' : 'main.meetingHalted')}`;
       return { k: what, parts: [title(t('main.meetingRoom')), aside(clip(what, 50)), key('E', t(m?.status === 'running' ? 'main.seeHowGoing' : m ? 'main.seeOrCall' : 'main.callMeeting'))] };
     }
     case 'elevator': {
@@ -2454,10 +2455,10 @@ function hintFor(it: Interactable): Hint {
       if (player.seat?.seatId === seat.id) {
         const tv = !!seat.tv && tvShowing();
         const use = tv ? t('main.watchTv') : seat.game ? t('main.playMinesweeper') : seat.bar ? t('main.orderDrink') : '';
-        return { k: `${seat.id}|sitting|${tv}`, parts: [title(seat.label), aside(t('main.sitting')), ...(use ? [key('E', use), key('W A S D', t('main.getUp'))] : [key('E', t('main.getUp'))])] };
+        return { k: `${seat.id}|sitting|${tv}`, parts: [title(seatLabel(seat)), aside(t('main.sitting')), ...(use ? [key('E', use), key('W A S D', t('main.getUp'))] : [key('E', t('main.getUp'))])] };
       }
       const full = !freePlace(seat);
-      return { k: `${seat.id}|${full}`, parts: [title(seat.label), seat.game ? aside(t('main.minesweeperOn')) : '', full ? aside(t('main.noRoom')) : key('E', t('main.sitDown'))] };
+      return { k: `${seat.id}|${full}`, parts: [title(seatLabel(seat)), seat.game ? aside(t('main.minesweeperOn')) : '', full ? aside(t('main.noRoom')) : key('E', t('main.sitDown'))] };
     }
     case 'ladder': {
       const up = floorThere(1)?.name;
@@ -2525,7 +2526,7 @@ function carryHint(card: CarriedIssue, it: Interactable | null): Hint {
 
 function deskHint(deskId: string): Hint {
   const w = store.workerAtDesk(deskId);
-  if (!w && DESK_BY_ID.get(deskId)?.room) return { k: 'room', parts: [h('span.title', {}, t('main.deskFree', { desk: DESK_BY_ID.get(deskId)!.label })), key('E', t('main.callMeeting'))] };
+  if (!w && DESK_BY_ID.get(deskId)?.room) return { k: 'room', parts: [h('span.title', {}, t('main.deskFree', { desk: deskLabel(DESK_BY_ID.get(deskId)!) })), key('E', t('main.callMeeting'))] };
   if (!w) {
     const paused = hiringPaused();
     const m = store.machine;
@@ -2533,7 +2534,7 @@ function deskHint(deskId: string): Hint {
     return {
       k: `${paused}|${full}|${m.workers}|${m.limit}|${!!m.pressure}`,
       parts: [
-        h('span.title', {}, t('main.deskEmpty', { desk: DESK_BY_ID.get(deskId)!.label })),
+        h('span.title', {}, t('main.deskEmpty', { desk: deskLabel(DESK_BY_ID.get(deskId)!) })),
         ...(full
           ? [h('span.cost', {}, t('main.officeFull', { workers: m.workers, limit: m.limit ?? 0 }))]
           : [
@@ -2574,7 +2575,7 @@ function stationHint(deskId: string): Hint {
     return {
       k: `${full}|${m.workers}|${m.limit}`,
       parts: [
-        h('span.title', {}, `${info.icon} ${STATION_AGENT[kind].name}`),
+        h('span.title', {}, `${info.icon} ${stationAgentName(kind)}`),
         aside(info.about),
         full ? h('span.cost', {}, t('main.officeFull', { workers: m.workers, limit: m.limit ?? 0 })) : key('E', t('main.prompt')),
       ],

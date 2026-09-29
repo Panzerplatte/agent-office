@@ -1,6 +1,7 @@
 import { BALCONY, DANCE_FLOOR, FIRE_PIT, FLOOR, LOFT, MEETING_ROOM, ROOF_BAR, ROOF_TABLES, SEATING_BY_ID, STAGE, seatAt } from '../../shared/layout';
 import type { PeerInfo } from '../../shared/protocol';
 import { ROOF } from '../../shared/rooftop';
+import { seatOn } from '../i18n/labels';
 
 /**
  * What a teammate is up to, for the line under their name tag and in the sidebar: whatever they have
@@ -13,11 +14,7 @@ export function whereabouts(p: PeerInfo): string | undefined {
   if (p.golfing) return '🏌️ teeing off';
   const place = p.seat ? seatAt(p.seat) : undefined;
   const seat = place && SEATING_BY_ID.get(place.seatId);
-  if (seat) {
-    // "🛋️ Couch" -> "🛋️ on the couch".
-    const [icon, ...name] = seat.label.split(' ');
-    return `${icon} ${seat.game ? 'in' : 'on'} the ${name.join(' ').toLowerCase()}`;
-  }
+  if (seat) return seatOn(seat);
   // The roof is the office's size, but none of its rooms are up there.
   if (p.floor === ROOF) return onTheRoof(p);
   // Down on the street, or out the back door on the stairs down to it.

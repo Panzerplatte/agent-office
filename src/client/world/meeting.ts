@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MEETING_PATTERNS, meetingSummary } from '../../shared/meetings';
+import { meetingWords, patternLabel } from '../i18n/labels';
 import { fmtCost, fmtTokens, type Meeting, type MeetingState } from '../../shared/protocol';
 
 const FONT = 'Nunito, ui-rounded, system-ui, sans-serif';
@@ -93,7 +94,7 @@ export class MeetingBoardTexture {
     g.fillText(`📄 ${m.output}`, 24, 48);
     g.font = `800 34px ${FONT}`;
     g.textAlign = 'right';
-    g.fillText(`${p.icon} ${p.label} · ${m.status === 'running' ? meetingStage(m) : m.status === 'done' ? '✅ done' : '⛔ stopped'}`, W - 24, 48);
+    g.fillText(`${p.icon} ${patternLabel(m.pattern)} · ${m.status === 'running' ? meetingStage(m) : m.status === 'done' ? '✅ done' : '⛔ stopped'}`, W - 24, 48);
     g.textAlign = 'left';
 
     const text = (m.preview ?? '').replace(/\r/g, '');
@@ -179,7 +180,7 @@ export class MeetingSignTexture {
       return;
     }
     const p = MEETING_PATTERNS[m.pattern];
-    let y = lines(`${p.icon} ${p.label}`, `800 34px ${FONT}`, '#ffd166', 130, 1, 40);
+    let y = lines(`${p.icon} ${patternLabel(m.pattern)}`, `800 34px ${FONT}`, '#ffd166', 130, 1, 40);
     y = lines(m.title, `900 44px ${FONT}`, '#fffaf3', y + 16, 3, 50);
     y += 18;
     if (m.status === 'running') {
@@ -201,7 +202,7 @@ export class MeetingSignTexture {
       if (m.cost > 0) g.fillText(`${fmtCost(m.cost)}${m.costKnown ? '' : '+'} so far`, pad, H - 22);
     } else {
       // The summary line after the pattern, which is up top already.
-      lines(meetingSummary(m).split(' · ').slice(1).join(' · '), `700 30px ${FONT}`, '#e9ecef', y, Math.floor((H - y) / 38), 38);
+      lines(meetingSummary(m, meetingWords).split(' · ').slice(1).join(' · '), `700 30px ${FONT}`, '#e9ecef', y, Math.floor((H - y) / 38), 38);
     }
     this.texture.needsUpdate = true;
   }

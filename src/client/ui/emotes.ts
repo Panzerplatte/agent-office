@@ -1,17 +1,7 @@
 import { EMOTES, type Emote, type EmoteId } from '../../shared/emotes';
 import { h } from './dom';
-import { t, type Key } from '../i18n';
-
-/** What each emote is called on the wheel. */
-const LABEL: Record<EmoteId, Key> = {
-  wave: 'menus.emoteWave',
-  thumbs: 'menus.emoteThumbs',
-  clap: 'menus.emoteClap',
-  dance: 'menus.emoteDance',
-  point: 'menus.emotePointAt',
-  facepalm: 'menus.emoteFacepalm',
-};
-const labelOf = (e: Emote) => t(LABEL[e.id]);
+import { t } from '../i18n';
+import { emoteLabel as labelOf } from '../i18n/labels';
 
 /** How far (px) the mouse has to go from the middle of the wheel before it points at an emote. */
 const DEAD_ZONE = 26;
