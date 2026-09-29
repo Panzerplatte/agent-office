@@ -1,4 +1,5 @@
-export {}; // a module, so its names don't clash with the other pages' scripts
+import { t } from './i18n';
+import { serverError } from './i18n/errors';
 
 const form = document.getElementById('form') as HTMLFormElement;
 const nameRow = document.getElementById('name-row') as HTMLLabelElement;
@@ -8,6 +9,14 @@ const sub = document.getElementById('sub') as HTMLParagraphElement;
 const input = document.getElementById('password') as HTMLInputElement;
 const error = document.getElementById('error') as HTMLParagraphElement;
 const submit = document.getElementById('submit') as HTMLButtonElement;
+
+// The page's own words, in your language.
+document.title = t('pages.loginTitle');
+sub.textContent = t('pages.loginPassword');
+nameRow.firstChild!.textContent = t('pages.yourName');
+(input.parentElement as HTMLLabelElement).firstChild!.textContent = t('pages.password');
+nameNote.textContent = t('pages.loginNameNote');
+submit.textContent = t('pages.loginSubmit');
 
 const NAME_KEY = 'agent-office.login-name';
 
@@ -19,9 +28,9 @@ if (linkKey) {
   void fetch('/api/link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: linkKey }) })
     .then(async (res) => {
       if (res.ok) return location.replace('/');
-      error.textContent = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'Could not sign in';
+      error.textContent = serverError(((await res.json().catch(() => ({}))) as { error?: string }).error, 'pages.loginFailed');
     })
-    .catch(() => void (error.textContent = 'Server unreachable'));
+    .catch(() => void (error.textContent = t('pages.unreachable')));
 }
 
 // Ask for a name once people have accounts; it's optional while the shared password still works.
@@ -32,7 +41,7 @@ void fetch('/api/login', { cache: 'no-store' })
     nameRow.hidden = false;
     nameInput.required = !shared;
     nameNote.hidden = !shared;
-    sub.textContent = shared ? 'Knock knock. Who is it?' : 'Knock knock. Who is it? Sign in with your own account.';
+    sub.textContent = t(shared ? 'pages.loginWho' : 'pages.loginWhoOwn');
     try {
       nameInput.value = localStorage.getItem(NAME_KEY) ?? '';
     } catch {
@@ -63,10 +72,10 @@ form.addEventListener('submit', async (e) => {
       return;
     }
     const body = await res.json().catch(() => ({}));
-    error.textContent = body.error ?? 'Could not sign in';
+    error.textContent = serverError(body.error, 'pages.loginFailed');
     input.select();
   } catch {
-    error.textContent = 'Server unreachable';
+    error.textContent = t('pages.unreachable');
   } finally {
     submit.disabled = false;
   }
