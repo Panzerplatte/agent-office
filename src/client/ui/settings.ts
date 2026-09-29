@@ -7,6 +7,7 @@ import { DOG_NAME_MAX, cleanDogName } from '../../shared/dog';
 import { h, openModal, timeAgo } from './dom';
 import { agentFields, choiceLabel, officeChoice } from './provider';
 import { openPromptEditor, rewrittenPrompts } from './prompts';
+import { LANGS, lang, setLang, t } from '../i18n';
 
 const VIEWS: [ViewMode, string, string][] = [
   ['first', '👀 First person', 'See through your own eyes. Click the office to look around with the mouse and click things to use them. Esc frees the mouse.'],
@@ -78,6 +79,30 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     return row;
   };
   const soundRow = volumeRow('Office sounds volume', 'volume', 'muted', previewSound);
+
+  // Your language, for you alone: the page reloads in it, since everything on screen is built with its text.
+  const langRow = h(
+    'div.seg',
+    { role: 'radiogroup', 'aria-label': t('core.language') },
+    ...LANGS.map(({ id, name }) =>
+      h(
+        'button.btn',
+        {
+          type: 'button',
+          role: 'radio',
+          lang: id,
+          'aria-checked': String(lang() === id),
+          class: lang() === id ? 'on' : '',
+          onclick: () => {
+            if (lang() === id) return;
+            setLang(id);
+            location.reload();
+          },
+        },
+        name,
+      ),
+    ),
+  );
 
   // Voice chat: an open mic, or muted until you hold V.
   const talkRow = h('div.seg', { role: 'radiogroup', 'aria-label': 'Voice chat' });
@@ -417,7 +442,10 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     h(
       'div.body',
       {},
-      h('label', {}, 'Camera view'),
+      h('label', {}, t('core.language')),
+      langRow,
+      h('p.setting-note', {}, t('core.languageNote')),
+      h('label', { style: 'margin-top:18px' }, 'Camera view'),
       seg,
       note,
       h('label', { style: 'margin-top:18px' }, 'Office sounds'),
