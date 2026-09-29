@@ -386,7 +386,7 @@ export class GitHub {
       this.issues = { items, fetchedAt: Date.now(), loading: false };
     } catch (err) {
       const msg = (err as Error).message;
-      this.issues = msg === ISSUES_OFF ? { items: [], off: msg, fetchedAt: Date.now(), loading: false } : { ...this.issues, loading: false, error: msg, fetchedAt: Date.now() };
+      this.issues = msg === ISSUES_OFF ? { items: [], off: 'issues-disabled', fetchedAt: Date.now(), loading: false } : { ...this.issues, loading: false, error: msg, fetchedAt: Date.now() };
     }
     this.onIssues(this.issues);
   }

@@ -7,6 +7,7 @@ import type { DogState } from './dog.js';
 import type { EmoteId } from './emotes.js';
 import type { BallState } from './hoop.js';
 import type { JukeboxState } from './jukebox.js';
+import type { NoticeParams } from './notices.js';
 import type { PromptId } from './prompts.js';
 import type { DrinkId } from './rooftop.js';
 import type { WbElement, WbPointer, WhiteboardView } from './whiteboard.js';
@@ -244,8 +245,8 @@ export interface PeerInfo {
   voice: boolean;
   muted: boolean;
   sharing: boolean;
-  /** On a smoke break, cigarette in hand. */
-  smoking?: boolean;
+  /** On a smoke break at the balcony's ashtray: a cigarette in hand, or a joint. */
+  smoking?: Smokable;
   /** At the golf tee on the balcony, club in hand. */
   golfing?: boolean;
   /** Sitting down: the place they're in (see seatAt in layout), like "couch:1". */
@@ -526,8 +527,8 @@ export interface MachineState {
 export interface GhState<T> {
   items: T[];
   error?: string;
-  /** Why the board has nothing to show and never will until it's switched on, such as issues turned off on GitHub. */
-  off?: string;
+  /** Why the board has nothing to show until it's switched on: issues turned off on GitHub. */
+  off?: 'issues-disabled';
   fetchedAt: number;
   loading: boolean;
 }
@@ -954,6 +955,10 @@ export interface SearchResults {
   more: boolean;
 }
 
+/** What you can light up at the balcony's ashtray. */
+export type Smokable = 'cigarette' | 'joint';
+export const isSmokable = (v: unknown): v is Smokable => v === 'cigarette' || v === 'joint';
+
 /** Why the gong rang. */
 export type GongWhy = 'hit' | 'merged' | 'queue';
 
@@ -961,10 +966,10 @@ export type ClientMsg =
   | { t: 'move'; x: number; y: number; z: number; rotY: number; moving: boolean }
   /**
    * You reached out to use something; everyone else sees your character's arm do it. With `smoke`,
-   * you lit a cigarette (or put it out) on the balcony instead; with `golf`, you took a club out at
+   * you lit a cigarette or a joint (or put it out, false) on the balcony instead; with `golf`, you took a club out at
    * the tee (or put it back); with `drink`, you took a drink from the rooftop bar (or finished it, null).
    */
-  | { t: 'act'; smoke?: boolean; golf?: boolean; drink?: DrinkId | null }
+  | { t: 'act'; smoke?: Smokable | false; golf?: boolean; drink?: DrinkId | null }
   /**
    * You hit a golf ball off the tee: its heading (0 is south, toward +x from there), loft (radians)
    * and power (0–1). Everyone on your floor works out where it goes the same way (world/golf.ts fly).
@@ -1163,7 +1168,7 @@ export type ServerMsg =
   | { t: 'peer.update'; peer: PeerInfo }
   | { t: 'peer.move'; id: string; x: number; y: number; z: number; rotY: number; moving: boolean }
   | { t: 'peer.leave'; id: string }
-  | { t: 'peer.act'; id: string; smoke?: boolean; golf?: boolean; drink?: DrinkId | null }
+  | { t: 'peer.act'; id: string; smoke?: Smokable | false; golf?: boolean; drink?: DrinkId | null }
   /** Someone on your floor hit a golf ball off the tee (see the client's 'golf'). */
   | { t: 'golf'; id: string; yaw: number; loft: number; power: number }
   | { t: 'peer.emote'; id: string; emote: EmoteId }
@@ -1194,7 +1199,11 @@ export type ServerMsg =
   | { t: 'gh.labeled'; kind: 'issue' | 'pull'; number: number; labels?: GhLabel[]; error?: string }
   | { t: 'rtc'; from: string; data: unknown }
   | ({ t: 'chat' } & ChatLine)
-  | { t: 'toast'; text: string; level: 'info' | 'warn' | 'error' }
+  /**
+   * A line for the team. `text` is in English; `key` and `params` (from shared/notices) let the browser
+   * say it in your language, and a browser that doesn't know the key shows the text.
+   */
+  | { t: 'toast'; text: string; level: 'info' | 'warn' | 'error'; key?: string; params?: NoticeParams }
   | { t: 'team'; state: TeamState }
   | { t: 'upgrade'; state: UpgradeState }
   | { t: 'services'; state: ServicesState }

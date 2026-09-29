@@ -30,7 +30,7 @@ import { RELAY_LOGIN, relayRequest, relayUpgrade, signInPage, stoppedPage, tunne
 import { ChatLog } from './history.js';
 import { Arcade, HighScores } from './cabinet.js';
 import type { ChatLine, ClientMsg, FloorInfo, FloorView, Me, MeetingRequest, PeerInfo, SearchResults, ServerMsg, ServicesState } from '../shared/protocol.js';
-import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider } from '../shared/protocol.js';
+import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider, isSmokable } from '../shared/protocol.js';
 import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layout.js';
 import { JUKEBOX_TUNES, STREAM } from '../shared/jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
@@ -39,6 +39,7 @@ import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
 import { lookFromSeed, sanitizeLook } from '../shared/avatar.js';
 import { EMOTE_EVERY, EmoteBucket, isEmote } from '../shared/emotes.js';
+import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, isDrink } from '../shared/rooftop.js';
@@ -191,7 +192,7 @@ export async function startServer(cfg: Config) {
   const highScores = new HighScores(cfg.dataDir);
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
-    if (first) toastFloor(floors.get(first.floor), `🏆 ${first.score.name} set a new arcade high score: ${scoreText(first.score.score)}`);
+    if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
   });
   /** What the office is called where it has no project of its own to go by (webhooks, invites). */
   const officeName = cfg.project ? path.basename(cfg.project) : 'the office';
@@ -212,7 +213,7 @@ export async function startServer(cfg: Config) {
       c.ws.send(json);
     }
   };
-  const toastAll = (text: string, level: ToastLevel = 'info') => broadcast({ t: 'toast', text, level });
+  const toastAll = (text: string | Notice, level: ToastLevel = 'info') => broadcast({ t: 'toast', ...asNotice(text), level });
 
   // --- The building: a floor per project, each with its own workers, boards and queue -----------
   const building = new Building(cfg.dataDir, cfg.projectsDir);
@@ -236,8 +237,8 @@ export async function startServer(cfg: Config) {
       c.ws.send(json);
     }
   };
-  const toastFloor = (floor: Floor | undefined, text: string, level: ToastLevel = 'info') => {
-    if (floor) toFloor(floor, { t: 'toast', text, level });
+  const toastFloor = (floor: Floor | undefined, text: string | Notice, level: ToastLevel = 'info') => {
+    if (floor) toFloor(floor, { t: 'toast', ...asNotice(text), level });
   };
   const floorInfos = (): FloorInfo[] => [
     ...[...floors.values()].map((f) => ({ ...f.info(), ...(building.isLocal(f.id) ? { local: true } : {}) })),
@@ -257,8 +258,8 @@ export async function startServer(cfg: Config) {
     }, 250);
   };
   /** Tells just this person why their request didn't happen; nothing when there's no error. */
-  const warn = (c: Client, error: string | undefined) => {
-    if (error) sendTo(c, { t: 'toast', text: error, level: 'warn' });
+  const warn = (c: Client, error: string | Notice | undefined) => {
+    if (error) sendTo(c, { t: 'toast', ...asNotice(error), level: 'warn' });
   };
 
   // --- Loopback-only endpoint for authenticated agent events -------------------------------
@@ -325,7 +326,7 @@ export async function startServer(cfg: Config) {
     const err = floor.queue.add(str(body?.prompt, 20000), agent.name, str(body?.title, 200) || undefined, issue);
     if (err) return send(res, 400, { error: err });
     const task = floor.queue.state().tasks.at(-1)!;
-    toastFloor(floor, `📋 The ${agent.name} queued ${issue !== undefined ? `issue #${issue}` : `“${task.title}”`}`);
+    toastFloor(floor, issue !== undefined ? notice('queue.agentQueuedIssue', { agent: agent.name, issue }) : notice('queue.agentQueuedTask', { agent: agent.name, title: task.title }));
     send(res, 200, { ok: true, task: { id: task.id, title: task.title, status: task.status } });
   };
   // Workers' terminals outlive a restart of the office (see ptys.ts) with this address in their
@@ -1065,8 +1066,8 @@ export async function startServer(cfg: Config) {
       if (c.peer.floor === floor.id || (!next && c.peer.floor === ROOF)) {
         if (next) goToFloor(c, next);
         else toLobby(c);
-        sendTo(c, { t: 'toast', text: next ? `🛗 ${who} took ${name} off the building, so you rode the elevator to ${next.def.name}` : `🛗 ${who} took ${name}, the last floor, off the building`, level: 'warn' });
-      } else sendTo(c, { t: 'toast', text: `🛗 ${who} took ${name} off the building`, level: 'info' });
+        sendTo(c, { t: 'toast', ...(next ? notice('floor.removedRode', { who, name, next: next.def.name }) : notice('floor.removedLast', { who, name })), level: 'warn' });
+      } else sendTo(c, { t: 'toast', ...notice('floor.removed', { who, name }), level: 'info' });
     }
     floors.delete(floor.id);
     floor.shutdown();
@@ -1114,7 +1115,7 @@ export async function startServer(cfg: Config) {
    */
   const takeIssue = (c: Client, floor: Floor, n: number) => {
     floor.queue.dropIssue(n);
-    void floor.github.claim(n).then((err) => warn(c, err && `Couldn't assign issue #${n} on GitHub: ${err}`));
+    void floor.github.claim(n).then((err) => warn(c, err && notice('issue.claimFailed', { issue: n, error: err })));
   };
 
   const handleMessage = (c: Client, msg: ClientMsg) => {
@@ -1122,7 +1123,7 @@ export async function startServer(cfg: Config) {
     /** The floor `c` is on, or a note to them that they have to be on one. */
     const here = (): Floor | undefined => {
       const f = floorOf(c);
-      if (!f) warn(c, 'Take the elevator to a floor first');
+      if (!f) warn(c, notice('floor.pickOne'));
       return f;
     };
     /** A worker by id, with the floor it sits on. */
@@ -1152,9 +1153,10 @@ export async function startServer(cfg: Config) {
           broadcast({ t: 'peer.act', id: c.id, drink: drink ?? null }, c.id, true);
           break;
         }
-        if (typeof msg.smoke === 'boolean') {
-          if (msg.smoke === !!c.peer.smoking) break;
-          c.peer.smoking = msg.smoke;
+        if (msg.smoke === false || isSmokable(msg.smoke)) {
+          if (msg.smoke === (c.peer.smoking ?? false)) break;
+          if (msg.smoke) c.peer.smoking = msg.smoke;
+          else delete c.peer.smoking;
           broadcast({ t: 'peer.act', id: c.id, smoke: msg.smoke }, c.id, true);
           break;
         }
@@ -1234,11 +1236,11 @@ export async function startServer(cfg: Config) {
       case 'floor.go': {
         if (msg.floor === ROOF) {
           if (floors.size) goToRoof(c);
-          else warn(c, 'There is no building to go up on yet');
+          else warn(c, notice('floor.noBuilding'));
           break;
         }
         const floor = floors.get(str(msg.floor, 64));
-        if (!floor) warn(c, building.pending().some((d) => d.id === msg.floor) ? "That floor is still being cloned — it'll be ready in a moment" : 'No such floor');
+        if (!floor) warn(c, notice(building.pending().some((d) => d.id === msg.floor) ? 'floor.cloning' : 'floor.noSuch'));
         else goToFloor(c, floor, arrivalSpot(msg.at));
         break;
       }
@@ -1253,7 +1255,7 @@ export async function startServer(cfg: Config) {
         void building
           .add(repo, who, (def) => {
             floorsChanged();
-            toastAll(`🛗 ${who} is adding a floor for ${def.repo ?? def.name}…`);
+            toastAll(notice('floor.adding', { who, repo: def.repo ?? def.name }));
           })
           .then((r) => {
             floorsChanged();
@@ -1261,14 +1263,14 @@ export async function startServer(cfg: Config) {
             const floor = openFloor(r);
             if (!floor) return sendTo(c, { t: 'floor.added', repo, error: `Cloned ${r.repo}, but couldn't open its floor — see the office's log` });
             console.log(`  ${who} added a floor for ${r.repo} (${r.dir})`);
-            toastAll(`🛗 New floor: ${r.name}, added by ${who}`);
+            toastAll(notice('floor.added', { who, name: r.name }));
             sendTo(c, { t: 'floor.added', repo, floor: floor.id });
           });
         break;
       }
       case 'floor.remove': {
         // Everyone's workers on it stop: admins do it.
-        if (!meOf(c.accountId).admin) return warn(c, 'Only admins can take a floor off the building');
+        if (!meOf(c.accountId).admin) return warn(c, notice('admin.floors'));
         const id = str(msg.floor, 64);
         const r = building.remove(id, who);
         if (typeof r === 'string') return warn(c, r);
@@ -1280,12 +1282,12 @@ export async function startServer(cfg: Config) {
       }
       case 'floor.projectsDir': {
         // It's a folder on the office's machine that `gh` writes into: admins pick it.
-        const err = meOf(c.accountId).admin ? building.setProjectsDir(str(msg.dir, 1024), who) : 'Only admins can move the workspace folder';
+        const err = meOf(c.accountId).admin ? building.setProjectsDir(str(msg.dir, 1024), who) : notice('admin.workspace');
         warn(c, err);
         if (err) break;
         const state = building.projectsDirState();
         broadcast({ t: 'projectsDir', state });
-        toastAll(state.custom ? `📁 ${who} moved the workspace folder to ${state.dir}` : `📁 ${who} put the workspace folder back to ${state.dir}`);
+        toastAll(notice(state.custom ? 'workspace.moved' : 'workspace.reset', { who, dir: state.dir }));
         break;
       }
       case 'ball.take':
@@ -1305,7 +1307,7 @@ export async function startServer(cfg: Config) {
         const floor = here();
         if (!floor) break;
         const name = floor.dog.rename(str(msg.name, 200));
-        toastFloor(floor, `🐶 ${who} named the dog ${name}`);
+        toastFloor(floor, notice('dog.named', { who, name }));
         break;
       }
       case 'worker.spawn': {
@@ -1313,7 +1315,7 @@ export async function startServer(cfg: Config) {
         if (!floor) break;
         const kind = msg.kind === 'shell' ? 'shell' : 'agent';
         if (kind === 'agent' && msg.provider !== undefined && (!isAgentProvider(msg.provider) || !floor.project.agentProviders.includes(msg.provider))) {
-          warn(c, 'Unknown agent provider');
+          warn(c, notice('agent.unknown'));
           break;
         }
         const model = msg.model === undefined ? undefined : str(msg.model, OPEN_CODE_MODEL_MAX + 1);
@@ -1321,13 +1323,13 @@ export async function startServer(cfg: Config) {
         const r = floor.workers.spawn(str(msg.deskId, 32), who, str(msg.prompt, 20000) || undefined, msg.worktree === true, kind, msg.provider, model, effort);
         const issue = kind === 'agent' ? issueNumber(msg.issue) : undefined;
         if (typeof r === 'string') warn(c, r);
-        else toastFloor(floor, kind === 'shell' ? `${who} opened a shell at a desk` : `${who} hired ${r.name}${issue ? ` for issue #${issue}` : r.prompt ? ' with a task' : ''}`);
+        else toastFloor(floor, kind === 'shell' ? notice('worker.shell', { who }) : issue ? notice('worker.hiredIssue', { who, name: r.name, issue }) : notice(r.prompt ? 'worker.hiredTask' : 'worker.hired', { who, name: r.name }));
         if (typeof r !== 'string' && issue) takeIssue(c, floor, issue);
         break;
       }
       case 'worker.resume': {
         const w = worker(msg.workerId);
-        warn(c, w ? w.floor.workers.resume(w.wid) : 'No such worker');
+        warn(c, w ? w.floor.workers.resume(w.wid) : notice('worker.noSuch'));
         break;
       }
       case 'worker.kill': {
@@ -1336,7 +1338,7 @@ export async function startServer(cfg: Config) {
         const { floor, info } = w;
         // The worker leaves right away; its worktree is dealt with after that, and the outcome follows.
         const done = floor.workers.kill(info.id, CLEANUPS.has(String(msg.cleanup)) ? msg.cleanup : undefined);
-        toastFloor(floor, `${who} sent ${info.name} home`);
+        toastFloor(floor, notice('worker.sentHome', { who, name: info.name }));
         void done.then(({ note, error }) => {
           if (note) toastFloor(floor, note);
           if (error) toastFloor(floor, error, 'warn');
@@ -1373,7 +1375,7 @@ export async function startServer(cfg: Config) {
         warn(c, err);
         const issue = w?.info.kind === 'agent' ? issueNumber(msg.issue) : undefined;
         if (w && !err && issue) {
-          toastFloor(w.floor, `${who} handed issue #${issue} to ${w.info.name}`);
+          toastFloor(w.floor, notice('worker.handedIssue', { who, issue, name: w.info.name }));
           takeIssue(c, w.floor, issue);
         }
         break;
@@ -1383,7 +1385,7 @@ export async function startServer(cfg: Config) {
         if (!floor) break;
         const r = floor.workers.station(str(msg.deskId, 32), who, str(msg.prompt, 20000));
         if (typeof r === 'string') warn(c, r);
-        else if (r.hired) toastFloor(floor, `${who} asked the ${r.info.name} something`);
+        else if (r.hired) toastFloor(floor, notice('worker.asked', { who, name: r.info.name }));
         break;
       }
       case 'worker.pr': {
@@ -1393,8 +1395,8 @@ export async function startServer(cfg: Config) {
         void floor.workers.openPr(wid, who).then((r) => {
           if (typeof r === 'string') return warn(c, r);
           const name = floor.workers.get(wid)?.name ?? 'the worker';
-          toastFloor(floor, r.existed ? `${name}'s branch already has PR #${r.number}` : `${who} opened PR #${r.number} for ${name}`);
-          if (r.dirty) warn(c, `${name} still has uncommitted changes in its worktree — they are not in the PR`);
+          toastFloor(floor, r.existed ? notice('pr.exists', { name, number: r.number }) : notice('pr.opened', { who, number: r.number, name }));
+          if (r.dirty) warn(c, notice('pr.dirty', { name }));
           // Put it on the board now rather than at the next poll. A refresh already in flight
           // returns at once and can miss it, so look again shortly after.
           void floor.github.refresh().then(() => {
@@ -1443,7 +1445,7 @@ export async function startServer(cfg: Config) {
         void floor.github.merge(n, method, msg.deleteBranch === true, msg.auto === true).then((error) => {
           sendTo(c, { t: 'gh.merged', number: n, error });
           if (error) return;
-          toastFloor(floor, msg.auto ? `${who} set PR #${n} to merge once its checks pass` : `🎉 ${who} merged PR #${n}`);
+          toastFloor(floor, notice(msg.auto ? 'pr.autoMerge' : 'pr.merged', { who, number: n }));
           // An auto-merge rings once GitHub gets round to it and the boards see it merged.
           if (!msg.auto) floor.merged(n, who);
         });
@@ -1463,7 +1465,7 @@ export async function startServer(cfg: Config) {
         }
         void floor.github.comment(kind, n, body).then((r) => {
           sendTo(c, { t: 'gh.commented', kind, number: n, ...r });
-          if (r.comment) toastFloor(floor, `💬 ${who} commented on ${kind === 'pull' ? 'PR' : 'issue'} #${n}`);
+          if (r.comment) toastFloor(floor, notice(kind === 'pull' ? 'pr.commented' : 'issue.commented', { who, number: n }));
         });
         break;
       }
@@ -1491,10 +1493,10 @@ export async function startServer(cfg: Config) {
         void floor.github.close(kind, n, { comment: str(msg.comment, 20000).trim() || undefined, reason, deleteBranch: msg.deleteBranch === true }).then((error) => {
           sendTo(c, { t: 'gh.closed', kind, number: n, error });
           if (error) return;
-          if (kind === 'pull') return toastFloor(floor, `${who} closed PR #${n} without merging`);
+          if (kind === 'pull') return toastFloor(floor, notice('pr.closed', { who, number: n }));
           // Nobody should be seated for an issue that's closed.
           const dropped = floor.queue.dropIssue(n);
-          toastFloor(floor, `${who} closed issue #${n}${reason === 'not planned' ? ' as not planned' : ''}${dropped ? ' and took it off the queue' : ''}`);
+          toastFloor(floor, notice('issue.closed', { who, number: n, notPlanned: reason === 'not planned' ? 1 : 0, dropped: dropped ? 1 : 0 }));
         });
         break;
       }
@@ -1512,7 +1514,7 @@ export async function startServer(cfg: Config) {
         }
         void floor.github.setLabels(kind, n, add, remove).then((r) => {
           sendTo(c, { t: 'gh.labeled', kind, number: n, ...r });
-          if (r.labels) toastFloor(floor, `🏷️ ${who} labeled ${kind === 'pull' ? 'PR' : 'issue'} #${n}: ${[...add.map((l) => `+${l}`), ...remove.map((l) => `−${l}`)].join(' ')}`);
+          if (r.labels) toastFloor(floor, notice(kind === 'pull' ? 'pr.labeled' : 'issue.labeled', { who, number: n, labels: [...add.map((l) => `+${l}`), ...remove.map((l) => `−${l}`)].join(' ') }));
         });
         break;
       }
@@ -1520,7 +1522,7 @@ export async function startServer(cfg: Config) {
         const floor = here();
         if (!floor) break;
         if (msg.provider !== undefined && (!isAgentProvider(msg.provider) || !floor.project.agentProviders.includes(msg.provider))) {
-          warn(c, 'Unknown agent provider');
+          warn(c, notice('agent.unknown'));
           break;
         }
         const issue = Number.isInteger(msg.issue) && (msg.issue as number) > 0 ? (msg.issue as number) : undefined;
@@ -1528,7 +1530,7 @@ export async function startServer(cfg: Config) {
         const effort = isAgentEffort(msg.effort) ? msg.effort : undefined;
         const err = floor.queue.add(str(msg.prompt, 20000), who, str(msg.title, 200), issue, msg.provider, model, effort);
         if (err) warn(c, err);
-        else toastFloor(floor, `📋 ${who} queued ${issue !== undefined ? `issue #${issue}` : 'a task'}`);
+        else toastFloor(floor, issue !== undefined ? notice('queue.queuedIssue', { who, issue }) : notice('queue.queuedTask', { who }));
         break;
       }
       case 'queue.remove': {
@@ -1554,7 +1556,7 @@ export async function startServer(cfg: Config) {
         const floor = here();
         if (!floor) break;
         if (msg.provider !== undefined && (!isAgentProvider(msg.provider) || !floor.project.agentProviders.includes(msg.provider))) {
-          warn(c, 'Unknown agent provider');
+          warn(c, notice('agent.unknown'));
           break;
         }
         const count = (v: unknown) => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : undefined);
@@ -1590,11 +1592,11 @@ export async function startServer(cfg: Config) {
         const url = str(msg.url, 4096).trim();
         const err = webhook.set(url, who);
         warn(c, err);
-        if (!err) toastAll(url ? `📣 ${who} set up team notifications` : `${who} turned off team notifications`);
+        if (!err) toastAll(notice(url ? 'webhook.on' : 'webhook.off', { who }));
         break;
       }
       case 'notify.test':
-        void webhook.test(who).then((err) => sendTo(c, { t: 'toast', text: err ?? '📣 Sent a test message', level: err ? 'warn' : 'info' }));
+        void webhook.test(who).then((err) => sendTo(c, { t: 'toast', ...asNotice(err ?? notice('webhook.tested')), level: err ? 'warn' : 'info' }));
         break;
       case 'theme.set': {
         if (!isThemePick(msg.pick)) return;
@@ -1602,30 +1604,37 @@ export async function startServer(cfg: Config) {
         themes.set(msg.pick, who);
         const now = themes.state().active;
         toastAll(
-          msg.pick === 'halloween'
-            ? `🎃 ${who} dressed the office up for Halloween`
-            : msg.pick === 'christmas'
-              ? `🎄 ${who} dressed the office up for Christmas`
-              : msg.pick === 'off'
-                ? `${who} took the holiday decorations down`
-                : `📅 ${who} set the decorations to follow the calendar${now ? ` (it's ${now === 'halloween' ? 'Halloween 🎃' : 'Christmas 🎄'} season)` : ''}`,
+          notice(
+            msg.pick === 'halloween'
+              ? 'theme.halloween'
+              : msg.pick === 'christmas'
+                ? 'theme.christmas'
+                : msg.pick === 'off'
+                  ? 'theme.off'
+                  : now === 'halloween'
+                    ? 'theme.autoHalloween'
+                    : now === 'christmas'
+                      ? 'theme.autoChristmas'
+                      : 'theme.auto',
+            { who },
+          ),
         );
         break;
       }
       case 'prompts.set': {
-        if (!meOf(c.accountId).admin) return warn(c, 'Only admins can change the office’s prompts');
+        if (!meOf(c.accountId).admin) return warn(c, notice('admin.prompts'));
         if (!isPromptId(msg.id) || (msg.text !== null && typeof msg.text !== 'string')) return;
         const custom = !!prompts.state().custom[msg.id];
         const err = prompts.setPrompt(msg.id, msg.text === null ? null : str(msg.text, PROMPT_MAX + 1), who);
         if (err) return warn(c, err);
         const now = !!prompts.state().custom[msg.id];
         const { label } = PROMPTS[msg.id];
-        if (now) toastAll(`📝 ${who} rewrote the “${label}” prompt`);
-        else if (custom) toastAll(`📝 ${who} put the default “${label}” prompt back`);
+        if (now) toastAll(notice('prompt.rewrote', { who, label }));
+        else if (custom) toastAll(notice('prompt.reset', { who, label }));
         break;
       }
       case 'prompts.agent': {
-        if (!meOf(c.accountId).admin) return warn(c, 'Only admins can pick the office’s default worker');
+        if (!meOf(c.accountId).admin) return warn(c, notice('admin.defaultWorker'));
         const ch = msg.choice;
         if (ch !== null && (!ch || typeof ch !== 'object')) return;
         const choice = ch && {
@@ -1635,26 +1644,26 @@ export async function startServer(cfg: Config) {
         };
         const err = prompts.setAgent(choice, who);
         if (err) return warn(c, err);
-        toastAll(choice ? `🤖 ${who} set the office’s default worker` : `🤖 ${who} put the office’s default worker back to ${path.basename(cfg.agentCmd)}`);
+        toastAll(choice ? notice('defaultWorker.set', { who }) : notice('defaultWorker.reset', { who, cmd: path.basename(cfg.agentCmd) }));
         break;
       }
       case 'leaveOnMerge.set': {
         const on = msg.on === true;
         if (on === leaveOnMerge.on) break;
         leaveOnMerge.set(on, who);
-        toastAll(on ? `🏠 ${who} set workers to go home by themselves once their pull request merges` : `🪑 ${who} set workers whose pull request merged to stay until they're sent home`);
+        toastAll(notice(on ? 'leaveOnMerge.on' : 'leaveOnMerge.off', { who }));
         // The ones already merged go now.
         if (on) for (const f of floors.values()) f.sendLandedHome();
         break;
       }
       case 'machine.limit': {
-        if (!meOf(c.accountId).admin) return warn(c, 'Only admins can change the worker limit');
+        if (!meOf(c.accountId).admin) return warn(c, notice('admin.workerLimit'));
         const limit = msg.limit === null ? undefined : parseWorkerLimit(msg.limit);
-        if (msg.limit !== null && limit === undefined) return warn(c, `The worker limit is a whole number from 1 to ${MAX_WORKER_LIMIT}`);
+        if (msg.limit !== null && limit === undefined) return warn(c, notice('workerLimit.range', { max: MAX_WORKER_LIMIT }));
         const err = machine.setLimit(limit, who);
         if (err) return warn(c, err);
         const now = machine.limit;
-        toastAll(limit !== undefined ? `⚙️ ${who} set the worker limit to ${now}` : now === undefined ? `⚙️ ${who} took the worker limit off` : `⚙️ ${who} put the worker limit back to ${now} (--max-workers)`);
+        toastAll(limit !== undefined ? notice('workerLimit.set', { who, limit }) : now === undefined ? notice('workerLimit.off', { who }) : notice('workerLimit.reset', { who, limit: now }));
         pumpQueues();
         break;
       }
@@ -1704,7 +1713,7 @@ export async function startServer(cfg: Config) {
       case 'upgrade.start':
         void upgrader.start(who).then((err) => {
           if (err) warn(c, err);
-          else toastAll(`${who} is upgrading the office — it restarts when the new version is built`);
+          else toastAll(notice('upgrade.started', { who }));
         });
         break;
       case 'limits.refresh':
@@ -1718,7 +1727,7 @@ export async function startServer(cfg: Config) {
         void team.invite(user).then(async (r) => {
           sendTo(c, { t: 'team.invited', github: user, ...r });
           if ('error' in r) return;
-          toastAll(`${who} invited ${r.name} to the office`);
+          toastAll(notice('account.invited', { who, name: r.name }));
           await teamChanged();
         });
         break;
@@ -1727,7 +1736,7 @@ export async function startServer(cfg: Config) {
         const name = str(msg.name, 64);
         void team.remove(name).then(async (err) => {
           if (err) return warn(c, err);
-          toastAll(`${who} removed ${name}'s access`);
+          toastAll(notice('account.removed', { who, name }));
           await teamChanged();
         });
         break;
@@ -1746,7 +1755,7 @@ export async function startServer(cfg: Config) {
         const d = floor.decor.add(msg.decor, who);
         if (typeof d === 'string') return warn(c, d);
         decorChanged(floor);
-        toastFloor(floor, `🖼️ ${who} hung ${d.title ? `“${d.title}”` : 'a picture'}`);
+        toastFloor(floor, d.title ? notice('picture.hung', { who, title: d.title }) : notice('picture.hungUntitled', { who }));
         break;
       }
       case 'decor.update': {
@@ -1763,7 +1772,7 @@ export async function startServer(cfg: Config) {
         const d = floor.decor.remove(str(msg.id, 32));
         if (!d) break;
         decorChanged(floor);
-        toastFloor(floor, `${who} took down ${d.title ? `“${d.title}”` : 'a picture'}`);
+        toastFloor(floor, d.title ? notice('picture.down', { who, title: d.title }) : notice('picture.downUntitled', { who }));
         break;
       }
       case 'wb.open':
@@ -1803,7 +1812,7 @@ export async function startServer(cfg: Config) {
         if ('error' in r) return warn(c, r.error);
         if (!r.changed) break;
         jukeboxChanged(floor);
-        toastFloor(floor, floor.jukebox.state().track === STREAM ? `📻 ${who} tuned the jukebox to ${floor.jukebox.title()}` : `🎵 ${who} put on “${floor.jukebox.title()}”`);
+        toastFloor(floor, notice(floor.jukebox.state().track === STREAM ? 'jukebox.radio' : 'jukebox.playing', { who, title: floor.jukebox.title() }));
         break;
       }
       case 'jukebox.skip': {
@@ -1811,7 +1820,7 @@ export async function startServer(cfg: Config) {
         if (!floor) break;
         floor.jukebox.skip(who);
         jukeboxChanged(floor);
-        toastFloor(floor, `⏭️ ${who} skipped to “${floor.jukebox.title()}”`);
+        toastFloor(floor, notice('jukebox.skipped', { who, title: floor.jukebox.title() }));
         break;
       }
       case 'cabinet.play': {
@@ -1819,14 +1828,14 @@ export async function startServer(cfg: Config) {
         if (!floor || (c.playing && msg.game === c.game)) break;
         const at = cabinetPlayer(floor);
         if (at && at !== c) {
-          warn(c, `${at.peer.name} is on the arcade — press E there to watch`);
+          warn(c, notice('arcade.busy', { name: at.peer.name }));
           sendTo(c, { t: 'cabinet', state: cabinetState(floor) });
           break;
         }
         // Already at it: that game's over, and this is the next one.
         if (c.playing) arcade.leave(c.game, floor.id);
         c.game = arcade.start({ owner: c.accountId ? `account:${c.accountId}` : `name:${who}`, name: who, color: c.peer.color, connection: c.id }, msg.game);
-        if (c.game !== msg.game && !arcade.counts(c.game)) warn(c, "🕹️ That's a lot of new games in a row, so this one won't go on the high-score table");
+        if (c.game !== msg.game && !arcade.counts(c.game)) warn(c, notice('arcade.tooMany'));
         c.playing = true;
         c.frame = undefined;
         cabinetChanged(floor);
@@ -1840,7 +1849,7 @@ export async function startServer(cfg: Config) {
         const frame = checkFrame(msg.frame);
         if (!c.playing || !floor || !frame) break;
         // Every frame counts towards the score, even one that comes too soon after the last to pass on.
-        if (arcade.frame(c.game, frame, floor.id) === 'void') warn(c, "🕹️ The office couldn't follow this game, so its score won't go on the high-score table");
+        if (arcade.frame(c.game, frame, floor.id) === 'void') warn(c, notice('arcade.lost'));
         c.frame = frame;
         const now = Date.now();
         if (now - c.lastFrameAt < 40) break;
@@ -1852,7 +1861,7 @@ export async function startServer(cfg: Config) {
         const floor = here();
         if (!floor || !floor.jukebox.stop(who)) break;
         jukeboxChanged(floor);
-        toastFloor(floor, `🔇 ${who} turned the jukebox off`);
+        toastFloor(floor, notice('jukebox.off', { who }));
         break;
       }
       case 'ping':
@@ -1864,7 +1873,7 @@ export async function startServer(cfg: Config) {
   /** Inviting, listing and revoking people. Admins only: an admin account, or the shared password. */
   const handleAccounts = (c: Client, msg: Extract<ClientMsg, { t: `accounts.${string}` }>) => {
     const who = c.peer.name;
-    if (!meOf(c.accountId).admin) return warn(c, 'Only admins can manage accounts');
+    if (!meOf(c.accountId).admin) return warn(c, notice('admin.accounts'));
     switch (msg.t) {
       case 'accounts.get':
         sendTo(c, { t: 'accounts', state: accounts.state(onlineAccounts()) });
@@ -1881,30 +1890,30 @@ export async function startServer(cfg: Config) {
         break;
       case 'accounts.revoke': {
         const id = str(msg.accountId, 32);
-        if (id === c.accountId) return warn(c, "You can't revoke your own account");
+        if (id === c.accountId) return warn(c, notice('account.notSelfRevoke'));
         const a = accounts.revoke(id);
         if (!a) break;
         console.log(`  ${who} revoked ${a.name}'s account`);
-        toastAll(`${who} revoked ${a.name}'s account`);
+        toastAll(notice('account.revoked', { who, name: a.name }));
         accountsChanged(); // signs them out everywhere
         break;
       }
       case 'accounts.role': {
         const id = str(msg.accountId, 32);
-        if (id === c.accountId) return warn(c, "You can't change your own role");
+        if (id === c.accountId) return warn(c, notice('account.notSelfRole'));
         const a = accounts.setRole(id, msg.role === 'admin' ? 'admin' : 'member');
         if (!a) break;
-        toastAll(a.role === 'admin' ? `${who} made ${a.name} an admin` : `${a.name} is no longer an admin`);
+        toastAll(notice(a.role === 'admin' ? 'account.madeAdmin' : 'account.noLongerAdmin', { who, name: a.name }));
         accountsChanged();
         break;
       }
       case 'accounts.shared': {
         if (msg.on === accounts.sharedPassword) break;
         // Only someone who can still get in without it may switch it off.
-        if (!msg.on && !c.accountId) return warn(c, 'Sign in with an admin account of your own first, or nobody could get back in');
+        if (!msg.on && !c.accountId) return warn(c, notice('password.needAccount'));
         accounts.setSharedPassword(!!msg.on);
         console.log(`  ${who} switched the shared office password ${msg.on ? 'on' : 'off'}`);
-        toastAll(msg.on ? `${who} switched the shared office password back on` : `🔑 ${who} switched off the shared office password — everyone signs in with their own account now`);
+        toastAll(notice(msg.on ? 'password.on' : 'password.off', { who }));
         accountsChanged(); // signs out whoever came in with it
         break;
       }

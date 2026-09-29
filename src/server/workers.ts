@@ -15,6 +15,7 @@ import { DESK_BY_ID, STATION_AGENT } from '../shared/layout.js';
 import { QUEUE_AGENT_DISALLOWED_TOOLS, stationBrief } from './stations.js';
 import { officePrompt, type PromptSource } from './prompts.js';
 import { isBusy } from '../shared/status.js';
+import { notice, type Notice } from '../shared/notices.js';
 import { gh } from './github.js';
 import type { ServiceOwner } from './services.js';
 import { TaskNamer, fallbackTask } from './tasks.js';
@@ -136,7 +137,7 @@ export interface WorkerEvents {
   remove(workerId: string): void;
   data(workerId: string, data: string, viewers: string[]): void;
   screen(workerId: string, frame: { cols: number; rows: number; lines: Record<number, Run[]>; full: boolean; cursor: [number, number] }): void;
-  toast(text: string, level: 'info' | 'warn' | 'error'): void;
+  toast(text: string | Notice, level: 'info' | 'warn' | 'error'): void;
 }
 
 export class WorkerManager {
@@ -193,7 +194,7 @@ export class WorkerManager {
       this.emitUpdate(w);
       this.persist();
     });
-    this.host = new PtyHost(dataDir, () => this.events.toast("The workers' terminal host stopped — resuming them", 'warn'));
+    this.host = new PtyHost(dataDir, () => this.events.toast(notice('worker.hostStopped'), 'warn'));
     this.scrollback = new ScrollbackStore(dataDir);
     this.restore();
     this.scrollback.prune(new Set(this.workers.keys()));
@@ -391,7 +392,7 @@ export class WorkerManager {
    * pull request's head commit) is work delivered. Resolves once that's done, with a line for the team
    * about the worktree.
    */
-  async kill(id: string, cleanup?: WorktreeCleanup, landed?: string): Promise<{ note?: string; error?: string }> {
+  async kill(id: string, cleanup?: WorktreeCleanup, landed?: string): Promise<{ note?: Notice; error?: Notice }> {
     const w = this.workers.get(id);
     if (!w) return {};
     this.workers.delete(id);
@@ -413,14 +414,14 @@ export class WorkerManager {
     if (!wt || w.info.meeting) return {};
     const name = w.info.name;
     if (!cleanup) {
-      const work = describeWork(await this.trees.inspect(wt, landed));
-      if (work) return { note: `Kept ${name}'s worktree and branch ${wt.branch} — it has ${work}` };
+      const state = await this.trees.inspect(wt, landed);
+      if (describeWork(state)) return { note: notice('worktree.keptWork', { name, branch: wt.branch, ...(state.error ? { checkError: state.error } : { dirty: state.dirty, unpushed: state.unpushed }) }) };
       cleanup = 'all';
     }
-    if (cleanup === 'keep') return { note: `Kept ${name}'s worktree and branch ${wt.branch}` };
+    if (cleanup === 'keep') return { note: notice('worktree.kept', { name, branch: wt.branch }) };
     const error = await this.trees.remove(wt, cleanup);
-    if (error) return { error: `Couldn't delete ${name}'s worktree: ${error}` };
-    return { note: cleanup === 'all' ? `Deleted ${name}'s worktree and branch ${wt.branch}` : `Deleted ${name}'s worktree and kept branch ${wt.branch}` };
+    if (error) return { error: notice('worktree.deleteFailed', { name, error }) };
+    return { note: notice(cleanup === 'all' ? 'worktree.deleted' : 'worktree.deletedKeptBranch', { name, branch: wt.branch }) };
   }
 
   /** What a worker's worktree holds, so whoever sends it home knows what deleting it would lose. */
@@ -1070,7 +1071,7 @@ export class WorkerManager {
       // Resuming a conversation Claude no longer has ("No conversation found") exits before Claude
       // ever starts. Start a fresh one rather than leave the worker asleep.
       if (isClaude && resumeSessionId && info.status === 'starting' && !this.closing) {
-        this.events.toast(`${info.name}'s last conversation couldn't be resumed — starting a fresh one`, 'warn');
+        this.events.toast(notice('worker.freshStart', { name: info.name }), 'warn');
         this.launch(w, undefined, undefined);
         return;
       }
@@ -1108,7 +1109,7 @@ export class WorkerManager {
     if (w.viewers.size) this.events.data(w.info.id, msg, [...w.viewers.keys()]);
     w.screenDirty = true;
     w.unsaved = true;
-    this.events.toast(`Could not start ${what}: ${message}`, 'error');
+    this.events.toast(notice('worker.startFailed', { what, error: message }), 'error');
     this.emitUpdate(w);
   }
 

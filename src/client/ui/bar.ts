@@ -1,5 +1,7 @@
 import { DRINKS, type Drink } from '../../shared/rooftop';
 import { h, openModal } from './dom';
+import { t } from '../i18n';
+import { drinkBlurb, drinkName } from '../i18n/labels';
 
 export interface BarOptions {
   /** Had enough: nothing stronger than water or a mocktail. */
@@ -9,14 +11,14 @@ export interface BarOptions {
 
 /** How hard a drink hits, for the menu. */
 function kick(d: Drink): string {
-  if (d.strength < 0) return '💧 sobers you up a little';
-  if (d.strength === 0) return 'no alcohol';
-  return d.strength >= 0.55 ? '🌀🌀🌀 strong' : d.strength >= 0.4 ? '🌀🌀 goes to your head' : '🌀 light';
+  if (d.strength < 0) return t('menus.barSobers');
+  if (d.strength === 0) return t('menus.barNone');
+  return t(d.strength >= 0.55 ? 'menus.barStrong' : d.strength >= 0.4 ? 'menus.barMedium' : 'menus.barLight');
 }
 
 /** The rooftop bar's menu: pick a drink and the bartender pours it. */
 export function openBar(opts: BarOptions) {
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
+  const close = h('button.btn.close', { 'aria-label': t('menus.close') }, '✕');
   const list = h(
     'ul.svc-list',
     {},
@@ -28,11 +30,11 @@ export function openBar(opts: BarOptions) {
           tabindex: refused ? -1 : 0,
           role: 'button',
           'aria-disabled': String(refused),
-          title: refused ? "The bartender won't pour you another" : `Order a ${d.name.toLowerCase()}`,
+          title: refused ? t('menus.barRefused') : t('menus.barOrder', { drink: drinkName(d) }),
           style: refused ? 'opacity:.45;cursor:not-allowed' : '',
         },
         h('span.jb-icon', { style: 'font-size:26px' }, d.emoji),
-        h('div.svc-main', {}, h('div.svc-title', {}, d.name), h('div.svc-meta', {}, `${d.blurb} · ${kick(d)}`)),
+        h('div.svc-main', {}, h('div.svc-title', {}, drinkName(d)), h('div.svc-meta', {}, `${drinkBlurb(d)} · ${kick(d)}`)),
       );
       const pick = () => {
         if (refused) return;
@@ -51,15 +53,15 @@ export function openBar(opts: BarOptions) {
   );
   const el = h(
     'div.modal.jukebox',
-    { role: 'dialog', 'aria-label': 'Bar' },
-    h('header', {}, h('h2', {}, '🍸 Sky Bar'), close),
+    { role: 'dialog', 'aria-label': t('menus.bar') },
+    h('header', {}, h('h2', {}, t('menus.barTitle')), close),
     h(
       'div.body',
       {},
-      opts.cutOff ? h('p.setting-note', { style: 'margin:0 0 12px;font-weight:800' }, "🙅 The bartender thinks you've had enough. Water's on the house.") : null,
+      opts.cutOff ? h('p.setting-note', { style: 'margin:0 0 12px;font-weight:800' }, t('menus.barCutOff')) : null,
       list,
     ),
-    h('footer', {}, h('span.grow', {}, 'Drinks go to your head for a minute or so, and the view goes with them. Everything is on the house.')),
+    h('footer', {}, h('span.grow', {}, t('menus.barFoot'))),
   );
   const modal = openModal(el);
   close.addEventListener('click', () => modal.close());

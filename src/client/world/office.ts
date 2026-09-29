@@ -16,6 +16,10 @@ import { buildStack, type Stack } from './stack';
 import { buildTower } from './tower';
 import { buildHoop, type HoopView } from './hoop';
 import { HOOP } from '../../shared/hoop';
+import { t, type Key } from '../i18n';
+
+/** What's written above each wall board, in your language. */
+const BOARD_HEADS: Record<keyof typeof BOARDS, Key> = { issues: 'boards.headIssues', queue: 'boards.headQueue', pulls: 'boards.headPulls', services: 'boards.headServices' };
 
 export interface Collider {
   minX: number;
@@ -334,7 +338,7 @@ function exitDoor(night: NightParts): { group: THREE.Group; door: Door } {
   hinge.add(leaf);
   g.add(hinge);
 
-  const exit = textPlane('EXIT', { bg: '#2a9d4b', color: '#ffffff', size: 64, border: '#ffffff' });
+  const exit = textPlane(t('world.signExit'), { bg: '#2a9d4b', color: '#ffffff', size: 64, border: '#ffffff' });
   exit.scale.multiplyScalar(0.7);
   exit.position.set(0, o.y1 + 0.35, -(WALL_T / 2 + 0.03));
   exit.rotation.y = Math.PI;
@@ -542,7 +546,7 @@ function buildBalcony(group: THREE.Group, colliders: Collider[], interactables: 
   interactables.push(it);
   tray.userData.interact = it;
 
-  const sign = textPlane('🚬 Smoke break', { bg: '#2b2d42', color: '#fffaf3', size: 56, border: '#fffaf3' });
+  const sign = textPlane(t('world.signSmoke'), { bg: '#2b2d42', color: '#fffaf3', size: 56, border: '#fffaf3' });
   sign.scale.multiplyScalar(0.8);
   sign.position.set(-6.5, 2.2, minZ + 0.02);
   group.add(sign);
@@ -851,7 +855,7 @@ function buildBeanbag(def: DeskDef, index: number): DeskView {
   return { def, group, laptopAnchor, seatAnchor, stage, chair: bag, vacancy, vacancyY };
 }
 
-const KIOSK_SIGN: Record<StationKind, string> = { issues: '📌 Ask me', pulls: '🔀 Ask me', queue: '📋 Ask me' };
+const KIOSK_ICON: Record<StationKind, string> = { issues: '📌', pulls: '🔀', queue: '📋' };
 
 /**
  * A board agent's kiosk: a little counter in its color with a sign on the front, and the agent standing
@@ -869,7 +873,7 @@ function buildKiosk(def: DeskDef): DeskView {
   group.add(mesh(roundedBox(width - 0.16, height - 0.1, depth - 0.12, 0.06), color, 0, (height - 0.1) / 2 + 0.04, 0));
   group.add(mesh(roundedBox(width - 0.02, 0.06, depth + 0.02, 0.05), toon(PALETTE.ink), 0, 0.03, 0));
   group.add(mesh(roundedBox(width, 0.06, depth, 0.05), toon(PALETTE.desk), 0, height - 0.03, 0));
-  const sign = textPlane(KIOSK_SIGN[kind], { bg: '#fffaf3', size: 56 });
+  const sign = textPlane(t('world.signKiosk', { icon: KIOSK_ICON[kind] }), { bg: '#fffaf3', size: 56 });
   sign.scale.multiplyScalar(0.62);
   sign.position.set(0, height * 0.55, -(depth - 0.12) / 2 - 0.012);
   sign.rotation.y = Math.PI;
@@ -1082,7 +1086,7 @@ export function buildOffice(): Office {
     bg.rotation.y = b.rotY;
     group.add(bg);
     boardMeshes[key] = face;
-    const label = textPlane(b.label, { bg: '#fffaf3', size: 64 });
+    const label = textPlane(t(BOARD_HEADS[key]), { bg: '#fffaf3', size: 64 });
     label.scale.multiplyScalar(1.3);
     label.position.set(b.x + nx * 0.04, b.y + b.height / 2 + 0.5, b.z + nz * 0.04);
     label.rotation.y = b.rotY;
@@ -1415,7 +1419,7 @@ function buildMeetingRoom(group: THREE.Group, colliders: Collider[], interactabl
       for (const [leaf, x0] of leaves) leaf.position.x = x0 + Math.sign(x0 - dx) * e * (half - 0.06);
     },
   });
-  const label = textPlane('🤝 Meeting room', { bg: '#2b2d42', color: '#fffaf3', size: 56, border: '#fffaf3' });
+  const label = textPlane(t('main.meetingRoom'), { bg: '#2b2d42', color: '#fffaf3', size: 56, border: '#fffaf3' });
   label.scale.multiplyScalar(0.62);
   label.position.set(dx, 2.52, R.minZ - 0.07);
   label.rotation.y = Math.PI;
@@ -1602,7 +1606,7 @@ function buildLoft(group: THREE.Group, colliders: Collider[], interactables: Int
   const screen = mesh(new THREE.PlaneGeometry(0.8, 0.45), new THREE.MeshBasicMaterial({ color: '#4cc9f0' }), 0, 1.18, -0.165, false);
   desk.add(screen);
   desk.add(mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.12, 10), toon('#ffd166'), 0.9, 0.89, 0.15));
-  const plate = textPlane('👑 BOSS', { bg: '#ffd166', size: 48 });
+  const plate = textPlane(t('world.signBoss'), { bg: '#ffd166', size: 48 });
   plate.scale.multiplyScalar(0.55);
   plate.position.set(0, 0.5, -0.55);
   plate.rotation.y = Math.PI;
@@ -1667,12 +1671,12 @@ function buildLoft(group: THREE.Group, colliders: Collider[], interactables: Int
   group.add(lamp);
 
   // Signs: one on the back wall inside, one over the glass for everyone downstairs.
-  const inside = textPlane('👑 Boss Office', { bg: '#fffaf3', size: 64 });
+  const inside = textPlane(t('world.signBossOffice'), { bg: '#fffaf3', size: 64 });
   inside.scale.multiplyScalar(0.8);
   inside.position.set(maxX - 3, floorY + 1.9, maxZ - 0.04);
   inside.rotation.y = Math.PI;
   group.add(inside);
-  const outside = textPlane('👑 Boss Office', { bg: '#2b2d42', color: '#fffaf3', size: 64, border: '#fffaf3' });
+  const outside = textPlane(t('world.signBossOffice'), { bg: '#2b2d42', color: '#fffaf3', size: 64, border: '#fffaf3' });
   outside.scale.multiplyScalar(1.4);
   outside.position.set(cx, roofY + 0.2, minZ - 0.02);
   outside.rotation.y = Math.PI;

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { EMOTE_BY_ID, type Emote, type EmoteId } from '../../shared/emotes';
-import type { CarriedIssue, Theme } from '../../shared/protocol';
+import type { CarriedIssue, Smokable, Theme } from '../../shared/protocol';
 import type { Drink } from '../../shared/rooftop';
 import { OpenBook } from './book';
 import { HeldCard } from './card';
-import { REACH_TIME, SMOKE_CYCLE, cigarette, coffeeMug, dragCurve, drinkGlass, emoteEnvelope, putDownGlass, reachCurve } from './character';
+import { HandSmoke, REACH_TIME, SMOKE_CYCLE, coffeeMug, dragCurve, drinkGlass, emoteEnvelope, putDownGlass, reachCurve } from './character';
 import { UNDEAD_SKIN, raggedCuff, warlockHand, witchFire } from './costumes';
 import { mesh, toon, toonUnique } from './toon';
 import { ballMesh } from './hoop';
@@ -79,8 +79,7 @@ export class Hands {
   private walk = 0;
   private ladderK = 0;
   private poleK = 0;
-  private cig: THREE.Group;
-  private ember: THREE.MeshToonMaterial;
+  private cig = new HandSmoke();
   /** Each light, and how bright it is where it's brightest. */
   private lights: [THREE.Light, number][] = [];
   private lightLevel = 1;
@@ -118,14 +117,11 @@ export class Hands {
     this.mug.visible = false;
     this.left.group.add(this.mug);
     // Held between the fingers of the right hand, lit end out past the knuckles.
-    const cig = cigarette();
-    this.cig = cig.group;
-    this.ember = cig.ember;
-    this.cig.scale.setScalar(0.55);
-    this.cig.rotation.set(0.35, Math.PI + 0.5, 0);
-    this.cig.position.set(-0.035, 0.03, -0.075);
-    this.cig.visible = false;
-    this.right.group.add(this.cig);
+    const cig = this.cig.group;
+    cig.scale.setScalar(0.55);
+    cig.rotation.set(0.35, Math.PI + 0.5, 0);
+    cig.position.set(-0.035, 0.03, -0.075);
+    this.right.group.add(cig);
     this.thumbUp = mesh(new THREE.CapsuleGeometry(0.027, 0.035, 4, 10), this.skin, -0.035, 0.065, -0.005, false);
     this.thumbUp.rotation.z = 0.3;
     this.thumbUp.visible = false;
@@ -162,17 +158,17 @@ export class Hands {
     this.wind = 0;
   }
 
-  /** Puts a lit cigarette in your right hand, or takes it away. */
-  setSmoking(on: boolean) {
-    if (on === this.smokeT >= 0) return;
-    this.smokeT = on ? 0 : -1;
-    this.cig.visible = on;
+  /** Puts a lit cigarette or joint in your right hand, or takes it away (false). */
+  setSmoking(what: Smokable | false) {
+    if (what === this.cig.smoking) return;
+    if (!what || !this.cig.smoking) this.smokeT = what ? 0 : -1;
+    this.cig.show(what);
   }
 
   /** Where the cigarette's lit end is, in camera space (the hands' camera sits where the real one is). */
   cigTip(out: THREE.Vector3): THREE.Vector3 {
     this.right.group.updateMatrixWorld(true);
-    return this.cig.localToWorld(out.set(0, 0, 0.09));
+    return this.cig.group.localToWorld(out.copy(this.cig.tip));
   }
 
   setColor(shirt: string) {
@@ -474,7 +470,7 @@ export class Hands {
       r.position.y += 0.02 * d;
       r.position.z += 0.3 * d;
       r.rotation.x += 0.5 * d;
-      this.ember.emissiveIntensity += ((d > 0.9 ? 1.4 : 0.3) - this.ember.emissiveIntensity) * Math.min(1, dt * 6);
+      this.cig.glow(d > 0.9 ? 1.4 : 0.3, dt);
     }
     if (this.emoting) this.emoteStep(dt, l);
     if (this.costume === 'halloween') this.burn(t);

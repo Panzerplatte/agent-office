@@ -1,4 +1,3 @@
-import { DESK_BY_ID } from '../../shared/layout';
 import type { AgentEffort, AgentProvider, GhIssue, GhLabel, GhPull, WorkerInfo } from '../../shared/protocol';
 import type { Net } from '../net';
 import { store, workerForPull } from '../state';
@@ -7,6 +6,8 @@ import { labelChip, openIssue, openLabels, openPull } from './pull';
 import { providerLabel } from './provider';
 import type { MeetingPreset } from './meeting';
 import { officePrompt } from './prompts';
+import { t } from '../i18n';
+import { deskLabelOf } from '../i18n/labels';
 
 export interface BoardActions {
   /** Start a worker on a ready-made prompt (shown for editing first). */
@@ -52,20 +53,20 @@ function issueColumns(items: GhIssue[]): Column<GhIssue>[] {
   const inProgress = open.filter((i) => i.assignees.length > 0 || i.labels.some((l) => /progress|doing|wip|started/i.test(l.name)) || store.taskForIssue(i.number)?.status === 'running');
   const todo = open.filter((i) => !inProgress.includes(i));
   return [
-    { key: 'open', title: '📥 Open', items: todo },
-    { key: 'progress', title: '🚧 In progress', items: inProgress },
-    { key: 'closed', title: '✅ Closed', items: items.filter((i) => i.state !== 'OPEN').sort(byUpdated), max: 40 },
+    { key: 'open', title: t('boards.colOpen'), items: todo },
+    { key: 'progress', title: t('boards.colProgress'), items: inProgress },
+    { key: 'closed', title: t('boards.colClosed'), items: items.filter((i) => i.state !== 'OPEN').sort(byUpdated), max: 40 },
   ];
 }
 
 function pullColumns(items: GhPull[]): Column<GhPull>[] {
   const open = items.filter((p) => p.state === 'OPEN');
   return [
-    { key: 'draft', title: '✏️ Draft', items: open.filter((p) => p.isDraft) },
-    { key: 'review', title: '👀 In review', items: open.filter((p) => !p.isDraft && p.reviewDecision !== 'APPROVED') },
-    { key: 'approved', title: '👍 Approved', items: open.filter((p) => !p.isDraft && p.reviewDecision === 'APPROVED') },
-    { key: 'merged', title: '🎉 Merged', items: items.filter((p) => p.state === 'MERGED').sort(byUpdated), max: 30 },
-    { key: 'closed', title: '🗑️ Closed', items: items.filter((p) => p.state === 'CLOSED').sort(byUpdated), max: 20 },
+    { key: 'draft', title: t('boards.colDraft'), items: open.filter((p) => p.isDraft) },
+    { key: 'review', title: t('boards.colReview'), items: open.filter((p) => !p.isDraft && p.reviewDecision !== 'APPROVED') },
+    { key: 'approved', title: t('boards.colApproved'), items: open.filter((p) => !p.isDraft && p.reviewDecision === 'APPROVED') },
+    { key: 'merged', title: t('boards.colMerged'), items: items.filter((p) => p.state === 'MERGED').sort(byUpdated), max: 30 },
+    { key: 'closed', title: t('boards.colPullClosed'), items: items.filter((p) => p.state === 'CLOSED').sort(byUpdated), max: 20 },
   ];
 }
 
@@ -112,26 +113,26 @@ const CHECK_ICON: Record<GhPull['checks'], string> = { pass: '🟢', fail: '🔴
 
 /** A chip naming a worker and desk, color-coded to match the worker back on the floor. */
 function workerChip(w: WorkerInfo, title: string) {
-  return h('span.desk-link', { style: `--dot:${w.color}`, title }, `🪑 ${w.name} · ${DESK_BY_ID.get(w.deskId)?.label ?? 'a desk'}`);
+  return h('span.desk-link', { style: `--dot:${w.color}`, title }, `🪑 ${w.name} · ${deskLabelOf(w.deskId) ?? t('boards.aDesk')}`);
 }
 
 /** A chip naming the worker and desk a pull request came from. */
 function deskChip(w: WorkerInfo) {
-  return workerChip(w, `Opened from ${w.name}'s desk (${w.worktree?.branch ?? 'its branch'})`);
+  return workerChip(w, t('boards.openedFromDesk', { name: w.name, branch: w.worktree?.branch ?? t('boards.itsBranch') }));
 }
 
 /** Where an issue stands on the 📋 queue, for its card. */
 function queueChip(issue: number): Node | '' {
-  const t = store.taskForIssue(issue);
-  if (!t) return '';
-  const provider = providerLabel(t.provider, store.project);
-  if (t.status === 'queued') return h('span.qchip', {}, `${store.queue.tasks.find((x) => x.status === 'queued') === t ? '📋 up next' : '📋 queued'} · ${provider}`);
-  if (t.status === 'running') {
-    const w = t.workerId ? store.workers.get(t.workerId) : undefined;
-    if (w) return workerChip(w, `${w.name} is working on this at ${DESK_BY_ID.get(w.deskId)?.label ?? 'a desk'} · ${provider}`);
-    return h('span.qchip.running', {}, `🤖 ${t.workerName ?? 'a worker'} · ${provider}`);
+  const task = store.taskForIssue(issue);
+  if (!task) return '';
+  const provider = providerLabel(task.provider, store.project);
+  if (task.status === 'queued') return h('span.qchip', {}, `${store.queue.tasks.find((x) => x.status === 'queued') === task ? t('boards.chipUpNext') : t('boards.chipQueued')} · ${provider}`);
+  if (task.status === 'running') {
+    const w = task.workerId ? store.workers.get(task.workerId) : undefined;
+    if (w) return workerChip(w, `${t('boards.workingOnThisAt', { name: w.name, desk: deskLabelOf(w.deskId) ?? t('boards.aDesk') })} · ${provider}`);
+    return h('span.qchip.running', {}, `🤖 ${task.workerName ?? t('boards.aWorker')} · ${provider}`);
   }
-  return t.pr ? h('span.qchip.done', {}, `🔀 PR #${t.pr.number} · ${provider}`) : '';
+  return task.pr ? h('span.qchip.done', {}, `🔀 PR #${task.pr.number} · ${provider}`) : '';
 }
 
 function card(n: number, title: string, meta: (Node | string)[], i: number, onclick: () => void, onLabels: () => void) {
@@ -143,7 +144,7 @@ function card(n: number, title: string, meta: (Node | string)[], i: number, oncl
       onclick,
       onkeydown: ((e: KeyboardEvent) => e.key === 'Enter' && e.target === e.currentTarget && onclick()) as EventListener,
     },
-    h('button.card-labels', { type: 'button', title: 'Change the labels', 'aria-label': `Change the labels on #${n}`, onclick: ((e: Event) => (e.stopPropagation(), onLabels())) as EventListener }, '🏷️'),
+    h('button.card-labels', { type: 'button', title: t('boards.changeLabels'), 'aria-label': t('boards.labelsOn', { n }), onclick: ((e: Event) => (e.stopPropagation(), onLabels())) as EventListener }, '🏷️'),
     h('div.num', {}, `#${n}`),
     h('div.ttl', {}, title),
     h('div.meta', {}, ...meta.filter((m) => m !== '').map((m) => (typeof m === 'string' ? h('span', {}, m) : m))),
@@ -153,9 +154,14 @@ function card(n: number, title: string, meta: (Node | string)[], i: number, oncl
 export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActions) {
   const body = h('div.body');
   const status = h('span.board-status');
-  const refresh = h('button.btn', { title: 'Refresh from GitHub', onclick: () => net.send({ t: 'gh.refresh' }) }, '🔄 Refresh');
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
-  const el = h('div.modal.board', { role: 'dialog', 'aria-label': kind === 'issues' ? 'Issues board' : 'Pull requests board' }, h('header', {}, h('h2', {}, kind === 'issues' ? '📌 Issues' : '🔀 Pull Requests'), status, refresh, close), body);
+  const refresh = h('button.btn', { title: t('boards.refreshTitle'), onclick: () => net.send({ t: 'gh.refresh' }) }, t('boards.refresh'));
+  const close = h('button.btn.close', { 'aria-label': t('boards.close') }, '✕');
+  const el = h(
+    'div.modal.board',
+    { role: 'dialog', 'aria-label': t(kind === 'issues' ? 'boards.issuesBoard' : 'boards.pullsBoard') },
+    h('header', {}, h('h2', {}, t(kind === 'issues' ? 'boards.issuesHeading' : 'boards.pullsHeading')), status, refresh, close),
+    body,
+  );
 
   const filters = loadFilters(kind);
   /** The column whose label picker is open, if any. */
@@ -177,15 +183,15 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
       list.append(
         h(
           'button.label-pick',
-          { type: 'button', 'aria-pressed': String(on), 'data-focus': `${col.key}:${name}`, title: `${n} in ${col.title.replace(/^\S+ /, '')}`, onclick: () => setFilter(col.key, on ? picked.filter((x) => x !== name) : [...picked, name]) },
+          { type: 'button', 'aria-pressed': String(on), 'data-focus': `${col.key}:${name}`, title: t('boards.labelCountIn', { n, column: col.title.replace(/^\S+ /, '') }), onclick: () => setFilter(col.key, on ? picked.filter((x) => x !== name) : [...picked, name]) },
           labelChip({ name, color: all.get(name) ?? '#dddddd' }),
           h('small', {}, String(n)),
         ),
       );
     }
-    if (!names.length) list.append(h('small', {}, 'No labels on this board yet.'));
-    const hint = picked.length ? 'Showing cards with any of these labels' : 'Pick labels to show only their cards';
-    return h('div.col-filter', {}, list, h('div.col-filter-foot', {}, h('small', {}, hint), picked.length ? h('button.btn.small', { type: 'button', onclick: () => setFilter(col.key, []) }, 'Clear') : null));
+    if (!names.length) list.append(h('small', {}, t('boards.noBoardLabels')));
+    const hint = t(picked.length ? 'boards.filterShowing' : 'boards.filterPick');
+    return h('div.col-filter', {}, list, h('div.col-filter-foot', {}, h('small', {}, hint), picked.length ? h('button.btn.small', { type: 'button', onclick: () => setFilter(col.key, []) }, t('boards.filterClear')) : null));
   };
 
   /** A column of cards. Click its header to filter it by label. */
@@ -195,7 +201,7 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
     const shown = matching.slice(0, col.max);
     const ul = h('ul');
     shown.forEach((it, i) => ul.append(cardOf(it, i)));
-    if (!shown.length) ul.append(h('li.empty', {}, picked.length ? 'Nothing here with those labels' : 'Nothing here'));
+    if (!shown.length) ul.append(h('li.empty', {}, t(picked.length ? 'boards.emptyFiltered' : 'boards.empty')));
     const open = picking === col.key;
     const count = picked.length ? `${shown.length} / ${col.items.slice(0, col.max).length}` : String(shown.length);
     const head = h(
@@ -204,7 +210,7 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
         type: 'button',
         'aria-expanded': String(open),
         'data-focus': col.key,
-        title: picked.length ? `Only cards labelled ${picked.join(' or ')}. Click to change.` : 'Filter by label',
+        title: picked.length ? t('boards.onlyLabelled', { labels: picked.join(t('boards.or')) }) : t('boards.filterByLabel'),
         onclick: () => {
           picking = open ? null : col.key;
           render();
@@ -221,7 +227,7 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
           'div.col-active',
           {},
           ...picked.map((name) => labelChip({ name, color: all.get(name) ?? '#dddddd' })),
-          h('button.col-clear', { type: 'button', 'aria-label': 'Clear label filter', title: 'Show every card', onclick: () => setFilter(col.key, []) }, '✕'),
+          h('button.col-clear', { type: 'button', 'aria-label': t('boards.clearFilter'), title: t('boards.showEveryCard'), onclick: () => setFilter(col.key, []) }, '✕'),
         ),
       );
     }
@@ -229,9 +235,14 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
     return section;
   };
 
+  const showStatus = () => {
+    const st = kind === 'issues' ? store.issues : store.pulls;
+    status.textContent = st.loading ? t('boards.refreshing') : st.fetchedAt ? t('boards.updated', { ago: timeAgo(st.fetchedAt) }) : '';
+  };
+
   const render = () => {
     const st = kind === 'issues' ? store.issues : store.pulls;
-    status.textContent = st.loading ? 'Refreshing…' : st.fetchedAt ? `Updated ${timeAgo(st.fetchedAt)}` : '';
+    showStatus();
     // Every refresh rebuilds the columns, so note how far each was scrolled and put it back afterwards,
     // and keep focus on the header or label toggle it was on.
     const scrolled = [...body.querySelectorAll('.column > ul')].map((ul) => ul.scrollTop);
@@ -240,11 +251,11 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
     const focused = active && body.contains(active) ? active.getAttribute('data-focus') : null;
     body.replaceChildren();
     if (st.off) {
-      body.append(h('div.board-error', {}, st.off));
+      body.append(h('div.board-error', {}, t('boards.issuesOff')));
       return;
     }
     if (st.error && !st.items.length) {
-      body.append(h('div.board-error', {}, `Couldn't load from GitHub: ${st.error}`, h('br'), h('small', {}, 'The server runs `gh` in the project directory — make sure it is installed and authenticated (gh auth login).')));
+      body.append(h('div.board-error', {}, t('boards.loadError', { error: st.error }), h('br'), h('small', {}, t('boards.ghHint'))));
       return;
     }
     const all = boardLabels(st.items);
@@ -252,7 +263,7 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
       for (const col of issueColumns(store.issues.items)) {
         body.append(
           column(col, all, (it, i) =>
-            card(it.number, it.title, [...labelChips(it.labels), queueChip(it.number), it.assignees.length ? `👤 ${it.assignees.join(', ')}` : `by ${it.author}`, it.comments ? `💬 ${it.comments}` : '', timeAgo(it.updatedAt)], i, () => openIssue(it, net, actions), () => openLabels('issue', it, net)),
+            card(it.number, it.title, [...labelChips(it.labels), queueChip(it.number), it.assignees.length ? `👤 ${it.assignees.join(', ')}` : t('boards.byAuthor', { name: it.author }), it.comments ? `💬 ${it.comments}` : '', timeAgo(it.updatedAt)], i, () => openIssue(it, net, actions), () => openLabels('issue', it, net)),
           ),
         );
       }
@@ -267,8 +278,8 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
               [
                 w ? deskChip(w) : '',
                 ...labelChips(it.labels),
-                `by ${it.author}`,
-                it.reviewDecision === 'CHANGES_REQUESTED' ? '🛠 changes requested' : '',
+                t('boards.byAuthor', { name: it.author }),
+                it.reviewDecision === 'CHANGES_REQUESTED' ? t('boards.changesRequested') : '',
                 CHECK_ICON[it.checks],
                 h('span', { style: 'color:#2a9d4b' }, `+${it.additions}`),
                 h('span', { style: 'color:#c3423f' }, `-${it.deletions}`),
@@ -291,12 +302,9 @@ export function openBoard(kind: 'issues' | 'pulls', net: Net, actions: BoardActi
   const unsubs = [store.on(kind, render), store.on('queue', render)];
   // Which desk a PR came from can change (a worker sent home, a PR opened from a desk).
   if (kind === 'pulls') unsubs.push(store.on('workers', render));
-  const timer = setInterval(() => {
-    const st = kind === 'issues' ? store.issues : store.pulls;
-    status.textContent = st.loading ? 'Refreshing…' : st.fetchedAt ? `Updated ${timeAgo(st.fetchedAt)}` : '';
-  }, 15000);
+  const timer = setInterval(showStatus, 15000);
   const modal = openModal(el, {
-    doing: kind === 'issues' ? '📋 at the issues board' : '🔀 at the PR board',
+    doing: t(kind === 'issues' ? 'boards.doingIssues' : 'boards.doingPulls'),
     onClose: () => {
       unsubs.forEach((u) => u());
       clearInterval(timer);

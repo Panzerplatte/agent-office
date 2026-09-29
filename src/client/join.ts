@@ -1,4 +1,5 @@
-export {}; // a module, so its names don't clash with the other pages' scripts
+import { t } from './i18n';
+import { serverError } from './i18n/errors';
 
 // An invite link, /join#<token>: make your own account, then walk in. The token rides in the
 // fragment, so it never reaches a server log or a Referer header.
@@ -10,6 +11,18 @@ const password = $<HTMLInputElement>('password');
 const again = $<HTMLInputElement>('again');
 const submit = $<HTMLButtonElement>('submit');
 const error = $('error');
+
+// The page's own words, in your language.
+document.title = t('pages.joinTitle');
+$('title').textContent = t('pages.joinInvited');
+$('sub').textContent = t('pages.joinChecking');
+const labels = form.querySelectorAll('label');
+labels[0].firstChild!.textContent = t('pages.yourName');
+labels[1].firstChild!.textContent = t('pages.joinPickPassword');
+labels[2].firstChild!.textContent = t('pages.joinAgain');
+form.querySelector('.note')!.textContent = t('pages.joinNote');
+submit.textContent = t('pages.joinSubmit');
+$('login').textContent = t('pages.toSignIn');
 
 function fail(msg: string) {
   $('sub').textContent = '';
@@ -24,30 +37,33 @@ async function post(body: Record<string, unknown>): Promise<{ ok: boolean; body:
 }
 
 async function peek() {
-  if (!token) return fail('This link is missing its invite code. Ask whoever sent it for the whole link.');
+  if (!token) return fail(t('pages.joinNoCode'));
   try {
     const r = await post({ peek: true });
-    if (!r.ok) return fail(r.body.error ?? 'This invite link does not work.');
+    if (!r.ok) return fail(serverError(r.body.error, 'pages.joinBroken'));
     const { name: invited, role, by, project } = r.body as { name?: string; role: string; by: string; project: string };
-    $('title').textContent = `Join the ${project} office`;
+    $('title').textContent = t('pages.joinOffice', { project });
     const sub = $('sub');
-    sub.replaceChildren(`${by} invited you${role === 'admin' ? ' as an ' : '. '}`);
     if (role === 'admin') {
+      // The role sits in the sentence as a pill, wherever the language puts it.
+      const [before, after] = t('pages.joinByAs', { by }).split('{role}');
       const pill = document.createElement('span');
       pill.className = 'role';
-      pill.textContent = 'admin';
-      sub.append(pill, '.');
+      pill.textContent = t('pages.joinAdmin');
+      sub.replaceChildren(before, pill, after);
+    } else {
+      sub.replaceChildren(t('pages.joinBy', { by }));
     }
-    sub.append(' Make your own account to come in.');
+    sub.append(' ', t('pages.joinMakeAccount'));
     if (invited) {
       name.value = invited;
       name.readOnly = true;
-      name.title = 'The name you were invited under';
+      name.title = t('pages.joinInvitedName');
     }
     form.hidden = false;
     (invited ? password : name).focus();
   } catch {
-    fail('Server unreachable.');
+    fail(t('pages.unreachable'));
   }
 }
 
@@ -55,7 +71,7 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   error.textContent = '';
   if (password.value !== again.value) {
-    error.textContent = "Those passwords don't match";
+    error.textContent = t('pages.joinMismatch');
     again.select();
     return;
   }
@@ -63,7 +79,7 @@ form.addEventListener('submit', async (e) => {
   try {
     const r = await post({ name: name.value.trim(), password: password.value });
     if (!r.ok) {
-      error.textContent = r.body.error ?? 'Could not make your account';
+      error.textContent = serverError(r.body.error, 'pages.joinFailed');
       return;
     }
     try {
@@ -73,7 +89,7 @@ form.addEventListener('submit', async (e) => {
     }
     location.replace('/');
   } catch {
-    error.textContent = 'Server unreachable';
+    error.textContent = t('pages.unreachable');
   } finally {
     submit.disabled = false;
   }

@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { ChangesState, FloorInfo, PeerInfo, ProjectInfo, ServerMsg, WorkerInfo } from '../shared/protocol.js';
 import { isBusy } from '../shared/status.js';
+import { notice, type Notice } from '../shared/notices.js';
 import { DESK_BY_ID } from '../shared/layout.js';
 import type { FloorDef } from './building.js';
 import { excludeFromGit } from './config.js';
@@ -39,7 +40,7 @@ export interface FloorContext {
   prompts: PromptSource;
   /** To everyone on this floor. */
   emit(floor: Floor, msg: ServerMsg, droppable?: boolean): void;
-  toast(floor: Floor, text: string, level?: ToastLevel): void;
+  toast(floor: Floor, text: string | Notice, level?: ToastLevel): void;
   /** A worker's terminal output, for whoever has that terminal open. */
   termData(workerId: string, data: string, viewers: string[]): void;
   /** What a worker changed, for whoever has its Changes window open. */
@@ -172,7 +173,7 @@ export class Floor {
         this.queue?.onPulls(state.items);
         if (state.loading || state.error) return;
         for (const p of this.merges.look(state.items)) {
-          ctx.toast(this, `🎉 PR #${p.number} merged: ${p.title}`);
+          ctx.toast(this, notice('pr.mergedOnGitHub', { number: p.number, title: p.title }));
           this.merged(p.number);
         }
         this.sendLandedHome();
@@ -191,7 +192,7 @@ export class Floor {
       hiringPaused: () => ctx.ledger.hiringPaused,
       room: () => ctx.capacity.room(),
       emptied: () => {
-        ctx.toast(this, '📋 The queue is empty: every task is done 🎉');
+        ctx.toast(this, notice('queue.empty'));
         ctx.emit(this, { t: 'gong', why: 'queue' });
       },
       worktreeNote: () => officePrompt(ctx.prompts, 'queue.worktree'),
@@ -273,7 +274,7 @@ export class Floor {
       if (!this.ctx.leaveOnMerge()) return;
       for (const { worker, pr, head } of landedWorkers(this.workers.list(), this.github.pulls.items, this.queue.state().tasks)) {
         const done = this.workers.kill(worker.id, undefined, head);
-        this.ctx.toast(this, `🏠 ${worker.name} went home: PR #${pr} merged`);
+        this.ctx.toast(this, notice('worker.wentHomeMerged', { name: worker.name, pr }));
         void done.then(({ note, error }) => {
           if (note) this.ctx.toast(this, note);
           if (error) this.ctx.toast(this, error, 'warn');

@@ -1,5 +1,7 @@
-import { EMOTES, type EmoteId } from '../../shared/emotes';
+import { EMOTES, type Emote, type EmoteId } from '../../shared/emotes';
 import { h } from './dom';
+import { t } from '../i18n';
+import { emoteLabel as labelOf } from '../i18n/labels';
 
 /** How far (px) the mouse has to go from the middle of the wheel before it points at an emote. */
 const DEAD_ZONE = 26;
@@ -35,13 +37,13 @@ export class EmoteWheel {
       const a = i * SLICE - Math.PI / 2;
       return h(
         'button.emote',
-        { type: 'button', title: `${e.label} (${i + 1})`, 'aria-label': e.label, style: `--x:${Math.cos(a) * RADIUS}px;--y:${Math.sin(a) * RADIUS}px`, onpointermove: () => this.point(i) },
+        { type: 'button', title: `${labelOf(e)} (${i + 1})`, 'aria-label': labelOf(e), style: `--x:${Math.cos(a) * RADIUS}px;--y:${Math.sin(a) * RADIUS}px`, onpointermove: () => this.point(i) },
         e.emoji,
         h('span.num', {}, i + 1),
       );
     });
     this.caption = h('div.middle');
-    this.el = h('div.emote-wheel.hidden', { role: 'menu', 'aria-label': 'Emotes' }, h('div.ring', {}, ...this.items, this.caption));
+    this.el = h('div.emote-wheel.hidden', { role: 'menu', 'aria-label': t('menus.emotes') }, h('div.ring', {}, ...this.items, this.caption));
     this.el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       const i = this.items.findIndex((b) => b.contains(e.target as Node));
@@ -124,7 +126,7 @@ export class EmoteWheel {
   private render() {
     this.items.forEach((b, i) => b.classList.toggle('on', i === this.at));
     const e = EMOTES[this.at];
-    const how = !e ? 'Point at one, or 1–6' : this.heldAt ? 'Let go of G' : 'Click';
-    this.caption.replaceChildren(h('b', {}, e?.label ?? 'Emote'), h('small', {}, how));
+    const how = t(!e ? 'menus.emotePoint' : this.heldAt ? 'menus.emoteLetGo' : 'menus.emoteClick');
+    this.caption.replaceChildren(h('b', {}, e ? labelOf(e) : t('menus.emote')), h('small', {}, how));
   }
 }

@@ -1,4 +1,5 @@
 import { isDocPath, resolveDocLink, type DocFile, type DocList, type DocText } from '../../shared/docs';
+import { locale, t } from '../i18n';
 import { clip, h, openModal, setDoing, timeAgo, toast } from './dom';
 import { markdownFile } from './markdown';
 
@@ -118,7 +119,8 @@ function slug(text: string): string {
 }
 
 function size(bytes: number): string {
-  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
+  const digits = bytes < 10240 ? 1 : 0;
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toLocaleString(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false })} KB`;
 }
 
 function lastRead(floor: string): string | undefined {
@@ -149,17 +151,17 @@ export function openBookshelf(deps: ShelfDeps) {
   const { floor, repoUrl } = deps;
   const q = (params: Record<string, string>) => new URLSearchParams({ floor, ...params }).toString();
 
-  const filter = h('input', { type: 'text', placeholder: 'Filter the docs…', 'aria-label': 'Filter the docs', spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
-  const count = h('div.bs-count', {}, 'Looking along the shelves…');
-  const list = h('ul.bs-list', { role: 'listbox', 'aria-label': 'Docs' });
+  const filter = h('input', { type: 'text', placeholder: t('windows.bookshelf.filterPlaceholder'), 'aria-label': t('windows.bookshelf.filterLabel'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
+  const count = h('div.bs-count', {}, t('windows.bookshelf.looking'));
+  const list = h('ul.bs-list', { role: 'listbox', 'aria-label': t('windows.bookshelf.listLabel') });
   const crumbs = h('div.bs-crumbs');
   const meta = h('div.bs-meta');
-  const toc = h('select.bs-toc', { 'aria-label': 'Jump to a heading', title: 'Jump to a heading' }) as HTMLSelectElement;
+  const toc = h('select.bs-toc', { 'aria-label': t('windows.bookshelf.tocLabel'), title: t('windows.bookshelf.tocLabel') }) as HTMLSelectElement;
   const page = h('div.bs-page', { tabindex: -1 });
   const el = h(
     'div.modal.bookshelf',
-    { role: 'dialog', 'aria-label': 'Bookshelf' },
-    h('header', {}, h('h2', {}, '📚 Bookshelf', deps.project ? h('span.bs-project', {}, ` · ${deps.project}`) : '')),
+    { role: 'dialog', 'aria-label': t('windows.bookshelf.title') },
+    h('header', {}, h('h2', {}, t('windows.bookshelf.heading'), deps.project ? h('span.bs-project', {}, ` · ${deps.project}`) : '')),
     h(
       'div.body',
       {},
@@ -183,7 +185,7 @@ export function openBookshelf(deps: ShelfDeps) {
   const modal = openModal(el, { doing: '📚 at the bookshelf', reading: true });
 
   const renderList = () => {
-    count.textContent = !files.length ? '' : filter.value.trim() ? `${shown.length} of ${files.length} docs` : `${files.length} doc${files.length === 1 ? '' : 's'}`;
+    count.textContent = !files.length ? '' : filter.value.trim() ? t('windows.bookshelf.countFiltered', { shown: shown.length, total: files.length }) : t('windows.bookshelf.count', { n: files.length });
     list.replaceChildren(
       ...shown.map((hit, i) => {
         const { doc } = hit;
@@ -202,8 +204,8 @@ export function openBookshelf(deps: ShelfDeps) {
         return li;
       }),
     );
-    if (!files.length) list.append(h('li.bs-none', {}, 'No Markdown files in this project yet.'));
-    else if (!shown.length) list.append(h('li.bs-none', {}, 'No doc matches that.'));
+    if (!files.length) list.append(h('li.bs-none', {}, t('windows.bookshelf.noFiles')));
+    else if (!shown.length) list.append(h('li.bs-none', {}, t('windows.bookshelf.noMatch')));
   };
 
   const refilter = () => {
@@ -282,7 +284,7 @@ export function openBookshelf(deps: ShelfDeps) {
       const to = resolveDocLink(path, img.getAttribute('src') ?? '');
       if (to) img.src = `/api/docs/picture?${q({ path: to.path })}`;
     }
-    toc.replaceChildren(h('option', { value: '' }, '☰ Contents'), ...heads.map((x) => h('option', { value: x.anchor }, `${' '.repeat(x.level - 1)}${clip(x.text, 60)}`)));
+    toc.replaceChildren(h('option', { value: '' }, t('windows.bookshelf.contents')), ...heads.map((x) => h('option', { value: x.anchor }, `${' '.repeat(x.level - 1)}${clip(x.text, 60)}`)));
     toc.hidden = heads.length < 3;
   };
 
@@ -294,15 +296,15 @@ export function openBookshelf(deps: ShelfDeps) {
       doc = await getJson<DocText>(`/api/docs/file?${q({ path })}`);
     } catch (err) {
       if (mine !== opening) return;
-      toast(`📚 Couldn't open ${nameOf(path)}: ${(err as Error).message}`, 'warn');
-      if (!current) page.replaceChildren(h('div.bs-empty', {}, `Couldn't open ${path}.`));
+      toast(t('notices.bookFailed', { name: nameOf(path), error: (err as Error).message }), 'warn');
+      if (!current) page.replaceChildren(h('div.bs-empty', {}, t('windows.bookshelf.openFailed', { path })));
       return;
     }
     if (mine !== opening || !el.isConnected) return;
     current = path;
     rememberRead(floor, path);
     const info = files.find((f) => f.path === path);
-    const body = doc.text.trim() ? markdownFile(doc.text) : h('div.md', {}, h('p.none', {}, 'This file is empty.'));
+    const body = doc.text.trim() ? markdownFile(doc.text) : h('div.md', {}, h('p.none', {}, t('windows.bookshelf.emptyFile')));
     wire(body, path);
     page.replaceChildren(body);
     const dir = path.slice(0, path.length - nameOf(path).length);
@@ -310,8 +312,8 @@ export function openBookshelf(deps: ShelfDeps) {
     crumbs.title = path;
     const words = doc.text.split(/\s+/).filter(Boolean).length;
     meta.replaceChildren(
-      [`${Math.max(1, Math.round(words / 220))} min read`, info ? size(info.size) : '', info ? `updated ${timeAgo(info.mtime)}` : ''].filter(Boolean).join(' · '),
-      repoUrl ? h('a', { href: `${repoUrl}/blob/HEAD/${path.split('/').map(encodeURIComponent).join('/')}`, target: '_blank', rel: 'noopener noreferrer', title: 'Open it on GitHub' }, 'GitHub ↗') : '',
+      [t('windows.bookshelf.minRead', { n: Math.max(1, Math.round(words / 220)) }), info ? size(info.size) : '', info ? t('windows.bookshelf.updated', { ago: timeAgo(info.mtime) }) : ''].filter(Boolean).join(' · '),
+      repoUrl ? h('a', { href: `${repoUrl}/blob/HEAD/${path.split('/').map(encodeURIComponent).join('/')}`, target: '_blank', rel: 'noopener noreferrer', title: t('windows.bookshelf.openOnGithub') }, 'GitHub ↗') : '',
     );
     turnedAt = 0;
     jump(hash);
@@ -344,14 +346,14 @@ export function openBookshelf(deps: ShelfDeps) {
       if (!el.isConnected) return;
       files = r.files;
       refilter();
-      if (r.more) count.textContent += ` (the first ${files.length})`;
+      if (r.more) count.textContent += t('windows.bookshelf.firstN', { n: files.length });
       const start = [lastRead(floor), ...shelfOrder(files).map((f) => f.path)].find((p) => p && files.some((f) => f.path === p));
       if (start) void openDoc(start);
-      else page.replaceChildren(h('div.bs-empty', {}, '📭 Nothing to read here: this project has no Markdown files yet.'));
+      else page.replaceChildren(h('div.bs-empty', {}, t('windows.bookshelf.nothingToRead')));
     })
     .catch((err: Error) => {
       if (!el.isConnected) return;
       count.textContent = '';
-      page.replaceChildren(h('div.bs-empty', {}, `Couldn't look along the shelves: ${err.message}`));
+      page.replaceChildren(h('div.bs-empty', {}, t('windows.bookshelf.listFailed', { error: err.message })));
     });
 }

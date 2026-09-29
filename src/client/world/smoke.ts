@@ -30,7 +30,7 @@ interface Puff {
 const MAX = 160;
 const tmp = new THREE.Vector3();
 
-/** Cigarette smoke: soft grey puffs that drift up on the breeze, spread out and fade. */
+/** Cigarette smoke: soft grey puffs that drift up on the breeze, spread out and fade. A joint's is thicker and hangs about longer. */
 export class Smoke {
   readonly group = new THREE.Group();
   private live: Puff[] = [];
@@ -39,21 +39,24 @@ export class Smoke {
   private tex = puffTexture();
 
   /** A thin wisp curling up off a cigarette's lit end. */
-  wisp(at: THREE.Vector3) {
+  wisp(at: THREE.Vector3, thick = false) {
     tmp.set((Math.random() - 0.5) * 0.06, 0.3 + Math.random() * 0.1, (Math.random() - 0.5) * 0.06);
-    this.emit(at, tmp, 0.06, 0.4, 2.4, 0.5);
+    if (thick) this.emit(at, tmp, 0.08, 0.6, 3.2, 0.6);
+    else this.emit(at, tmp, 0.06, 0.4, 2.4, 0.5);
   }
 
-  /** A lungful blown out along `dir` (a unit vector). */
-  exhale(at: THREE.Vector3, dir: THREE.Vector3) {
-    for (let i = 0; i < 8; i++) {
-      const speed = 0.95 - i * 0.08;
+  /** A lungful blown out along `dir` (a unit vector); a thick one is a big, slow cloud. */
+  exhale(at: THREE.Vector3, dir: THREE.Vector3, thick = false) {
+    const n = thick ? 12 : 8;
+    const grow = thick ? 1.6 : 1;
+    for (let i = 0; i < n; i++) {
+      const speed = (0.95 - i * 0.08 * (8 / n)) / Math.sqrt(grow);
       tmp.copy(dir).multiplyScalar(speed);
       tmp.x += (Math.random() - 0.5) * 0.15;
       tmp.y += 0.12 + (Math.random() - 0.5) * 0.1;
       tmp.z += (Math.random() - 0.5) * 0.15;
       const start = at.clone().addScaledVector(dir, i * 0.03);
-      this.emit(start, tmp, 0.12, 0.75 + Math.random() * 0.35, 2.6 + Math.random() * 0.8, 0.6);
+      this.emit(start, tmp, 0.12, (0.75 + Math.random() * 0.35) * grow, (2.6 + Math.random() * 0.8) * grow, 0.6);
     }
   }
 

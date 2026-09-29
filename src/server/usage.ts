@@ -1,6 +1,7 @@
 import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Usage, UsageState } from '../shared/protocol.js';
+import { notice, type Notice } from '../shared/notices.js';
 
 /*
  * Where a worker's numbers come from
@@ -276,7 +277,7 @@ export class Ledger {
     dataDir: string,
     private opts: LedgerOptions,
     private onChange: (state: UsageState) => void,
-    private toast: (text: string, level: 'info' | 'warn') => void,
+    private toast: (text: string | Notice, level: 'info' | 'warn') => void,
   ) {
     this.file = path.join(dataDir, 'usage.json');
     this.load();
@@ -314,7 +315,7 @@ export class Ledger {
     if (this.opts.budget !== undefined && this.overBudget && this.warnedDay !== day) {
       this.warnedDay = day;
       const spent = fmtUsd(this.days[day].cost);
-      this.toast(`💸 Today's spend passed the ${fmtUsd(this.opts.budget)} budget (${spent})${this.opts.pauseHiring ? ' — no new hires until tomorrow' : ''}`, 'warn');
+      this.toast(notice('budget.passed', { budget: fmtUsd(this.opts.budget), spent, paused: this.opts.pauseHiring ? 1 : 0 }), 'warn');
     }
   }
 

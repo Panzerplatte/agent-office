@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 type Attrs = Record<string, string | number | boolean | EventListener | undefined | null>;
 type Child = Node | string | number | null | undefined | false;
 
@@ -120,7 +122,7 @@ export function openModal(content: HTMLElement, opts: { escCloses?: boolean; onC
 /** The ✕ for a window that didn't bring its own: at the end of its header, or else on its top right corner. */
 function addCloseButton(content: HTMLElement, close: () => void) {
   if (content.querySelector('.close')) return;
-  const x = h('button.btn.close', { type: 'button', 'aria-label': 'Close', title: 'Close (Esc)', onclick: close }, '✕');
+  const x = h('button.btn.close', { type: 'button', 'aria-label': t('windows.common.close'), title: t('windows.common.closeEsc'), onclick: close }, '✕');
   const header = content.querySelector(':scope > header');
   if (header) return header.append(x);
   x.classList.add('corner');
@@ -143,12 +145,12 @@ export function toast(text: string, level: 'info' | 'warn' | 'error' = 'info'): 
 }
 
 export function timeAgo(iso: string | number): string {
-  const t = typeof iso === 'number' ? iso : Date.parse(iso);
-  const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+  const at = typeof iso === 'number' ? iso : Date.parse(iso);
+  const s = Math.max(0, (Date.now() - at) / 1000);
+  if (s < 60) return t('windows.common.justNow');
+  if (s < 3600) return t('windows.common.minutesAgo', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('windows.common.hoursAgo', { n: Math.floor(s / 3600) });
+  return t('windows.common.daysAgo', { n: Math.floor(s / 86400) });
 }
 
 /** `text` cut to at most `max` characters, with an ellipsis when it was longer. */
@@ -156,12 +158,13 @@ export function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/** A worker's status in words, in your language (it's picked before the page loads, and switching reloads it). */
 export const STATUS_LABEL: Record<string, string> = {
-  starting: 'starting',
-  idle: 'ready',
-  working: 'working',
-  needs_input: 'needs input',
-  done: 'done',
-  exited: 'exited',
-  offline: 'asleep',
+  starting: t('notices.status.starting'),
+  idle: t('notices.status.idle'),
+  working: t('notices.status.working'),
+  needs_input: t('notices.status.needs_input'),
+  done: t('notices.status.done'),
+  exited: t('notices.status.exited'),
+  offline: t('notices.status.offline'),
 };
