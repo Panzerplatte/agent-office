@@ -156,7 +156,7 @@ export class Voice {
     try {
       this.screen = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
     } catch (err) {
-      return (err as Error).name === 'NotAllowedError' ? null : `Could not share: ${(err as Error).message}`;
+      return (err as Error).name === 'NotAllowedError' ? null : t('world.shareFailed', { why: (err as Error).message });
     }
     const track = this.screen.getVideoTracks()[0];
     track.contentHint = 'detail';

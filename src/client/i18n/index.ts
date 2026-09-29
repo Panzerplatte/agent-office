@@ -5,15 +5,16 @@ import boards from './boards';
 import notices from './notices';
 import main from './main';
 import data from './data';
+import world from './world';
 import type { Table } from './table';
 
 /**
  * The office's interface in your language. Every text you see comes from `t('<table>.<key>')`,
- * and each table (core, menus, windows, boards, notices, main, data) keeps its English and German side by
+ * and each table (core, menus, windows, boards, notices, main, data, world) keeps its English and German side by
  * side, so a German one missing a key doesn't typecheck. Your pick is yours alone, kept in this
  * browser, and the page reloads to switch, since windows and panels are built with their text.
  */
-const TABLES = { core, menus, windows, boards, notices, main, data };
+const TABLES = { core, menus, windows, boards, notices, main, data, world };
 
 export type Lang = 'en' | 'de';
 

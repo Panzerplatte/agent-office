@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { MEETING_PATTERNS, meetingSummary } from '../../shared/meetings';
 import { meetingWords, patternLabel } from '../i18n/labels';
 import { fmtCost, fmtTokens, type Meeting, type MeetingState } from '../../shared/protocol';
+import { t } from '../i18n';
 
 const FONT = 'Nunito, ui-rounded, system-ui, sans-serif';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -46,7 +47,8 @@ export function speaking(m: Meeting): string[] {
 /** What's on the table in a line: "Round 2 of 3 · critiquing". */
 export function meetingStage(m: Meeting): string {
   const doing = [...new Set(m.turns.filter((t) => t.state !== 'done').map((t) => t.doing))].join(', ');
-  return `Round ${m.round} of ${m.rounds}${doing ? ` · ${doing}` : ''}`;
+  const round = t('world.meetingStage', { round: m.round, rounds: m.rounds });
+  return doing ? `${round} · ${doing}` : round;
 }
 
 /**
@@ -94,7 +96,7 @@ export class MeetingBoardTexture {
     g.fillText(`📄 ${m.output}`, 24, 48);
     g.font = `800 34px ${FONT}`;
     g.textAlign = 'right';
-    g.fillText(`${p.icon} ${patternLabel(m.pattern)} · ${m.status === 'running' ? meetingStage(m) : m.status === 'done' ? '✅ done' : '⛔ stopped'}`, W - 24, 48);
+    g.fillText(`${p.icon} ${patternLabel(m.pattern)} · ${m.status === 'running' ? meetingStage(m) : t(m.status === 'done' ? 'world.meetingDone' : 'world.meetingStopped')}`, W - 24, 48);
     g.textAlign = 'left';
 
     const text = (m.preview ?? '').replace(/\r/g, '');
@@ -102,7 +104,7 @@ export class MeetingBoardTexture {
       g.fillStyle = '#8d99ae';
       g.font = `800 44px ${FONT}`;
       g.textAlign = 'center';
-      g.fillText(m.status === 'running' ? `Nothing written yet: ${speaking(m).join(', ') || 'the table'} ${speaking(m).length === 1 ? 'is' : 'are'} on it` : m.reason ? `⛔ ${m.reason}` : 'Nothing was written', W / 2, H / 2 + 30);
+      g.fillText(m.status === 'running' ? t('world.meetingNothingYet', { who: speaking(m).join(', '), n: speaking(m).length }) : m.reason ? `⛔ ${m.reason}` : t('world.meetingNothing'), W / 2, H / 2 + 30);
       g.textAlign = 'left';
       this.texture.needsUpdate = true;
       return;
@@ -167,15 +169,15 @@ export class MeetingSignTexture {
     g.fillRect(0, 0, W, H);
     g.textBaseline = 'alphabetic';
     // A strip across the top says whether the room is taken.
-    const [strip, label] = !m ? ['#06d6a0', '● FREE'] : m.status === 'running' ? ['#ffd166', '● IN A MEETING'] : m.status === 'done' ? ['#9ef01a', '✅ DONE'] : ['#ffb3c1', '⛔ STOPPED'];
+    const [strip, label] = !m ? ['#06d6a0', t('world.meetingFree')] : m.status === 'running' ? ['#ffd166', t('world.meetingOn')] : m.status === 'done' ? ['#9ef01a', t('world.meetingSignDone')] : ['#ffb3c1', t('world.meetingSignStopped')];
     g.fillStyle = strip;
     g.fillRect(0, 0, W, 78);
     g.fillStyle = INK;
     g.font = `900 38px ${FONT}`;
     g.fillText(label, pad, 53);
     if (!m) {
-      let y = lines('🤝 Meeting room', `900 50px ${FONT}`, '#fffaf3', 160, 2, 58);
-      lines('Press E at the table to call a meeting: a debate, lead & team, map-reduce, red / blue or a review panel.', `700 32px ${FONT}`, '#e9ecef', y + 30, 8, 42);
+      let y = lines(t('main.meetingRoom'), `900 50px ${FONT}`, '#fffaf3', 160, 2, 58);
+      lines(t('world.meetingHow'), `700 32px ${FONT}`, '#e9ecef', y + 30, 8, 42);
       this.texture.needsUpdate = true;
       return;
     }
@@ -196,10 +198,10 @@ export class MeetingSignTexture {
       g.fillRect(pad, barY, (W - 2 * pad) * f, 20);
       g.fillStyle = '#fffaf3';
       g.font = `800 30px ${FONT}`;
-      g.fillText(`${fmtTokens(m.tokens)} of ${fmtTokens(m.budget)} tokens`, pad, H - 58);
+      g.fillText(t('world.meetingTokens', { used: fmtTokens(m.tokens), budget: fmtTokens(m.budget) }), pad, H - 58);
       g.font = `700 28px ${FONT}`;
       g.fillStyle = '#e9ecef';
-      if (m.cost > 0) g.fillText(`${fmtCost(m.cost)}${m.costKnown ? '' : '+'} so far`, pad, H - 22);
+      if (m.cost > 0) g.fillText(t('world.meetingSoFar', { cost: `${fmtCost(m.cost)}${m.costKnown ? '' : '+'}` }), pad, H - 22);
     } else {
       // The summary line after the pattern, which is up top already.
       lines(meetingSummary(m, meetingWords).split(' · ').slice(1).join(' · '), `700 30px ${FONT}`, '#e9ecef', y, Math.floor((H - y) / 38), 38);

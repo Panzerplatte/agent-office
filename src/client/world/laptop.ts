@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FLAG_BOLD, FLAG_DIM, FLAG_INVERSE, RGB_FLAG, type Run } from '../../shared/protocol';
 import { mesh, roundedBox, toon } from './toon';
+import { t } from '../i18n';
 
 export const TERM_THEME = {
   background: '#1e1f2e',
@@ -99,7 +100,7 @@ export function paintScreen(ctx: CanvasRenderingContext2D, w: number, h: number,
     ctx.font = `700 ${Math.round(h / 12)}px ui-monospace, Menlo, monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(placeholder ?? 'booting…', w / 2, h / 2);
+    ctx.fillText(placeholder ?? t('main.laptopBooting'), w / 2, h / 2);
     ctx.textAlign = 'left';
     return;
   }
@@ -158,7 +159,7 @@ export class Laptop {
   private drawnVersion = -1;
   private paintedAt = 0;
   private openT = 0;
-  private placeholder = 'booting…';
+  private placeholder = t('main.laptopBooting');
 
   constructor() {
     this.canvas.width = 1024;

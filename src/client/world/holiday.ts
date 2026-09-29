@@ -6,6 +6,7 @@ import { batWingGeometry, glowTexture } from './costumes';
 import type { Collider, Office } from './office';
 import { SPOOKY_MOON } from './sky';
 import { mergeByMaterial, mesh, textPlane, toon, toonUnique } from './toon';
+import { t } from '../i18n';
 
 /*
  * The building dressed up for a holiday (the costumes are in world/costumes.ts). Halloween puts
@@ -540,7 +541,7 @@ export class Holiday {
       graves.add(s);
       this.colliders.halloween.push({ minX: x - 0.3, maxX: x + 0.3, minZ: z - 0.45, maxZ: z + 0.45, bottom: G, top: G + 1.2 });
       if (kind !== 1) {
-        const label = textPlane('R.I.P.', { color: '#2b2d42', size: 56 });
+        const label = textPlane(t('world.signRip'), { color: '#2b2d42', size: 56 });
         label.scale.multiplyScalar(kind === 2 ? 0.55 : 0.45);
         label.position.set(x + 0.09, G + (kind === 2 ? 0.28 : 0.5), z);
         label.rotation.y = s.rotation.y;

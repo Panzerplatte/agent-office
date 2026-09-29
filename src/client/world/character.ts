@@ -9,6 +9,7 @@ import { OpenBook } from './book';
 import { HeldCard } from './card';
 import { UNDEAD_SKIN, elfBoot, elfHat, elfWorker, santaHat, warlockHat, zombieWorker } from './costumes';
 import { cardSprite, disposeSprite, mesh, textSprite, toon, toonUnique } from './toon';
+import { t, type Key } from '../i18n';
 
 export type Pose = 'stand' | 'walk' | 'sit' | 'type';
 
@@ -1093,14 +1094,14 @@ const STATUS_BULB: Record<string, string> = {
 };
 
 /** Status pill on a worker's task card: [text, background, text color]. */
-const TASK_CHIP: Record<string, [string, string, string]> = {
-  starting: ['⏳ STARTING', STATUS_BULB.starting, '#2b2d42'],
-  idle: ['💬 READY', STATUS_BULB.idle, '#2b2d42'],
-  working: ['⌨️ WORKING', STATUS_BULB.working, '#2b2d42'],
-  needs_input: ['❗ NEEDS YOU', STATUS_BULB.needs_input, '#ffffff'],
-  done: ['✅ DONE', STATUS_BULB.done, '#2b2d42'],
-  exited: ['💤 ASLEEP', STATUS_BULB.exited, '#ffffff'],
-  offline: ['💤 ASLEEP', STATUS_BULB.offline, '#ffffff'],
+const TASK_CHIP: Record<string, [Key, string, string]> = {
+  starting: ['world.chipStarting', STATUS_BULB.starting, '#2b2d42'],
+  idle: ['world.chipReady', STATUS_BULB.idle, '#2b2d42'],
+  working: ['world.chipWorking', STATUS_BULB.working, '#2b2d42'],
+  needs_input: ['world.chipNeedsYou', STATUS_BULB.needs_input, '#ffffff'],
+  done: ['world.chipDone', STATUS_BULB.done, '#2b2d42'],
+  exited: ['world.chipAsleep', STATUS_BULB.exited, '#ffffff'],
+  offline: ['world.chipAsleep', STATUS_BULB.offline, '#ffffff'],
 };
 
 /** The outline of a worker's bubble, and its pill, once it has a pull request: GitHub's open green, or the PR board's merged purple. */
@@ -1580,9 +1581,9 @@ export class Worker {
     const bg = hot ? (status === 'done' ? '#caffbf' : '#ffd6e0') : status === 'working' ? '#ffec99' : '#fffaf3';
     const border = pr && PR_INK[pr.state];
     // Not working on or waiting for something more: its pull request in place of ready / done / asleep.
-    const prLabel = pr && status !== 'working' && status !== 'needs_input' && status !== 'starting' ? `${PR_ICON[pr.state]} PR #${pr.number} ${pr.state}` : undefined;
+    const prLabel = pr && status !== 'working' && status !== 'needs_input' && status !== 'starting' ? t(pr.state === 'merged' ? 'world.prMerged' : 'world.prOpen', { icon: PR_ICON[pr.state], n: pr.number }) : undefined;
     const bubble =
-      prLabel ?? (status === 'needs_input' ? '❗ needs you' : status === 'done' && bounce ? '✅ done!' : status === 'working' ? '⌨️ working' : isAsleep(status) ? '💤' : '');
+      prLabel ?? (status === 'needs_input' ? t('world.bubbleNeedsYou') : status === 'done' && bounce ? t('world.bubbleDone') : status === 'working' ? t('world.bubbleWorking') : isAsleep(status) ? '💤' : '');
     const key = `${border}|${prLabel}|${task ? `${status}|${bounce}|${task.name}|${task.summary}` : bubble}`;
     if (key === this.bubbleKey) return;
     this.bubbleKey = key;
@@ -1593,8 +1594,9 @@ export class Worker {
     }
     this.bubbleIsCard = !!task;
     if (task) {
-      const [text, chipBg, color] = prLabel ? [prLabel.toUpperCase(), border!, '#ffffff'] : (TASK_CHIP[status] ?? TASK_CHIP.idle);
-      this.bubble = cardSprite({ chip: { text, bg: chipBg, color }, title: task.name, body: task.summary, bg: isAsleep(status) ? '#e9ecef' : bg, border });
+      const [key, chipBg, color] = TASK_CHIP[status] ?? TASK_CHIP.idle;
+      const chip = prLabel ? { text: prLabel.toUpperCase(), bg: border!, color: '#ffffff' } : { text: t(key), bg: chipBg, color };
+      this.bubble = cardSprite({ chip, title: task.name, body: task.summary, bg: isAsleep(status) ? '#e9ecef' : bg, border });
     } else if (bubble) this.bubble = textSprite(bubble, { bg, size: 38, border });
     if (this.bubble) this.root.add(this.bubble);
   }

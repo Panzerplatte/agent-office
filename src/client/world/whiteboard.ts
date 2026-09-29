@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WHITEBOARD } from '../../shared/layout';
 import { mesh, roundedBox, textPlane, toon } from './toon';
 import type { Collider, Interactable } from './office';
+import { t } from '../i18n';
 
 // The whiteboard: a rolling whiteboard on casters out on the open floor, with a marker tray. Its
 // face shows whatever everyone has drawn on it (see ui/whiteboard.ts), live.
@@ -78,7 +79,7 @@ export function buildWhiteboard(): WhiteboardStand {
   const eraserFelt = mesh(new THREE.BoxGeometry(0.19, 0.015, 0.075), toon('#6c757d'), 0.62, trayY + 0.015, 0.09, false);
   group.add(eraserFelt);
 
-  const plaque = textPlane('📝 Whiteboard', { bg: '#fffaf3', size: 48 });
+  const plaque = textPlane(t('world.signWhiteboard'), { bg: '#fffaf3', size: 48 });
   plaque.scale.multiplyScalar(0.55);
   plaque.position.set(0, bottom + height + 0.2, 0.05);
   group.add(plaque);
