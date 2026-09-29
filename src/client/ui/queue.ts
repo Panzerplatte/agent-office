@@ -5,29 +5,30 @@ import { h, openModal, timeAgo, STATUS_LABEL } from './dom';
 import { confirmDialog } from './prompt';
 import { providerPicker, providerLabel, providerUsageState, resolvedProvider, modelBadge } from './provider';
 import { officeFull } from '../world/machine';
+import { t } from '../i18n';
 
 export interface QueueActions {
   openTerminal(workerId: string): void;
 }
 
 /** The queue task's name, linked to its GitHub issue when it has one. */
-function taskTitle(t: QueueTask): HTMLElement {
-  if (t.issue === undefined) return h('div.queue-title', { title: t.prompt }, t.title);
-  const issue = store.issues.items.find((i) => i.number === t.issue);
-  const text = t.title.startsWith(`#${t.issue}`) ? t.title : `#${t.issue} ${t.title}`;
-  return h('div.queue-title', { title: t.prompt }, issue ? h('a', { href: issue.url, target: '_blank', rel: 'noopener' }, text) : text);
+function taskTitle(task: QueueTask): HTMLElement {
+  if (task.issue === undefined) return h('div.queue-title', { title: task.prompt }, task.title);
+  const issue = store.issues.items.find((i) => i.number === task.issue);
+  const text = task.title.startsWith(`#${task.issue}`) ? task.title : `#${task.issue} ${task.title}`;
+  return h('div.queue-title', { title: task.prompt }, issue ? h('a', { href: issue.url, target: '_blank', rel: 'noopener' }, text) : text);
 }
 
-function outcome(t: QueueTask): string {
-  switch (t.outcome) {
+function outcome(task: QueueTask): string {
+  switch (task.outcome) {
     case 'done':
-      return t.pr ? 'finished' : 'finished, no PR found yet';
+      return t(task.pr ? 'boards.finished' : 'boards.finishedNoPr');
     case 'exited':
-      return t.error ? `stopped: ${t.error}` : 'stopped before finishing';
+      return task.error ? t('boards.stoppedWith', { error: task.error }) : t('boards.stoppedEarly');
     case 'killed':
-      return 'sent home';
+      return t('boards.sentHome');
     case 'failed':
-      return `couldn't start: ${t.error ?? 'unknown error'}`;
+      return t('boards.couldntStart', { error: task.error ?? t('boards.unknownError') });
     default:
       return '';
   }
@@ -35,24 +36,24 @@ function outcome(t: QueueTask): string {
 
 export function openQueue(net: Net, actions: QueueActions) {
   const body = h('div.body.queue');
-  const close = h('button.btn.close', { 'aria-label': 'Close' }, '✕');
+  const close = h('button.btn.close', { 'aria-label': t('boards.close') }, '✕');
   const limitValue = h('b');
-  const minus = h('button.btn', { type: 'button', title: 'Fewer workers at once', 'aria-label': 'Fewer workers at once' }, '−');
-  const plus = h('button.btn', { type: 'button', title: 'More workers at once', 'aria-label': 'More workers at once' }, '+');
-  const limit = h('div.queue-limit', { title: 'How many workers the queue keeps busy at once. 0 pauses it.' }, 'Workers at once', minus, limitValue, plus);
+  const minus = h('button.btn', { type: 'button', title: t('boards.fewerWorkers'), 'aria-label': t('boards.fewerWorkers') }, '−');
+  const plus = h('button.btn', { type: 'button', title: t('boards.moreWorkers'), 'aria-label': t('boards.moreWorkers') }, '+');
+  const limit = h('div.queue-limit', { title: t('boards.limitTitle') }, t('boards.limitLabel'), minus, limitValue, plus);
   minus.addEventListener('click', () => net.send({ t: 'queue.limit', maxWorkers: store.queue.maxWorkers - 1 }));
   plus.addEventListener('click', () => net.send({ t: 'queue.limit', maxWorkers: store.queue.maxWorkers + 1 }));
   const el = h(
     'div.modal',
-    { role: 'dialog', 'aria-label': 'Task queue', style: 'width:min(800px,100%)' },
-    h('header', {}, h('h2', {}, '📋 Task queue'), limit, close),
+    { role: 'dialog', 'aria-label': t('boards.queueAria'), style: 'width:min(800px,100%)' },
+    h('header', {}, h('h2', {}, t('boards.queueHeading')), limit, close),
     body,
-    h('footer', {}, h('span.grow', {}, 'The queue keeps going while you are away. Set “workers at once” to 0 to pause it.')),
+    h('footer', {}, h('span.grow', {}, t('boards.queueFoot'))),
   );
 
-  const ta = h('textarea', { rows: 2, placeholder: 'Describe a task for the next free worker…', 'aria-label': 'New task' }) as HTMLTextAreaElement;
+  const ta = h('textarea', { rows: 2, placeholder: t('boards.newTaskPlaceholder'), 'aria-label': t('boards.newTask') }) as HTMLTextAreaElement;
   const provider = providerPicker(store.project, 'queue-provider');
-  const addBtn = h('button.btn.primary', { type: 'submit' }, 'Add to queue');
+  const addBtn = h('button.btn.primary', { type: 'submit' }, t('boards.addToQueue'));
   const form = h('form.queue-add', {}, ta, provider.element, addBtn) as HTMLFormElement;
   form.noValidate = true;
   const submit = () => {
@@ -81,59 +82,65 @@ export function openQueue(net: Net, actions: QueueActions) {
     return h('div', {}, h('h4', {}, title, h('span.count', {}, String(tasks.length)), extra ?? null), h('ul.queue-list', {}, ...tasks.map(row)));
   };
 
-  const row = (t: QueueTask): HTMLElement => {
-    const w = t.workerId ? store.workers.get(t.workerId) : undefined;
+  const row = (task: QueueTask): HTMLElement => {
+    const w = task.workerId ? store.workers.get(task.workerId) : undefined;
     const meta: string[] = [];
     const buttons: HTMLElement[] = [];
-    const badge = modelBadge(t.provider, t.model, t.effort);
-    const model = badge ? ` · initial: ${badge}` : '';
+    const badge = modelBadge(task.provider, task.model, task.effort);
+    const model = badge ? t('boards.initialModel', { model: badge }) : '';
     const usageSuffix = (provider: AgentProvider | undefined, usage?: Usage) => {
       const state = providerUsageState(provider, store.project, usage);
-      return state === 'untracked' ? ' · usage untracked' : state === 'waiting' && resolvedProvider(provider, store.project) === 'opencode' ? ' · waiting for metrics' : state === 'waiting' && resolvedProvider(provider, store.project) === 'codex' ? ' · waiting for first report' : '';
+      return state === 'untracked'
+        ? t('boards.usageUntracked')
+        : state === 'waiting' && resolvedProvider(provider, store.project) === 'opencode'
+          ? t('boards.waitingMetrics')
+          : state === 'waiting' && resolvedProvider(provider, store.project) === 'codex'
+            ? t('boards.waitingReport')
+            : '';
     };
     let pos: string | null = null;
-    if (t.status === 'running') {
-      const selectedProvider = providerLabel(t.provider ?? w?.provider, store.project);
-      meta.push(`⚙️ ${selectedProvider}${model}${usageSuffix(t.provider ?? w?.provider, w?.usage)}`);
-      meta.push(`${t.workerName ?? 'a worker'} · ${w ? STATUS_LABEL[w.status] ?? w.status : 'gone'}`);
-      if (t.branch) meta.push(`🌿 ${t.branch}`);
-      if (t.startedAt) meta.push(`started ${timeAgo(t.startedAt)}`);
-      meta.push(`by ${t.addedBy}`);
+    if (task.status === 'running') {
+      const selectedProvider = providerLabel(task.provider ?? w?.provider, store.project);
+      meta.push(`⚙️ ${selectedProvider}${model}${usageSuffix(task.provider ?? w?.provider, w?.usage)}`);
+      meta.push(`${task.workerName ?? t('boards.aWorker')} · ${w ? STATUS_LABEL[w.status] ?? w.status : t('boards.gone')}`);
+      if (task.branch) meta.push(`🌿 ${task.branch}`);
+      if (task.startedAt) meta.push(t('boards.startedAgo', { ago: timeAgo(task.startedAt) }));
+      meta.push(t('boards.byAuthor', { name: task.addedBy }));
       if (w) {
-        buttons.push(h('button.btn', { type: 'button', onclick: () => actions.openTerminal(w.id) }, '🖥️ Terminal'));
+        buttons.push(h('button.btn', { type: 'button', onclick: () => actions.openTerminal(w.id) }, t('boards.terminal')));
         buttons.push(
           h('button.btn', {
             type: 'button',
-            title: 'Send the worker home; the task counts as stopped',
-            onclick: () => confirmDialog(`Stop ${w.name}?`, `This sends ${w.name} home and stops the task. You can requeue it afterwards.`, 'Stop', () => net.send({ t: 'worker.kill', workerId: w.id })),
-          }, '⏹ Stop'),
+            title: t('boards.stopTitle'),
+            onclick: () => confirmDialog(t('boards.stopConfirmTitle', { name: w.name }), t('boards.stopConfirmBody', { name: w.name }), t('boards.stopConfirm'), () => net.send({ t: 'worker.kill', workerId: w.id })),
+          }, t('boards.stop')),
         );
       }
-    } else if (t.status === 'queued') {
+    } else if (task.status === 'queued') {
       const queued = store.queue.tasks.filter((x) => x.status === 'queued');
-      const i = queued.indexOf(t);
+      const i = queued.indexOf(task);
       pos = String(i + 1);
-      meta.push(`⚙️ ${providerLabel(t.provider, store.project)}${model}${usageSuffix(t.provider, w?.usage)}`);
-      meta.push(`added by ${t.addedBy} ${timeAgo(t.addedAt)}`);
-      buttons.push(h('button.btn', { type: 'button', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0, onclick: () => net.send({ t: 'queue.move', taskId: t.id, delta: -1 }) }, '↑'));
-      buttons.push(h('button.btn', { type: 'button', title: 'Move down', 'aria-label': 'Move down', disabled: i === queued.length - 1, onclick: () => net.send({ t: 'queue.move', taskId: t.id, delta: 1 }) }, '↓'));
-      buttons.push(h('button.btn', { type: 'button', title: 'Remove from the queue', 'aria-label': 'Remove', onclick: () => net.send({ t: 'queue.remove', taskId: t.id }) }, '✕'));
+      meta.push(`⚙️ ${providerLabel(task.provider, store.project)}${model}${usageSuffix(task.provider, w?.usage)}`);
+      meta.push(t('boards.addedBy', { name: task.addedBy, ago: timeAgo(task.addedAt) }));
+      buttons.push(h('button.btn', { type: 'button', title: t('boards.moveUp'), 'aria-label': t('boards.moveUp'), disabled: i === 0, onclick: () => net.send({ t: 'queue.move', taskId: task.id, delta: -1 }) }, '↑'));
+      buttons.push(h('button.btn', { type: 'button', title: t('boards.moveDown'), 'aria-label': t('boards.moveDown'), disabled: i === queued.length - 1, onclick: () => net.send({ t: 'queue.move', taskId: task.id, delta: 1 }) }, '↓'));
+      buttons.push(h('button.btn', { type: 'button', title: t('boards.removeFromQueue'), 'aria-label': t('boards.remove'), onclick: () => net.send({ t: 'queue.remove', taskId: task.id }) }, '✕'));
     } else {
-      meta.push(`⚙️ ${providerLabel(t.provider, store.project)}${model}${usageSuffix(t.provider, w?.usage)}`);
-      meta.push(outcome(t));
-      if (t.workerName) meta.push(t.workerName);
-      if (t.branch) meta.push(`🌿 ${t.branch}`);
-      if (t.finishedAt) meta.push(timeAgo(t.finishedAt));
-      if (t.pr) buttons.push(h('a.btn', { href: t.pr.url, target: '_blank', rel: 'noopener', title: t.pr.title }, `🔀 PR #${t.pr.number}${t.pr.state === 'MERGED' ? ' ✓' : t.pr.state === 'DRAFT' ? ' (draft)' : ''}`));
-      if (w) buttons.push(h('button.btn', { type: 'button', onclick: () => actions.openTerminal(w.id) }, '🖥️ Terminal'));
-      buttons.push(h('button.btn', { type: 'button', title: 'Put it back on the queue', onclick: () => net.send({ t: 'queue.retry', taskId: t.id }) }, '↻ Requeue'));
-      buttons.push(h('button.btn', { type: 'button', title: 'Forget it', 'aria-label': 'Remove', onclick: () => net.send({ t: 'queue.remove', taskId: t.id }) }, '✕'));
+      meta.push(`⚙️ ${providerLabel(task.provider, store.project)}${model}${usageSuffix(task.provider, w?.usage)}`);
+      meta.push(outcome(task));
+      if (task.workerName) meta.push(task.workerName);
+      if (task.branch) meta.push(`🌿 ${task.branch}`);
+      if (task.finishedAt) meta.push(timeAgo(task.finishedAt));
+      if (task.pr) buttons.push(h('a.btn', { href: task.pr.url, target: '_blank', rel: 'noopener', title: task.pr.title }, `🔀 PR #${task.pr.number}${task.pr.state === 'MERGED' ? ' ✓' : task.pr.state === 'DRAFT' ? t('boards.draftSuffix') : ''}`));
+      if (w) buttons.push(h('button.btn', { type: 'button', onclick: () => actions.openTerminal(w.id) }, t('boards.terminal')));
+      buttons.push(h('button.btn', { type: 'button', title: t('boards.requeueTitle'), onclick: () => net.send({ t: 'queue.retry', taskId: task.id }) }, t('boards.requeue')));
+      buttons.push(h('button.btn', { type: 'button', title: t('boards.forget'), 'aria-label': t('boards.remove'), onclick: () => net.send({ t: 'queue.remove', taskId: task.id }) }, '✕'));
     }
     return h(
       'li',
-      { class: t.status },
+      { class: task.status },
       pos ? h('span.pos', {}, pos) : null,
-      h('div.queue-main', {}, taskTitle(t), h('div.queue-meta', {}, meta.join(' · '))),
+      h('div.queue-main', {}, taskTitle(task), h('div.queue-meta', {}, meta.join(' · '))),
       h('div.queue-actions', {}, ...buttons),
     );
   };
@@ -144,29 +151,19 @@ export function openQueue(net: Net, actions: QueueActions) {
 
   const render = () => {
     const q = store.queue;
-    limitValue.textContent = q.maxWorkers === 0 ? 'Paused' : String(q.maxWorkers);
+    limitValue.textContent = q.maxWorkers === 0 ? t('boards.paused') : String(q.maxWorkers);
     minus.toggleAttribute('disabled', q.maxWorkers <= 0);
-    const running = q.tasks.filter((t) => t.status === 'running');
-    const queued = q.tasks.filter((t) => t.status === 'queued');
-    const done = q.tasks.filter((t) => t.status === 'done').slice().reverse();
+    const running = q.tasks.filter((task) => task.status === 'running');
+    const queued = q.tasks.filter((task) => task.status === 'queued');
+    const done = q.tasks.filter((task) => task.status === 'done').slice().reverse();
     const m = store.machine;
     const parts: (HTMLElement | null)[] = [
-      h(
-        'p.note',
-        {},
-        'Or open the 📌 Issues board and click ',
-        h('b', {}, 'Add to queue'),
-        ' on an issue. Whenever a desk is free and fewer than ',
-        h('b', {}, q.maxWorkers === 0 ? '0' : String(q.maxWorkers)),
-        " of its tasks are running, the next task gets a fresh worker in its own git worktree (workers you hire yourself don't count). Issues are assigned on GitHub when they start, and the pull request is linked when it shows up.",
-      ),
-      queued.length && officeFull(m)
-        ? h('p.note', {}, `⏸ The office is at its limit of ${m.limit} worker${m.limit === 1 ? '' : 's'}, so the next task waits until one goes home. A queue worker that's finished goes home by itself to make room.`)
-        : null,
-      section('🤖 Working on it', running),
-      section('⏳ Up next', queued),
-      section('✅ Finished', done, h('button.btn', { type: 'button', onclick: () => net.send({ t: 'queue.clear' }) }, 'Clear')),
-      running.length + queued.length + done.length ? null : h('div.queue-empty', {}, 'Nothing on the queue yet.'),
+      h('p.note', {}, t('boards.noteOpenBoard'), h('b', {}, t('boards.addToQueue')), t('boards.noteOnIssue'), h('b', {}, q.maxWorkers === 0 ? '0' : String(q.maxWorkers)), t('boards.noteRest')),
+      queued.length && officeFull(m) ? h('p.note', {}, t('boards.officeFull', { n: m.limit ?? 0 })) : null,
+      section(t('boards.secWorking'), running),
+      section(t('boards.secUpNext'), queued),
+      section(t('boards.secFinished'), done, h('button.btn', { type: 'button', onclick: () => net.send({ t: 'queue.clear' }) }, t('boards.clearFinished'))),
+      running.length + queued.length + done.length ? null : h('div.queue-empty', {}, t('boards.queueEmpty')),
     ];
     list.replaceChildren(...parts.filter((n): n is HTMLElement => n !== null));
   };
@@ -182,7 +179,7 @@ export function openQueue(net: Net, actions: QueueActions) {
   const unsubs = [store.on('queue', render), store.on('workers', render), store.on('issues', render), store.on('machine', machineChanged)];
   const tick = setInterval(render, 30_000);
   const modal = openModal(el, {
-    doing: '📥 at the queue',
+    doing: t('boards.doingQueue'),
     onClose: () => {
       unsubs.forEach((u) => u());
       clearInterval(tick);

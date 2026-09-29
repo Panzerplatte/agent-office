@@ -16,6 +16,10 @@ import { buildStack, type Stack } from './stack';
 import { buildTower } from './tower';
 import { buildHoop, type HoopView } from './hoop';
 import { HOOP } from '../../shared/hoop';
+import { t, type Key } from '../i18n';
+
+/** What's written above each wall board, in your language. */
+const BOARD_HEADS: Record<keyof typeof BOARDS, Key> = { issues: 'boards.headIssues', queue: 'boards.headQueue', pulls: 'boards.headPulls', services: 'boards.headServices' };
 
 export interface Collider {
   minX: number;
@@ -1082,7 +1086,7 @@ export function buildOffice(): Office {
     bg.rotation.y = b.rotY;
     group.add(bg);
     boardMeshes[key] = face;
-    const label = textPlane(b.label, { bg: '#fffaf3', size: 64 });
+    const label = textPlane(t(BOARD_HEADS[key]), { bg: '#fffaf3', size: 64 });
     label.scale.multiplyScalar(1.3);
     label.position.set(b.x + nx * 0.04, b.y + b.height / 2 + 0.5, b.z + nz * 0.04);
     label.rotation.y = b.rotY;

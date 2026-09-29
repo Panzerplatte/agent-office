@@ -4,6 +4,7 @@ import { DESK_BY_ID } from '../../shared/layout';
 import type { WorkerInfo } from '../../shared/protocol';
 import type { Net } from '../net';
 import { store } from '../state';
+import { t } from '../i18n';
 import { h, openModal, toast, type Modal } from './dom';
 import { ScreenZoom } from './arcade';
 import { Blocks, H, W, paintScreen, type ScreenView } from './blocks';
@@ -183,9 +184,9 @@ export class Cabinet {
   private open(mode: 'play' | 'watch') {
     this.mode = mode;
     this.watching = mode === 'watch' ? (store.cabinet.player?.name ?? '') : '';
-    const board = h('canvas', { 'aria-label': mode === 'play' ? GAME : `${this.watching} playing ${GAME}` });
-    const stop = h('button.btn', { type: 'button' }, mode === 'play' ? '✕ Stop playing' : '✕ Stop watching');
-    const tip = mode === 'play' ? '← → move · ↑ turn · ↓ faster · Space drop · C hold · P pause' : `👀 Watching ${this.watching}`;
+    const board = h('canvas', { 'aria-label': mode === 'play' ? GAME : t('windows.cabinet.watchingLabel', { name: this.watching, game: GAME }) });
+    const stop = h('button.btn', { type: 'button' }, t(mode === 'play' ? 'windows.cabinet.stopPlaying' : 'windows.cabinet.stopWatching'));
+    const tip = mode === 'play' ? t('windows.cabinet.controls') : t('windows.cabinet.watching', { name: this.watching });
     const call = h('div.cabinet-call.hidden', { role: 'status' });
     const box = h(
       'div.arcade.cabinet',
@@ -334,14 +335,14 @@ export class Cabinet {
     const w = this.waiting;
     el.classList.toggle('hidden', !w);
     if (!w) return el.replaceChildren();
-    const go = h('button.btn.primary', { type: 'button' }, '💬 Open its terminal');
-    const back = h('button.btn', { type: 'button' }, '▶ Carry on');
+    const go = h('button.btn.primary', { type: 'button' }, t('windows.cabinet.openTerminal'));
+    const back = h('button.btn', { type: 'button' }, t('windows.cabinet.carryOn'));
     go.addEventListener('click', () => {
       this.modal?.close();
       this.opts.openTerminal(w.id);
     });
     back.addEventListener('click', () => this.resume());
-    el.replaceChildren(h('span', {}, `🙋 ${w.name} needs input${deskOf(w)}`), go, back);
+    el.replaceChildren(h('span', {}, t('windows.cabinet.needsInput', { name: w.name, desk: deskOf(w) })), go, back);
   }
 
   /** Nobody's game on the screen, just the high scores. */
@@ -351,7 +352,7 @@ export class Cabinet {
   }
 
   /** What the screen shows: your game, someone else's, or the high scores with nobody playing. */
-  private screen(t: number): ScreenView {
+  private screen(now: number): ScreenView {
     const c = store.cabinet;
     const g = this.game;
     if (this.mode === 'play' && g) {
@@ -361,16 +362,16 @@ export class Cabinet {
         player: store.profile.name,
         scores: c.scores,
         mine: g.id,
-        note: this.waiting ? `${this.waiting.name} needs you${deskOf(this.waiting)}` : 'P to carry on',
-        prompt: rank ? `🏆 #${rank} on the table! Enter: again` : 'Enter to play again',
-        t,
+        note: this.waiting ? t('windows.cabinet.needsYou', { name: this.waiting.name, desk: deskOf(this.waiting) }) : t('windows.cabinet.pToCarryOn'),
+        prompt: rank ? t('windows.cabinet.ranked', { rank }) : t('windows.cabinet.playAgain'),
+        t: now,
       };
     }
     if (c.player && c.player.id !== store.you) {
-      return { frame: store.cabinetFrame, player: c.player.name, scores: c.scores, mine: c.player.game, note: 'Back in a moment', prompt: store.cabinetFrame ? undefined : `▶ ${c.player.name.toUpperCase()}`, t };
+      return { frame: store.cabinetFrame, player: c.player.name, scores: c.scores, mine: c.player.game, note: t('windows.cabinet.backSoon'), prompt: store.cabinetFrame ? undefined : `▶ ${c.player.name.toUpperCase()}`, t: now };
     }
     const left = this.leftAt !== null;
-    return { frame: null, scores: c.scores, mine: g?.id, prompt: left ? 'PRESS E TO CARRY ON' : 'PRESS E TO PLAY', t };
+    return { frame: null, scores: c.scores, mine: g?.id, prompt: t(left ? 'windows.cabinet.pressToCarryOn' : 'windows.cabinet.pressToPlay'), t: now };
   }
 
   /** Draws the screen up close while you play or watch, and on the cabinet otherwise (the close one covers it). */
@@ -397,5 +398,5 @@ export function lostGame(asked: string, id: string): boolean {
 /** " at Desk 3", or nothing when it's not at a desk here. */
 function deskOf(w: WorkerInfo): string {
   const d = DESK_BY_ID.get(w.deskId);
-  return d ? ` at ${d.station ? `the ${d.label}` : d.label}` : '';
+  return d ? t(d.station ? 'windows.cabinet.atStation' : 'windows.cabinet.atDesk', { desk: d.label }) : '';
 }

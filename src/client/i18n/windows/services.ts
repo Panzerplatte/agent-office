@@ -1,0 +1,43 @@
+import { strings } from '../table';
+
+/** ui/services.ts. `{dev}`, `{http}`, `{cmd}` and `{host}` are code snippets put in as elements. */
+export default strings(
+  {
+    'services.dialog': 'Services',
+    'services.title': '🌐 Services',
+    'services.footer': 'Tunnels go through the office, so the office password still guards every page. Keep the terminal open while you look.',
+    'services.intro': 'Web servers the workers are running. Click one to copy a command that opens it on your computer — run it in a terminal and the page opens by itself.',
+    'services.empty': 'Nothing running yet.',
+    'services.emptyNote': 'When a worker starts a web server — {dev}, a preview build, {http} — it shows up here within a few seconds. Try prompting: “start the dev server in the background so we can review it”.',
+    'services.someWorker': 'A worker',
+    'services.started': 'started {ago}',
+    'services.open': 'Open ↗',
+    'services.openTitle': 'Open {url} (needs the tunnel, unless the office runs on this computer)',
+    'services.rowTitle': 'Copy the tunnel command',
+    'services.copied': '✅ Copied. Paste it in a terminal: it opens {url} once the tunnel is up.',
+    'services.commandFor': 'The command for :{port} — run it in a terminal, and it opens {url}.',
+    'services.copy': 'Copy',
+    'services.stopped': 'The server on :{port} stopped.',
+    'services.sshNote': 'It uses the same SSH access as the office. Not invited yourself (you set the office up)? Run {cmd} instead.',
+    'services.noSshNote': "Replace {host} with how you SSH to the office's machine. If the office runs on this computer, just click Open.",
+  },
+  {
+    'services.dialog': 'Services',
+    'services.title': '🌐 Services',
+    'services.footer': 'Tunnel laufen über das Office, das Office-Passwort schützt also weiter jede Seite. Lass das Terminal offen, solange du schaust.',
+    'services.intro': 'Webserver, die die Worker laufen lassen. Klick auf einen, um einen Befehl zu kopieren, der ihn auf deinem Computer öffnet – führ ihn im Terminal aus, und die Seite geht von selbst auf.',
+    'services.empty': 'Noch läuft nichts.',
+    'services.emptyNote': 'Wenn ein Worker einen Webserver startet – {dev}, einen Preview-Build, {http} –, taucht er hier nach ein paar Sekunden auf. Probier als Prompt: „Starte den Dev-Server im Hintergrund, damit wir ihn uns ansehen können“.',
+    'services.someWorker': 'Ein Worker',
+    'services.started': 'gestartet {ago}',
+    'services.open': 'Öffnen ↗',
+    'services.openTitle': '{url} öffnen (braucht den Tunnel, außer das Office läuft auf diesem Computer)',
+    'services.rowTitle': 'Tunnel-Befehl kopieren',
+    'services.copied': '✅ Kopiert. Füg ihn in ein Terminal ein: Er öffnet {url}, sobald der Tunnel steht.',
+    'services.commandFor': 'Der Befehl für :{port} – führ ihn im Terminal aus, dann öffnet er {url}.',
+    'services.copy': 'Kopieren',
+    'services.stopped': 'Der Server auf :{port} wurde beendet.',
+    'services.sshNote': 'Er nutzt denselben SSH-Zugang wie das Office. Selbst nicht eingeladen (du hast das Office eingerichtet)? Dann führ stattdessen {cmd} aus.',
+    'services.noSshNote': 'Ersetze {host} durch deinen SSH-Zugang zum Rechner des Office. Läuft das Office auf diesem Computer, klick einfach auf Öffnen.',
+  },
+);

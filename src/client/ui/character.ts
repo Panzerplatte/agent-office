@@ -4,7 +4,32 @@ import { HAIR_COLOR_NAMES, HAIR_COLORS, HAIR_STYLES, SKIN_TONES, randomLook, typ
 import { AVATAR_COLORS, saveProfile, store, type Profile } from '../state';
 import { Person } from '../world/character';
 import { toonUnique } from '../world/toon';
+import { t, type Key } from '../i18n';
 import { h, openModal } from './dom';
+
+/** The hair styles and colors (shared/avatar keeps them by their English names), as the picker says them. */
+const STYLE_NAME: Record<string, Key> = {
+  Short: 'windows.character.styleShort',
+  Long: 'windows.character.styleLong',
+  Bun: 'windows.character.styleBun',
+  Spiky: 'windows.character.styleSpiky',
+  Curly: 'windows.character.styleCurly',
+  Ponytail: 'windows.character.stylePonytail',
+  Bald: 'windows.character.styleBald',
+};
+const COLOR_NAME: Record<string, Key> = {
+  Black: 'windows.character.colorBlack',
+  'Dark brown': 'windows.character.colorDarkBrown',
+  Brown: 'windows.character.colorBrown',
+  Blonde: 'windows.character.colorBlonde',
+  Ginger: 'windows.character.colorGinger',
+  Silver: 'windows.character.colorSilver',
+  Red: 'windows.character.colorRed',
+  Pink: 'windows.character.colorPink',
+  Purple: 'windows.character.colorPurple',
+  Teal: 'windows.character.colorTeal',
+};
+const named = (names: Record<string, Key>, name: string) => (names[name] ? t(names[name]) : name);
 
 /** A turntable with your character on it, drawn with its own small renderer. */
 class Preview {
@@ -132,23 +157,23 @@ class Preview {
  */
 export function openCharacter(first: boolean, onSave: (p: Profile) => void) {
   const pick: Profile = { ...store.profile, look: { ...store.profile.look } };
-  const canvas = h('canvas', { 'aria-label': 'Your character, drag to spin' }) as HTMLCanvasElement;
+  const canvas = h('canvas', { 'aria-label': t('windows.character.canvas') }) as HTMLCanvasElement;
   const preview = new Preview(canvas, pick);
 
-  const input = h('input', { type: 'text', maxlength: 24, value: first ? '' : pick.name, placeholder: 'e.g. Ada', 'aria-label': 'Your name' }) as HTMLInputElement;
+  const input = h('input', { type: 'text', maxlength: 24, value: first ? '' : pick.name, placeholder: t('windows.character.namePlaceholder'), 'aria-label': t('windows.character.name') }) as HTMLInputElement;
   if (first && pick.name !== 'Guest') input.value = pick.name;
   // Your account's name is the one everyone sees; only the look is yours to change here.
   const account = store.me.account;
   if (account) {
     input.value = account.name;
     input.readOnly = true;
-    input.title = 'Your account name';
+    input.title = t('windows.character.accountName');
   }
 
-  const skinRow = h('div.swatches', { role: 'radiogroup', 'aria-label': 'Skin tone' });
-  const styleRow = h('div.seg', { role: 'radiogroup', 'aria-label': 'Hair style' });
-  const hairRow = h('div.swatches', { role: 'radiogroup', 'aria-label': 'Hair color' });
-  const shirtRow = h('div.swatches', { role: 'radiogroup', 'aria-label': 'Shirt color' });
+  const skinRow = h('div.swatches', { role: 'radiogroup', 'aria-label': t('windows.character.skinTone') });
+  const styleRow = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.character.hairStyle') });
+  const hairRow = h('div.swatches', { role: 'radiogroup', 'aria-label': t('windows.character.hairColor') });
+  const shirtRow = h('div.swatches', { role: 'radiogroup', 'aria-label': t('windows.character.shirtColor') });
 
   const swatch = (color: string, label: string, on: boolean, choose: () => void) =>
     h('button.swatch', { type: 'button', role: 'radio', 'aria-checked': String(on), style: `background:${color}`, class: on ? 'sel' : '', 'aria-label': label, title: label, onclick: choose });
@@ -164,43 +189,43 @@ export function openCharacter(first: boolean, onSave: (p: Profile) => void) {
 
   const paint = () => {
     const { skin, hair, style } = pick.look;
-    skinRow.replaceChildren(...SKIN_TONES.map((c, i) => swatch(c, `Skin tone ${i + 1} of ${SKIN_TONES.length}`, i === skin, () => change({ skin: i }))));
+    skinRow.replaceChildren(...SKIN_TONES.map((c, i) => swatch(c, t('windows.character.skinToneN', { n: i + 1, total: SKIN_TONES.length }), i === skin, () => change({ skin: i }))));
     styleRow.replaceChildren(
       ...HAIR_STYLES.map((name, i) =>
-        h('button.btn', { type: 'button', role: 'radio', 'aria-checked': String(i === style), class: i === style ? 'on' : '', onclick: () => change({ style: i }) }, name),
+        h('button.btn', { type: 'button', role: 'radio', 'aria-checked': String(i === style), class: i === style ? 'on' : '', onclick: () => change({ style: i }) }, named(STYLE_NAME, name)),
       ),
     );
-    hairRow.replaceChildren(...HAIR_COLORS.map((c, i) => swatch(c, HAIR_COLOR_NAMES[i], i === hair, () => change({ hair: i }))));
-    shirtRow.replaceChildren(...AVATAR_COLORS.map((c) => swatch(c, `Shirt ${c}`, c === pick.color, () => change({}, c))));
+    hairRow.replaceChildren(...HAIR_COLORS.map((c, i) => swatch(c, named(COLOR_NAME, HAIR_COLOR_NAMES[i]), i === hair, () => change({ hair: i }))));
+    shirtRow.replaceChildren(...AVATAR_COLORS.map((c) => swatch(c, t('windows.character.shirtN', { color: c }), c === pick.color, () => change({}, c))));
   };
   paint();
 
-  const surprise = h('button.btn', { type: 'button', title: 'Random look' }, '🎲 Surprise me');
+  const surprise = h('button.btn', { type: 'button', title: t('windows.character.surpriseTip') }, t('windows.character.surprise'));
   surprise.addEventListener('click', () => change(randomLook(), AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]));
-  const save = h('button.btn.primary', { type: 'submit' }, first ? 'Enter the office 🚪' : 'Save');
-  const close = first ? null : h('button.btn.close', { type: 'button', 'aria-label': 'Close' }, '✕');
+  const save = h('button.btn.primary', { type: 'submit' }, first ? t('windows.character.enter') : t('windows.character.save'));
+  const close = first ? null : h('button.btn.close', { type: 'button', 'aria-label': t('windows.common.close') }, '✕');
 
   const form = h(
     'form.modal.charsel',
-    { role: 'dialog', 'aria-label': 'Pick your character' },
-    h('header', {}, h('h2', {}, first ? '👋 Pick your character' : '🧍 Your character'), close),
+    { role: 'dialog', 'aria-label': t('windows.character.dialog') },
+    h('header', {}, h('h2', {}, first ? t('windows.character.titleFirst') : t('windows.character.title')), close),
     h(
       'div.body',
       {},
-      h('div.charsel-stage', {}, canvas, h('span.tip', {}, 'Drag to spin')),
+      h('div.charsel-stage', {}, canvas, h('span.tip', {}, t('windows.character.dragTip'))),
       h(
         'div.charsel-opts',
         {},
-        h('label', {}, 'Your name'),
+        h('label', {}, t('windows.character.name')),
         input,
-        account ? h('p.setting-note', {}, `🔑 Signed in as ${account.name}, so that's your name here.`) : null,
-        h('label', {}, 'Skin tone'),
+        account ? h('p.setting-note', {}, t('windows.character.signedIn', { name: account.name })) : null,
+        h('label', {}, t('windows.character.skinTone')),
         skinRow,
-        h('label', {}, 'Hair'),
+        h('label', {}, t('windows.character.hair')),
         styleRow,
-        h('label', {}, 'Hair color'),
+        h('label', {}, t('windows.character.hairColor')),
         hairRow,
-        h('label', {}, 'Shirt'),
+        h('label', {}, t('windows.character.shirt')),
         shirtRow,
       ),
     ),
