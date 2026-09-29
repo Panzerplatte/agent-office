@@ -1,6 +1,7 @@
 import { isDocPath, resolveDocLink, type DocFile, type DocList, type DocText } from '../../shared/docs';
 import { clip, h, openModal, setDoing, timeAgo, toast } from './dom';
 import { markdownFile } from './markdown';
+import { t } from '../i18n';
 
 // The bookshelf: every Markdown file in the floor's project, to read without leaving the office.
 // The filter box over the list picks docs out as you type (the letters in order, not necessarily
@@ -294,7 +295,7 @@ export function openBookshelf(deps: ShelfDeps) {
       doc = await getJson<DocText>(`/api/docs/file?${q({ path })}`);
     } catch (err) {
       if (mine !== opening) return;
-      toast(`📚 Couldn't open ${nameOf(path)}: ${(err as Error).message}`, 'warn');
+      toast(t('notices.bookFailed', { name: nameOf(path), error: (err as Error).message }), 'warn');
       if (!current) page.replaceChildren(h('div.bs-empty', {}, `Couldn't open ${path}.`));
       return;
     }

@@ -41,6 +41,7 @@ import { OfficeSound } from './sound';
 import { DesktopNotifier, askNotifyPermission, notifyPermission, waitingOnSomeone } from './notify';
 import { NextUp, waitingInOrder, waitingLabel } from './nextup';
 import { $, h, clip, closeAllModals, doingNow, modalOpen, onDoingChange, onModalChange, openModal, readingNow, toast, STATUS_LABEL } from './ui/dom';
+import { noticeText, t } from './i18n';
 import { openTerminal, openTerminalFor, routeTerminalMessage, type TerminalFind } from './ui/terminal';
 import { openSearch } from './ui/search';
 import { openChanges, openChangesFor, routeChangesMessage } from './ui/changes';
@@ -382,15 +383,15 @@ balls.onRest = (f: Flight, who: string, mine: boolean) => {
     sound.golf('cheer');
   }
   if (!mine) {
-    if (f.holed) toast(`🏆 ${who} got a hole in one!`);
+    if (f.holed) toast(t('notices.golfHoleInOneBy', { who }));
     return;
   }
   const rec = golfRecord();
   if (f.holed) {
     rec.holes++;
-    toast(rec.holes === 1 ? '🏆 HOLE IN ONE!' : `🏆 HOLE IN ONE! That's ${rec.holes}`);
+    toast(rec.holes === 1 ? t('notices.golfHoleInOne') : t('notices.golfHoleInOneAgain', { n: rec.holes }));
   } else if (Number.isFinite(f.fromPin) && (rec.best === null || f.fromPin < rec.best)) {
-    if (rec.best !== null) toast(`⛳ ${pinText(f.fromPin)} from the pin — your best yet!`);
+    if (rec.best !== null) toast(t('notices.golfBest', { distance: pinText(f.fromPin) }));
     rec.best = f.fromPin;
   } else return;
   saveGolfRecord(rec);
@@ -406,8 +407,8 @@ function teeTaken(): string | null {
 function teeOff() {
   if (golf.active || trip || climber.active) return;
   const other = teeTaken();
-  if (other) return toast(`🏌️ ${other} is on the tee — wait your turn`, 'warn');
-  if (carrying) return toast(`✋ Your hands are full: put #${carrying.issue} down first (Q)`, 'warn');
+  if (other) return toast(t('notices.golfTeeBusy', { name: other }), 'warn');
+  if (carrying) return toast(t('notices.handsFullCard', { issue: carrying.issue }), 'warn');
   if (player.seat) standUp();
   if (hanger.active) hanger.cancel();
   if (walkingTo) stopWalking();
@@ -462,7 +463,7 @@ const climber = new Climber(player, {
     else if (kind === 'twirl') sound.twirl();
     else if (kind === 'bonk') {
       sound.bonk();
-      toast(`🔝 ${store.currentFloor()?.name ?? 'This'} is the top floor — the hatch won't budge`);
+      toast(store.currentFloor() ? t('notices.topFloor', { floor: store.currentFloor()!.name }) : t('notices.topFloorHere'));
     } else if (kind === 'land') {
       sound.poleLanding(speed);
       landed(speed);
@@ -486,7 +487,7 @@ function landed(speed: number) {
     smoke.exhale(at, dir.set(Math.sin(a), 0.15, Math.cos(a)).normalize());
   }
   const f = store.currentFloor();
-  toast(`🚒 Wheee! Down to ${f?.name ?? 'the floor below'}`);
+  toast(f ? t('notices.poleDown', { floor: f.name }) : t('notices.poleDownBelow'));
 }
 office.stack.onHatch = (where, open) => sound.hatch({ x: LADDER.x + 0.3, y: where === 'floor' ? 0 : WALL_HEIGHT, z: LADDER.z }, open);
 // Speed lines round the edge of the screen, sliding down a pole.
@@ -496,7 +497,7 @@ $('app').append(whoosh);
 /** E at the ladder: onto it, facing the wall. */
 function grabLadder() {
   if (trip || climber.active) return;
-  if (!floorThere(1) && !floorThere(-1)) return toast('No other floors yet — add a project in the elevator', 'warn');
+  if (!floorThere(1) && !floorThere(-1)) return toast(t('notices.noOtherFloors'), 'warn');
   if (player.seat) standUp();
   if (hanger.active) hanger.cancel();
   if (walkingTo) stopWalking();
@@ -648,11 +649,11 @@ net.onMessage((msg) => {
       }
       // The card belongs to the board downstairs (or up): the office already put it back there.
       if (carrying) {
-        toast(`📌 #${carrying.issue} stayed behind on the other floor's board`);
+        toast(t('notices.cardLeftBehind', { issue: carrying.issue }));
         setCarrying(null);
       }
       // So does the ball: it's back under that floor's hoop.
-      if (holdingBall()) toast('🏀 The ball stayed behind, back under the other floor’s hoop');
+      if (holdingBall()) toast(t('notices.ballLeftBehind'));
       ballNews(false);
       arrive();
       break;
@@ -673,11 +674,11 @@ net.onMessage((msg) => {
       routeWorktreeMessage(msg);
       break;
     case 'toast':
-      toast(msg.text, msg.level);
+      toast(noticeText(msg), msg.level);
       break;
     case 'upgrade':
       if (msg.state.phase === 'restarting') showRestarting(msg.state, net);
-      if (msg.state.phase === 'failed' && upgradePhase === 'building') toast(`The upgrade failed, so the office stays on ${msg.state.current?.sha ?? 'this version'}`, 'error');
+      if (msg.state.phase === 'failed' && upgradePhase === 'building') toast(msg.state.current ? t('notices.upgradeFailed', { version: msg.state.current.sha }) : t('notices.upgradeFailedHere'), 'error');
       upgradePhase = msg.state.phase;
       break;
     case 'chat':
@@ -727,7 +728,7 @@ net.onMessage((msg) => {
     case 'horn':
       if (!upTop) break;
       sound.horn();
-      if (msg.by !== store.profile.name) toast(`📯 ${msg.by} blew the air horn!`);
+      if (msg.by !== store.profile.name) toast(t('notices.airHorn', { name: msg.by }));
       break;
   }
 });
@@ -736,7 +737,7 @@ function renderUpgrade() {
   const u = store.upgrade;
   const banner = $('upgrade-banner');
   banner.classList.toggle('hidden', u.phase !== 'building');
-  banner.textContent = `🛠️ ${u.by ?? 'Someone'} is upgrading the office. It restarts on the new version in a minute or two.`;
+  banner.textContent = u.by ? t('notices.upgradeBanner', { who: u.by }) : t('notices.upgradeBannerSomeone');
 }
 store.on('upgrade', renderUpgrade);
 
@@ -978,7 +979,7 @@ function noticeWaiting() {
     if (f.id === store.floor) continue;
     elsewhere += f.waiting;
     if (before !== undefined && f.waiting > before) {
-      toast(`🙋 A worker on the ${f.name} floor is waiting on someone — take the elevator up`, 'warn');
+      toast(t('notices.waitingUpstairs', { floor: f.name }), 'warn');
       sound.ding('needs_input');
     }
   }
@@ -1064,9 +1065,10 @@ function walkTo(id: string) {
   if (player.seat) standUp();
   if (golf.active) golf.stop();
   walkingTo = { id, replanAt: 0 };
-  if (store.onMyFloor(p)) toast(`🚶 Walking over to ${p.name}`);
+  if (store.onMyFloor(p)) toast(t('notices.walkTo', { name: p.name }));
   else {
-    toast(`🛗 Taking the elevator to ${p.name}, on the ${store.floors.find((f) => f.id === p.floor)?.name ?? 'other'} floor`);
+    const floor = store.floors.find((f) => f.id === p.floor)?.name;
+    toast(floor ? t('notices.walkElevator', { name: p.name, floor }) : t('notices.walkElevatorOther', { name: p.name }));
     ride(p.floor!);
   }
 }
@@ -1096,7 +1098,7 @@ function walkTick(now: number) {
   if (player.seat) return stopWalking();
   const p = store.peers.get(walkingTo.id);
   if (!p || !store.onMyFloor(p)) {
-    toast(p ? `${p.name} left the floor before you got there` : 'They left the office', 'warn');
+    toast(p ? t('notices.walkGone', { name: p.name }) : t('notices.walkLeftOffice'), 'warn');
     return stopWalking();
   }
   const at = whereIs(p);
@@ -1115,7 +1117,7 @@ player.onPathEnd = (why) => {
   // As near as the way goes (they're behind a desk, or on the couch): that'll do.
   if (Math.hypot(at.x - player.pos.x, at.z - player.pos.z) < 3) return arrivedAt(at);
   if (why === 'stuck') {
-    toast(`🚧 Couldn't find a way over to ${p.name}`, 'warn');
+    toast(t('notices.walkNoPath', { name: p.name }), 'warn');
     stopWalking();
   } else walkingTo.replanAt = 0;
 };
@@ -1292,7 +1294,7 @@ let askedToNotify = false;
 function officeIsFull(): boolean {
   const m = store.machine;
   if (!officeFull(m)) return false;
-  toast(`🚫 The office is at its limit of ${m.limit} worker${m.limit === 1 ? '' : 's'} — send one home before hiring another`, 'warn');
+  toast(t('notices.officeFull', { n: m.limit! }), 'warn');
   return true;
 }
 
@@ -1325,7 +1327,7 @@ function promptAtDesk(deskId: string) {
       onSubmit: (text, o) => hire(deskId, text, o.worktree, o.provider, o.model, o.effort),
     });
   } else if (isAsleep(w.status)) {
-    toast(`${w.name} is asleep — press R to resume first`, 'warn');
+    toast(t('notices.workerAsleep', { name: w.name }), 'warn');
   } else if (w.kind === 'shell') {
     openPrompt({
       title: `🐚 Run in ${w.name}`,
@@ -1398,7 +1400,7 @@ function askStation(deskId: string) {
   const info = STATION_INFO[kind];
   // A prompt typed into a question it's asking would answer it.
   if (w?.status === 'needs_input') {
-    toast(`The ${name} is waiting on an answer — here's its terminal`, 'warn');
+    toast(t('notices.stationWaiting', { name }), 'warn');
     return openWorkerTerminal(w.id);
   }
   // Nobody there yet: asking hires the agent.
@@ -1421,7 +1423,7 @@ function askStation(deskId: string) {
 }
 
 function resumeWorker(w: WorkerInfo) {
-  if (!w.sessionId && w.kind !== 'shell') toast(`${w.name} has no saved Claude session — starting a fresh one`, 'warn');
+  if (!w.sessionId && w.kind !== 'shell') toast(t('notices.noSession', { name: w.name }), 'warn');
   net.send({ t: 'worker.resume', workerId: w.id });
 }
 
@@ -1438,10 +1440,10 @@ function pullRequestFor(w: WorkerInfo) {
     else window.open(w.pr.url, '_blank', 'noopener');
     return;
   }
-  if (!w.worktree) return toast(`${w.name} works in the main checkout — only workers with their own worktree can open a PR`, 'warn');
+  if (!w.worktree) return toast(t('notices.prMainCheckout', { name: w.name }), 'warn');
   if (w.prOpening) return;
-  if (!prReady(w)) return toast(`${w.name} is still ${STATUS_LABEL[w.status]} — wait until it's done`, 'warn');
-  toast(`Pushing ${w.worktree.branch} and opening a pull request…`);
+  if (!prReady(w)) return toast(t('notices.prNotReady', { name: w.name, status: STATUS_LABEL[w.status] }), 'warn');
+  toast(t('notices.prPushing', { branch: w.worktree.branch }));
   net.send({ t: 'worker.pr', workerId: w.id });
 }
 
@@ -1452,7 +1454,7 @@ function goToDesk(deskId: string) {
   closeAllModals();
   standAt(desk);
   const w = store.workerAtDesk(deskId);
-  toast(w ? `You're at ${desk.label}, ${w.name}'s desk` : `You're at ${desk.label}`);
+  toast(w ? t('notices.atWorkerDesk', { desk: desk.label, name: w.name }) : t('notices.atDesk', { desk: desk.label }));
 }
 
 /** Behind the worker, looking over their shoulder at the laptop (or in front of a board agent's kiosk). */
@@ -1484,14 +1486,14 @@ function goToNextWaiting() {
   nextToast?.remove();
   if (!w || !desk) {
     const other = store.floors.find((f) => f.id !== store.floor && f.waiting > 0);
-    nextToast = toast(other ? `🛗 Nobody's waiting on this floor. ${other.waiting} on the ${other.name} floor: take the elevator` : '👍 Nobody is waiting on you');
+    nextToast = toast(other ? t('notices.nextOtherFloor', { n: other.waiting, floor: other.name }) : t('notices.nextNone'));
     return;
   }
   closeAllModals();
   standAt(desk);
   const waiting = waitingInOrder(store.workers.values());
-  const of = waiting.length > 1 ? ` (${waiting.findIndex((x) => x.id === w.id) + 1} of ${waiting.length})` : '';
-  nextToast = toast(`${w.status === 'needs_input' ? `🙋 ${w.name} needs input` : `✅ ${w.name} is done`}${of}. E opens its terminal`);
+  const of = waiting.length > 1 ? t('notices.nextOf', { i: waiting.findIndex((x) => x.id === w.id) + 1, n: waiting.length }) : '';
+  nextToast = toast(t(w.status === 'needs_input' ? 'notices.nextNeedsInput' : 'notices.nextDone', { name: w.name, of }));
 }
 
 /** The waiting worker you're standing at, if any: N skips it while anyone else is waiting. */
@@ -1585,7 +1587,7 @@ function githubUrl(remote?: string): string | undefined {
 }
 
 function showBookshelf() {
-  if (!store.floor) return toast('Take the elevator to a floor first');
+  if (!store.floor) return toast(t('notices.pickFloor'));
   openBookshelf({ floor: store.floor, project: store.project?.name, repoUrl: githubUrl(store.project?.remote), onTurn: turnPage });
 }
 
@@ -1605,7 +1607,7 @@ function sendToWorker(title: string, text: { context?: string; initial?: string 
   const desk = freeDesk();
   const awake = [...store.workers.values()].filter((w) => w.kind === 'agent' && !isAsleep(w.status));
   if (!desk && !awake.length) {
-    toast('Every desk and bean bag is taken — send a worker home first', 'warn');
+    toast(t('notices.seatsFull'), 'warn');
     return;
   }
   openAsk({
@@ -1692,10 +1694,10 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'smoke') {
     if (smokeBreakUntil) {
       setSmoking(false);
-      toast('You stub it out in the ashtray');
+      toast(t('notices.smokeStubbed'));
     } else {
       setSmoking(true);
-      toast('🚬 Smoke break');
+      toast(t('notices.smokeBreak'));
     }
   } else if (target.kind === 'gong') hitGong();
   else if (target.kind === 'whiteboard') openWhiteboard(net);
@@ -1711,14 +1713,14 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
 /** What the bartender says as they slide it over. */
-const CHEERS: Record<string, string> = {
-  beer: 'Cheers! 🍻',
-  wine: 'Salud!',
-  martini: 'Shaken, not stirred',
-  maitai: 'Aloha!',
-  shot: 'Salt, shot, lime… whoa',
-  mojito: 'Fresh and minty',
-  water: 'Good call. Stay hydrated',
+const CHEERS: Record<string, () => string> = {
+  beer: () => t('notices.cheersBeer'),
+  wine: () => t('notices.cheersWine'),
+  martini: () => t('notices.cheersMartini'),
+  maitai: () => t('notices.cheersMaitai'),
+  shot: () => t('notices.cheersShot'),
+  mojito: () => t('notices.cheersMojito'),
+  water: () => t('notices.cheersWater'),
 };
 
 /** E at the bar: the menu. */
@@ -1734,13 +1736,13 @@ function orderDrink(d: Drink) {
   const drink = cut ? DRINK_BY_ID.get('water')! : d;
   r.serve(player.pos.z);
   sound.pour(r.pourAt);
-  if (cut) toast("🙅 The bartender slides you a water instead: you've had enough", 'warn');
+  if (cut) toast(t('notices.barCut'), 'warn');
   setTimeout(() => {
     if (!upTop) return;
     booze.drink(drink, performance.now() / 1000);
     reach();
     if (player.view === 'first') hands.sip();
-    if (!cut) toast(`${drink.emoji} ${drink.name}. ${CHEERS[drink.id] ?? 'Enjoy!'}`);
+    if (!cut) toast(t('notices.barDrink', { emoji: drink.emoji, drink: drink.name, cheers: CHEERS[drink.id]?.() ?? t('notices.cheers') }));
   }, 1500);
 }
 
@@ -1759,7 +1761,7 @@ let nextHiccup = 0;
 let nextSip = 0;
 /** The drink in your hand everyone else was last told about. */
 let shownDrink: DrinkId | null = null;
-const FEELINGS = ['😌 You feel sober again', '🥴 You’re feeling a little tipsy', '🌀 Whoa… is the city spinning?', '🤪 You’re wasted. Maybe have some water'];
+const FEELINGS = ['notices.feelSober', 'notices.feelTipsy', 'notices.feelSpinning', 'notices.feelWasted'] as const;
 
 /** Every frame: how drunk you are, the glass in your hand, hiccups and the odd sip. */
 function drinking(now: number) {
@@ -1780,7 +1782,7 @@ function drinking(now: number) {
   }
   const stage = booze.stage(secs);
   if (stage !== feeling) {
-    if (stage > feeling || stage === 0) toast(FEELINGS[stage], stage >= 3 ? 'warn' : 'info');
+    if (stage > feeling || stage === 0) toast(t(FEELINGS[stage]), stage >= 3 ? 'warn' : 'info');
     feeling = stage;
   }
   if (amount > 0.5 && now > nextHiccup) {
@@ -1798,9 +1800,9 @@ function drinkCoffee() {
   const jittery = caffeine.drink(performance.now() / 1000);
   sound.coffee();
   if (player.view === 'first') hands.sip();
-  if (jittery) toast('☕ One cup too many… you’ve got the jitters!', 'warn');
-  else if (caffeine.cups > 1) toast('☕ Another cup: back to a full minute of buzz');
-  else toast('☕ Fresh coffee! A minute of quicker feet and higher jumps');
+  if (jittery) toast(t('notices.coffeeJitters'), 'warn');
+  else if (caffeine.cups > 1) toast(t('notices.coffeeAgain'));
+  else toast(t('notices.coffeeFresh'));
 }
 
 // ---- Smoke breaks ------------------------------------------------------------------------------------
@@ -1827,10 +1829,10 @@ function checkSmokeBreak(now: number) {
   if (!smokeBreakUntil) return;
   if (!onBalcony()) {
     setSmoking(false);
-    toast('🚭 No smoking inside, so you put it out');
+    toast(t('notices.smokeInside'));
   } else if (now > smokeBreakUntil) {
     setSmoking(false);
-    toast("That one's done. Back to work!");
+    toast(t('notices.smokeDone'));
   }
 }
 
@@ -1859,7 +1861,7 @@ let windFrom = 0;
 
 /** E at the ball: it's yours, if nobody beats you to it. */
 function takeBall() {
-  if (carrying) return toast('🗂️ Your hands are full: put the card back first (Q)', 'warn');
+  if (carrying) return toast(t('notices.handsFullCabinet'), 'warn');
   if (ball.holder) return;
   reach();
   sound.ball('bounce', ball.at, 1.5);
@@ -1957,8 +1959,8 @@ ball.onBasket = (b) => {
   popScore(mine ? `${how}+${points}` : `${clip(peer?.name ?? 'Someone', 16)} ${how}+${points}`, mine ? store.profile.color : (peer?.color ?? '#ff6b1a'));
   if (mine) {
     streak++;
-    const said = b.swish ? 'Swish!' : b.bank ? 'Off the glass!' : 'In off the rim!';
-    toast(`🏀 ${said} +${points} from ${b.distance.toFixed(1)} m${streak > 1 ? ` · 🔥 ${streak} in a row` : ''}`);
+    const said = t(b.swish ? 'notices.ballSwish' : b.bank ? 'notices.ballBank' : 'notices.ballRim');
+    toast(t('notices.ballScored', { said, points, distance: b.distance.toFixed(1) }) + (streak > 1 ? t('notices.ballStreak', { n: streak }) : ''));
   }
   if (b.three || (mine && streak >= 3)) confetti.burst(HOOP.rim.x + 0.3, HOOP.rim.y, HOOP.rim.z, 140, 0.7);
 };
@@ -2053,16 +2055,16 @@ function pickUp(it: GhIssue) {
   closeAllModals();
   dropBall();
   if (carrying?.issue === it.number) return;
-  if (carrying) toast(`📌 #${carrying.issue} went back on the board`);
+  if (carrying) toast(t('notices.cardWentBack', { issue: carrying.issue }));
   setCarrying({ issue: it.number, title: it.title });
   sound.paper();
-  toast(`✋ You took #${it.number} off the board: take it to an empty desk, a worker or the 📋 queue and press E`);
+  toast(t('notices.cardTaken', { issue: it.number }));
 }
 
 /** Q, or E at the issues board: the card goes back where it came from. */
 function putBack() {
   if (!carrying) return;
-  toast(`📌 #${carrying.issue} is back on the board`);
+  toast(t('notices.cardBack', { issue: carrying.issue }));
   setCarrying(null);
   sound.paper();
 }
@@ -2081,7 +2083,7 @@ function dropCard(it: Interactable, card: CarriedIssue, note: GhIssue | null): b
   }
   const prompt = issuePrompt({ number: card.issue, title: card.title });
   if (it.kind === 'queue') {
-    if (onQueue(card.issue)) toast(`#${card.issue} is already on the queue`, 'warn');
+    if (onQueue(card.issue)) toast(t('notices.cardQueued', { issue: card.issue }), 'warn');
     else {
       const { provider, model, effort } = officeChoice(store.project);
       net.send({ t: 'queue.add', prompt, title: `#${card.issue} ${card.title}`, issue: card.issue, provider, model, effort });
@@ -2097,7 +2099,7 @@ function dropCard(it: Interactable, card: CarriedIssue, note: GhIssue | null): b
   }
   if (it.kind !== 'desk' || !it.deskId) return false;
   const w = store.workerAtDesk(it.deskId);
-  const why = w ? cantTakeCard(w) : hiringPaused() ? '💸 Budget spent — hiring resumes tomorrow' : '';
+  const why = w ? cantTakeCard(w) : hiringPaused() ? t('notices.budgetSpent') : '';
   if (why) toast(why, 'warn');
   else if (w) {
     net.send({ t: 'worker.prompt', workerId: w.id, prompt, issue: card.issue });
@@ -2123,9 +2125,9 @@ function onQueue(issue: number): boolean {
 
 /** Why the worker at a desk can't be handed an issue card right now, or '' when it can. */
 function cantTakeCard(w: WorkerInfo): string {
-  if (w.kind === 'shell') return `${w.name} is a shell, not an agent`;
-  if (isAsleep(w.status)) return `${w.name} is asleep — press R to resume first`;
-  if (w.status === 'needs_input') return `${w.name} is waiting on an answer — open the terminal first`;
+  if (w.kind === 'shell') return t('notices.workerIsShell', { name: w.name });
+  if (isAsleep(w.status)) return t('notices.workerAsleep', { name: w.name });
+  if (w.status === 'needs_input') return t('notices.workerWaiting', { name: w.name });
   return '';
 }
 
@@ -2165,7 +2167,7 @@ function useSeat(seatId: string) {
   }
   const place = freePlace(seat);
   if (!place) {
-    toast(`No room on that ${seat.label.replace(/^\S+ /, '').toLowerCase()} right now`, 'warn');
+    toast(t('notices.noRoomOnSeat', { seat: seat.label.replace(/^\S+ /, '').toLowerCase() }), 'warn');
     return;
   }
   player.sit(place);
@@ -2650,7 +2652,7 @@ function emote(id: EmoteId) {
   if (!emoteLimit.take(now)) {
     if (now - emoteWarnedAt > 3000) {
       emoteWarnedAt = now;
-      toast('Easy there, one emote at a time', 'warn');
+      toast(t('notices.emoteSlow'), 'warn');
     }
     return;
   }
@@ -2955,7 +2957,7 @@ player.onClick = (ndc) => {
   const aim = aimedAt(ndc, 2.5);
   if (!aim) return;
   if (!aim.near) {
-    toast('Walk closer to that first');
+    toast(t('notices.walkCloser'));
     return;
   }
   use(aim.it, 'E', noteUnder(aim));
@@ -2985,7 +2987,7 @@ async function toggleVoice() {
 async function joinVoice() {
   const err = await voice.joinVoice(settings.pushToTalk);
   if (err) toast(err, 'warn');
-  else if (settings.pushToTalk && voice.inVoice) toast('🎙️ In voice, muted: hold V to talk');
+  else if (settings.pushToTalk && voice.inVoice) toast(t('notices.voiceMuted'));
 }
 
 async function toggleShare() {
@@ -3131,7 +3133,7 @@ const hud = mountHud(
 );
 /** F: hang a picture on a wall of this floor. There are no walls for them up on the roof. */
 function startHanging() {
-  if (upTop) return toast('No walls to hang pictures on up here — take the elevator down to a floor', 'warn');
+  if (upTop) return toast(t('notices.hangUpTop'), 'warn');
   hanger.start();
 }
 function showSettings() {

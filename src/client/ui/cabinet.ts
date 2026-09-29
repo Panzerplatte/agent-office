@@ -7,6 +7,7 @@ import { store } from '../state';
 import { h, openModal, toast, type Modal } from './dom';
 import { ScreenZoom } from './arcade';
 import { Blocks, H, W, paintScreen, type ScreenView } from './blocks';
+import { t } from '../i18n';
 
 /** What the cabinet makes a noise about: a piece landing, lines clearing (how many), the game ending. */
 export type CabinetSound = 'land' | 'clear' | 'over';
@@ -296,13 +297,13 @@ export class Cabinet {
         // It can't follow the old game on from where it was, so a new one for the new game it started.
         if (lostGame(this.asked, p.game)) {
           this.newGame();
-          toast("🕹️ The office lost track of your game, so here's a new one");
+          toast(t('notices.arcadeLostGame'));
         }
         this.asked = '';
         this.game.id = p.game;
       }
     } else if (this.mode === 'watch' && (!p || p.id === store.you || p.name !== this.watching)) {
-      if (!p) toast(`${this.watching} stepped away from the arcade`);
+      if (!p) toast(t('notices.arcadeLeft', { name: this.watching }));
       this.modal?.close();
     }
     this.dirty = true;

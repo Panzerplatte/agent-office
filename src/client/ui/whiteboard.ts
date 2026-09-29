@@ -7,6 +7,7 @@ import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, toast, type Modal } from './dom';
 import type { WhiteboardApp } from './whiteboard-app';
+import { t } from '../i18n';
 
 declare const __EXCALIDRAW_ASSETS__: string;
 
@@ -38,7 +39,7 @@ let redrawBoard = () => {};
 export function openWhiteboard(net: Net) {
   if (open) return;
   const floor = store.floor;
-  if (!floor) return toast('Take the elevator to a floor first', 'warn');
+  if (!floor) return toast(t('notices.pickFloor'), 'warn');
   const people = h('div.wb-people');
   const close = h('button.btn.close', { 'aria-label': 'Close', title: 'Close (Esc)' }, '✕');
   const host = h('div.wb-host', {}, h('div.wb-loading', {}, '✏️ Getting the markers out…'));

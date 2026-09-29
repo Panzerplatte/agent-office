@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { JUKEBOX_TUNES, STREAM, checkStreamUrl, trackTitle, tuneById, type JukeboxState } from '../shared/jukebox.js';
+import { notice, type Notice } from '../shared/notices.js';
 
 interface Saved {
   on: boolean;
@@ -35,13 +36,13 @@ export class Jukebox {
   }
 
   /** Puts on a tune, a stream, or (with neither) whatever it had. Says whether anything changed, or why it can't. */
-  play(input: { track?: unknown; url?: unknown }, by: string): { changed: boolean } | { error: string } {
+  play(input: { track?: unknown; url?: unknown }, by: string): { changed: boolean } | { error: string | Notice } {
     if (input.url !== undefined && input.url !== '') {
       const u = checkStreamUrl(input.url);
       if ('error' in u) return u;
       this.set({ on: true, track: STREAM, url: u.url, by });
     } else if (input.track !== undefined) {
-      if (typeof input.track !== 'string' || !tuneById(input.track)) return { error: "The jukebox doesn't have that one" };
+      if (typeof input.track !== 'string' || !tuneById(input.track)) return { error: notice('jukebox.noSuchTune') };
       this.set({ on: true, track: input.track, by });
     } else {
       if (this.s.on) return { changed: false };
