@@ -109,40 +109,85 @@ export function slugify(s: string, max = 40): string {
   );
 }
 
+/** What can be wrong with an output path. */
+export type OutputIssue = 'empty' | 'long' | 'absolute' | 'dots' | 'reserved' | 'control';
+
+/** Each OutputIssue in English; `{dir}` is the folder it can't go in. The page says them in your language. */
+export const OUTPUT_ISSUES: Record<OutputIssue, string> = {
+  empty: 'Say which file the meeting writes',
+  long: 'That output path is too long',
+  absolute: 'The output file goes inside the project: give a path relative to it',
+  dots: 'The output path can’t have empty, . or .. parts',
+  reserved: 'The output can’t go in {dir}/',
+  control: 'The output path has control characters in it',
+};
+
 /**
- * Why an output path can't be used, or undefined when it's fine: a file inside the checkout, not in
+ * What's wrong with an output path, or undefined when it's fine: a file inside the checkout, not in
  * the office's own folder or git's.
  */
-export function outputProblem(p: string): string | undefined {
-  if (!p.trim()) return 'Say which file the meeting writes';
-  if (p.length > 200) return 'That output path is too long';
-  if (/^[/\\]|^[a-zA-Z]:/.test(p)) return 'The output file goes inside the project: give a path relative to it';
+export function outputIssue(p: string): { issue: OutputIssue; dir?: string } | undefined {
+  if (!p.trim()) return { issue: 'empty' };
+  if (p.length > 200) return { issue: 'long' };
+  if (/^[/\\]|^[a-zA-Z]:/.test(p)) return { issue: 'absolute' };
   const parts = p.split(/[/\\]/);
-  if (parts.some((x) => x === '..' || x === '.' || x === '')) return 'The output path can’t have empty, . or .. parts';
-  if (parts[0] === '.git' || parts[0] === '.agent-office' || parts[0] === MEETING_NOTES_DIR) return `The output can’t go in ${parts[0]}/`;
-  if (/[\0-\x1f]/.test(p)) return 'The output path has control characters in it';
+  if (parts.some((x) => x === '..' || x === '.' || x === '')) return { issue: 'dots' };
+  if (parts[0] === '.git' || parts[0] === '.agent-office' || parts[0] === MEETING_NOTES_DIR) return { issue: 'reserved', dir: parts[0] };
+  if (/[\0-\x1f]/.test(p)) return { issue: 'control' };
   return undefined;
 }
 
-/** "3 rounds" / "round 2 of 3". */
-const rounds = (n: number) => `${n} round${n === 1 ? '' : 's'}`;
+/** Why an output path can't be used, in English, or undefined when it's fine (see outputIssue). */
+export function outputProblem(p: string): string | undefined {
+  const o = outputIssue(p);
+  return o && OUTPUT_ISSUES[o.issue].replace('{dir}', o.dir ?? '');
+}
+
+/** The words meetingSpend and meetingSummary put round the numbers. English here; the page passes its own language's. */
+export interface MeetingWords {
+  label(p: MeetingPattern): string;
+  /** "1.2M tokens". */
+  tokens(n: string): string;
+  /** "3 rounds". */
+  rounds(n: number): string;
+  /** "round 2 of 3", or "in round 2 of 3" for a meeting that stopped. */
+  roundOf(round: number, of: number, stopped: boolean): string;
+  stopped: string;
+  postedOnPr: string;
+  couldntPost(error: string): string;
+  /** After the output file: " on <branch>" once it's committed there, else " in <branch>'s worktree". */
+  onBranch(branch: string): string;
+  inWorktree(branch: string): string;
+}
+
+export const MEETING_WORDS: MeetingWords = {
+  label: (p) => MEETING_PATTERNS[p].label,
+  tokens: (n) => `${n} tokens`,
+  rounds: (n) => `${n} round${n === 1 ? '' : 's'}`,
+  roundOf: (round, of, stopped) => `${stopped ? 'in ' : ''}round ${round} of ${of}`,
+  stopped: 'stopped',
+  postedOnPr: 'posted on the PR',
+  couldntPost: (error) => `couldn't post it: ${error}`,
+  onBranch: (branch) => ` on ${branch}`,
+  inWorktree: (branch) => ` in ${branch}'s worktree`,
+};
 
 /** The spend, e.g. "1.2M tokens · $2.40" (or without the cost when a provider doesn't report it). */
-export function meetingSpend(m: Pick<Meeting, 'tokens' | 'cost' | 'costKnown'>): string {
-  return `${fmtTokens(m.tokens)} tokens${m.costKnown ? ` · ${fmtCost(m.cost)}` : m.cost > 0 ? ` · ${fmtCost(m.cost)}+` : ''}`;
+export function meetingSpend(m: Pick<Meeting, 'tokens' | 'cost' | 'costKnown'>, w: MeetingWords = MEETING_WORDS): string {
+  return `${w.tokens(fmtTokens(m.tokens))}${m.costKnown ? ` · ${fmtCost(m.cost)}` : m.cost > 0 ? ` · ${fmtCost(m.cost)}+` : ''}`;
 }
 
 /**
  * The line on the room's door once a meeting is over: pattern, rounds, tokens, cost, and the output
  * file it wrote (and where), or why it stopped.
  */
-export function meetingSummary(m: Meeting): string {
+export function meetingSummary(m: Meeting, w: MeetingWords = MEETING_WORDS): string {
   const p = MEETING_PATTERNS[m.pattern];
-  const ran = m.status === 'done' ? rounds(m.round) : `${m.status === 'stopped' ? 'in ' : ''}round ${m.round} of ${m.rounds}`;
-  const head = `${p.icon} ${p.label} · ${ran} · ${meetingSpend(m)}`;
-  if (m.status === 'stopped') return `${head} · ⛔ ${m.reason ?? 'stopped'}`;
+  const ran = m.status === 'done' ? w.rounds(m.round) : w.roundOf(m.round, m.rounds, m.status === 'stopped');
+  const head = `${p.icon} ${w.label(m.pattern)} · ${ran} · ${meetingSpend(m, w)}`;
+  if (m.status === 'stopped') return `${head} · ⛔ ${m.reason ?? w.stopped}`;
   if (m.status === 'running') return head;
-  const where = m.review?.url ? ' · posted on the PR' : m.review?.error ? ` · couldn't post it: ${m.review.error}` : m.commit ? ` on ${m.worktree?.branch}` : m.worktree ? ` in ${m.worktree.branch}'s worktree` : '';
+  const where = m.review?.url ? ` · ${w.postedOnPr}` : m.review?.error ? ` · ${w.couldntPost(m.review.error)}` : m.commit ? w.onBranch(m.worktree?.branch ?? '') : m.worktree ? w.inWorktree(m.worktree.branch) : '';
   return `${head} · ✅ ${m.output}${where}`;
 }
 

@@ -1,4 +1,5 @@
-import { MEETING_PATTERNS, MEETING_PATTERN_IDS, TOKENS_PER_SEAT, meetingSpend, outputProblem, slugify } from '../../shared/meetings';
+import { MEETING_PATTERNS, MEETING_PATTERN_IDS, TOKENS_PER_SEAT, meetingSpend, outputIssue, slugify } from '../../shared/meetings';
+import { meetingWords, meetingWorkerN, outputIssueText, patternBlurb, patternLabel, patternRoles, patternRoundsNote, patternStem } from '../i18n/labels';
 import { fmtTokens, type Meeting, type MeetingPattern, type MeetingTurn } from '../../shared/protocol';
 import type { Net } from '../net';
 import { store } from '../state';
@@ -106,9 +107,9 @@ function renderStatus(m: Meeting, body: HTMLElement, foot: HTMLElement, net: Net
   const review = m.review?.url ? h('a', { href: m.review.url, target: '_blank', rel: 'noopener noreferrer' }, t('windows.meeting.reviewLink', { pr: m.pr ?? '' })) : m.review?.error ? h('span.bad', {}, t('windows.meeting.reviewFailed', { error: m.review.error })) : null;
   body.replaceChildren(
     ...present(
-    h('div.meeting-head', {}, pill, h('b', {}, `${p.icon} ${p.label}`), h('span.meeting-title', { title: m.prompt }, m.title)),
+    h('div.meeting-head', {}, pill, h('b', {}, `${p.icon} ${patternLabel(m.pattern)}`), h('span.meeting-title', { title: m.prompt }, m.title)),
     h('p.meeting-line', {}, running ? t('windows.meeting.runningLine', { stage: meetingStage(m), name: m.calledBy, ago: timeAgo(new Date(m.startedAt).toISOString()) }) : m.status === 'done' ? t('windows.meeting.doneLine', { output: m.output, n: m.round }) : t('windows.meeting.stoppedLine', { round: m.round, reason: m.reason ?? t('windows.meeting.statusStopped') })),
-    h('div.meeting-budget', { title: t('windows.meeting.tokensOf', { used: m.tokens.toLocaleString(), budget: m.budget.toLocaleString() }) }, h('div.meeting-bar', {}, h('i', { style: `width:${(f * 100).toFixed(1)}%;background:${f > 0.9 ? 'var(--bad)' : f > 0.7 ? 'var(--warn)' : 'var(--good)'}` })), h('span', {}, t('windows.meeting.tokensOf', { used: meetingSpend(m), budget: fmtTokens(m.budget) }))),
+    h('div.meeting-budget', { title: t('windows.meeting.tokensOf', { used: m.tokens.toLocaleString(), budget: m.budget.toLocaleString() }) }, h('div.meeting-bar', {}, h('i', { style: `width:${(f * 100).toFixed(1)}%;background:${f > 0.9 ? 'var(--bad)' : f > 0.7 ? 'var(--warn)' : 'var(--good)'}` })), h('span', {}, t('windows.meeting.tokensOf', { used: meetingSpend(m, meetingWords), budget: fmtTokens(m.budget) }))),
     seats,
     h('div.meeting-out', {}, h('div.meeting-out-head', {}, h('b', {}, '📄 '), h('code', {}, m.output), where, review), h('pre.meeting-preview', {}, m.preview?.trim() ? m.preview : running ? t('windows.meeting.nothingYet') : t('windows.meeting.nothingWritten'))),
     store.meeting.past.length
@@ -164,8 +165,8 @@ function meetingForm(net: Net, preset: MeetingPreset | undefined, done: () => vo
   const pr = () => Number(prSel.value) || undefined;
   const syncOutput = () => {
     if (!outputTouched) outputIn.value = def().output(slug(), pr());
-    const problem = outputProblem(outputIn.value.trim());
-    outputNote.textContent = problem ? `⚠️ ${problem}` : pattern === 'review' ? t('windows.meeting.outputReview') : store.project?.branch ? t('windows.meeting.outputCommit') : t('windows.meeting.outputPlain');
+    const problem = outputIssue(outputIn.value.trim());
+    outputNote.textContent = problem ? `⚠️ ${outputIssueText(problem)}` : pattern === 'review' ? t('windows.meeting.outputReview') : store.project?.branch ? t('windows.meeting.outputCommit') : t('windows.meeting.outputPlain');
     outputNote.classList.toggle('bad', !!problem);
   };
   const syncBudget = () => {
@@ -188,14 +189,14 @@ function meetingForm(net: Net, preset: MeetingPreset | undefined, done: () => vo
   const pickPattern = (p: MeetingPattern) => {
     pattern = p;
     const d = def();
-    roles = d.roles.slice(0, d.seats.default);
+    roles = patternRoles(p).slice(0, d.seats.default);
     for (const b of patterns.children) b.classList.toggle('on', (b as HTMLElement).dataset.pattern === p);
     for (const b of patterns.children) b.setAttribute('aria-checked', String((b as HTMLElement).dataset.pattern === p));
     roundsIn.min = String(d.rounds.min);
     roundsIn.max = String(d.rounds.max);
     roundsIn.value = String(d.rounds.default);
     roundsIn.disabled = d.rounds.min === d.rounds.max;
-    roundsNote.textContent = d.roundsNote;
+    roundsNote.textContent = patternRoundsNote(p);
     prRow.classList.toggle('hidden', d.needs !== 'pr');
     partsRow.classList.toggle('hidden', d.needs !== 'parts');
     renderRoles();
@@ -203,14 +204,14 @@ function meetingForm(net: Net, preset: MeetingPreset | undefined, done: () => vo
   };
   for (const id of MEETING_PATTERN_IDS) {
     const d = MEETING_PATTERNS[id];
-    patterns.append(h('button.meeting-pattern', { type: 'button', role: 'radio', 'data-pattern': id, onclick: () => pickPattern(id) }, h('b', {}, `${d.icon} ${d.label}`), h('small', {}, d.blurb)));
+    patterns.append(h('button.meeting-pattern', { type: 'button', role: 'radio', 'data-pattern': id, onclick: () => pickPattern(id) }, h('b', {}, `${d.icon} ${patternLabel(id)}`), h('small', {}, patternBlurb(id))));
   }
   minus.addEventListener('click', () => {
     if (roles.length > def().seats.min) roles.pop();
     renderRoles();
   });
   plus.addEventListener('click', () => {
-    if (roles.length < def().seats.max) roles.push(def().roles[roles.length] ?? `Worker ${roles.length + 1}`);
+    if (roles.length < def().seats.max) roles.push(patternRoles(pattern)[roles.length] ?? meetingWorkerN(roles.length + 1));
     renderRoles();
   });
   outputIn.addEventListener('input', () => {
@@ -249,7 +250,7 @@ function meetingForm(net: Net, preset: MeetingPreset | undefined, done: () => vo
       return partsIn.focus();
     }
     const output = outputIn.value.trim();
-    if (outputProblem(output)) return outputIn.focus();
+    if (outputIssue(output)) return outputIn.focus();
     if (!provider.valid()) return;
     net.send({
       t: 'meeting.start',
@@ -267,7 +268,7 @@ function meetingForm(net: Net, preset: MeetingPreset | undefined, done: () => vo
       model: provider.model(),
       effort: provider.effort(),
     });
-    toast(t('notices.meetingCalling', { label: def().label }));
+    toast(t('notices.meetingCalling', { label: patternStem(pattern) }));
     done();
   };
   bodyEl.addEventListener('submit', (e) => {

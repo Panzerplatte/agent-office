@@ -179,18 +179,30 @@ export function pictureSize(size: number, aspect: number): { w: number; h: numbe
   return { w, h };
 }
 
-/** Checks a link someone wants to hang. Returns the tidied URL, or why it won't do. */
-export function checkImageUrl(raw: unknown): { url: string } | { error: string } {
+/** What can be wrong with a link to hang. */
+export type ImageUrlIssue = 'empty' | 'long' | 'notUrl' | 'protocol';
+
+/** Each ImageUrlIssue in English. The page says them in your language. */
+export const IMAGE_URL_ISSUES: Record<ImageUrlIssue, string> = {
+  empty: 'Paste a link to an image',
+  long: 'That link is too long',
+  notUrl: "That isn't a web link. Paste an address that starts with https://",
+  protocol: 'Only http and https links can hang on the wall',
+};
+
+/** Checks a link someone wants to hang. Returns the tidied URL, or why it won't do (in English, and as an ImageUrlIssue). */
+export function checkImageUrl(raw: unknown): { url: string } | { error: string; issue: ImageUrlIssue } {
+  const bad = (issue: ImageUrlIssue) => ({ error: IMAGE_URL_ISSUES[issue], issue });
   const s = typeof raw === 'string' ? raw.trim() : '';
-  if (!s) return { error: 'Paste a link to an image' };
-  if (s.length > 2048) return { error: 'That link is too long' };
+  if (!s) return bad('empty');
+  if (s.length > 2048) return bad('long');
   let u: URL;
   try {
     u = new URL(s);
   } catch {
-    return { error: "That isn't a web link. Paste an address that starts with https://" };
+    return bad('notUrl');
   }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return { error: 'Only http and https links can hang on the wall' };
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return bad('protocol');
   return { url: u.href };
 }
 

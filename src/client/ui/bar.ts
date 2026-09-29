@@ -1,19 +1,7 @@
-import { DRINKS, type Drink, type DrinkId } from '../../shared/rooftop';
+import { DRINKS, type Drink } from '../../shared/rooftop';
 import { h, openModal } from './dom';
-import { t, type Key } from '../i18n';
-
-/** Each drink's name and blurb in the menu. */
-const DRINK_TEXT: Record<DrinkId, [Key, Key]> = {
-  beer: ['menus.drinkBeer', 'menus.drinkBeerBlurb'],
-  wine: ['menus.drinkWine', 'menus.drinkWineBlurb'],
-  martini: ['menus.drinkMartini', 'menus.drinkMartiniBlurb'],
-  maitai: ['menus.drinkMaitai', 'menus.drinkMaitaiBlurb'],
-  shot: ['menus.drinkShot', 'menus.drinkShotBlurb'],
-  mojito: ['menus.drinkMojito', 'menus.drinkMojitoBlurb'],
-  water: ['menus.drinkWater', 'menus.drinkWaterBlurb'],
-};
-const drinkName = (d: Drink) => t(DRINK_TEXT[d.id][0]);
-const drinkBlurb = (d: Drink) => t(DRINK_TEXT[d.id][1]);
+import { t } from '../i18n';
+import { drinkBlurb, drinkName } from '../i18n/labels';
 
 export interface BarOptions {
   /** Had enough: nothing stronger than water or a mocktail. */

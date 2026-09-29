@@ -1,7 +1,8 @@
 import type { FloorInfo, RepoChoice, ServerMsg } from '../../shared/protocol';
 import { floorPalette, normalizeRepo, sameRepo } from '../../shared/floors';
-import { ROOF, ROOF_NAME } from '../../shared/rooftop';
+import { ROOF } from '../../shared/rooftop';
 import { t } from '../i18n';
+import { roofName } from '../i18n/labels';
 import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, timeAgo, type Modal } from './dom';
@@ -140,9 +141,9 @@ export function openElevator(opts: ElevatorOptions): void {
     const people = [...store.peers.values()].filter((p) => p.floor === ROOF).length;
     const btn = h(
       'button.floor-btn',
-      { type: 'button', class: here ? 'here' : '', disabled: here, title: here ? t('windows.elevator.roofHere') : t('windows.elevator.roofRide', { roof: ROOF_NAME.toLowerCase() }) },
+      { type: 'button', class: here ? 'here' : '', disabled: here, title: here ? t('windows.elevator.roofHere') : t('windows.elevator.roofRide', { roof: roofName().toLowerCase() }) },
       h('span.floor-no', { style: 'background:#2b2d42' }, '🍸'),
-      h('span.floor-text', {}, h('span.floor-name', {}, ROOF_NAME, here ? h('span.here-tag', {}, t('windows.elevator.youAreHere')) : null), h('span.floor-sub', {}, t('windows.elevator.roofSub'))),
+      h('span.floor-text', {}, h('span.floor-name', {}, roofName(), here ? h('span.here-tag', {}, t('windows.elevator.youAreHere')) : null), h('span.floor-sub', {}, t('windows.elevator.roofSub'))),
       h('span.floor-stats', {}, people ? h('span', { title: t('windows.elevator.roofPeople') }, `🧑 ${people}`) : ''),
     );
     btn.addEventListener('click', () => {

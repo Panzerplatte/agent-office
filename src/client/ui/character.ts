@@ -1,35 +1,12 @@
 import * as THREE from 'three';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
-import { HAIR_COLOR_NAMES, HAIR_COLORS, HAIR_STYLES, SKIN_TONES, randomLook, type Look } from '../../shared/avatar';
+import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, randomLook, type Look } from '../../shared/avatar';
 import { AVATAR_COLORS, saveProfile, store, type Profile } from '../state';
 import { Person } from '../world/character';
 import { toonUnique } from '../world/toon';
-import { t, type Key } from '../i18n';
+import { t } from '../i18n';
+import { hairColorName, hairStyleName } from '../i18n/labels';
 import { h, openModal } from './dom';
-
-/** The hair styles and colors (shared/avatar keeps them by their English names), as the picker says them. */
-const STYLE_NAME: Record<string, Key> = {
-  Short: 'windows.character.styleShort',
-  Long: 'windows.character.styleLong',
-  Bun: 'windows.character.styleBun',
-  Spiky: 'windows.character.styleSpiky',
-  Curly: 'windows.character.styleCurly',
-  Ponytail: 'windows.character.stylePonytail',
-  Bald: 'windows.character.styleBald',
-};
-const COLOR_NAME: Record<string, Key> = {
-  Black: 'windows.character.colorBlack',
-  'Dark brown': 'windows.character.colorDarkBrown',
-  Brown: 'windows.character.colorBrown',
-  Blonde: 'windows.character.colorBlonde',
-  Ginger: 'windows.character.colorGinger',
-  Silver: 'windows.character.colorSilver',
-  Red: 'windows.character.colorRed',
-  Pink: 'windows.character.colorPink',
-  Purple: 'windows.character.colorPurple',
-  Teal: 'windows.character.colorTeal',
-};
-const named = (names: Record<string, Key>, name: string) => (names[name] ? t(names[name]) : name);
 
 /** A turntable with your character on it, drawn with its own small renderer. */
 class Preview {
@@ -191,11 +168,11 @@ export function openCharacter(first: boolean, onSave: (p: Profile) => void) {
     const { skin, hair, style } = pick.look;
     skinRow.replaceChildren(...SKIN_TONES.map((c, i) => swatch(c, t('windows.character.skinToneN', { n: i + 1, total: SKIN_TONES.length }), i === skin, () => change({ skin: i }))));
     styleRow.replaceChildren(
-      ...HAIR_STYLES.map((name, i) =>
-        h('button.btn', { type: 'button', role: 'radio', 'aria-checked': String(i === style), class: i === style ? 'on' : '', onclick: () => change({ style: i }) }, named(STYLE_NAME, name)),
+      ...HAIR_STYLES.map((_, i) =>
+        h('button.btn', { type: 'button', role: 'radio', 'aria-checked': String(i === style), class: i === style ? 'on' : '', onclick: () => change({ style: i }) }, hairStyleName(i)),
       ),
     );
-    hairRow.replaceChildren(...HAIR_COLORS.map((c, i) => swatch(c, named(COLOR_NAME, HAIR_COLOR_NAMES[i]), i === hair, () => change({ hair: i }))));
+    hairRow.replaceChildren(...HAIR_COLORS.map((c, i) => swatch(c, hairColorName(i), i === hair, () => change({ hair: i }))));
     shirtRow.replaceChildren(...AVATAR_COLORS.map((c) => swatch(c, t('windows.character.shirtN', { color: c }), c === pick.color, () => change({}, c))));
   };
   paint();
