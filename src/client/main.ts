@@ -18,7 +18,7 @@ import { DrunkVision } from './world/drunk';
 import { Booze, type Stage as Feeling } from './booze';
 import { djFrame, djTime } from './dnb';
 import { openBar } from './ui/bar';
-import { DRINK_BY_ID, ROOF, ROOF_NAME, type Drink, type DrinkId } from '../shared/rooftop';
+import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
@@ -53,7 +53,7 @@ import { openAccounts, routeAccountsMessage } from './ui/accounts';
 import { openServices } from './ui/services';
 import { openQueue } from './ui/queue';
 import { openUpgrade, restarting, showRestarting, showUpgraded } from './ui/upgrade';
-import { openHelp, renderCaffeine, renderChat, renderPeople, renderWorkers, updateSpeaking } from './ui/hud';
+import { localizeHud, openHelp, renderCaffeine, renderChat, renderPeople, renderWorkers, updateSpeaking } from './ui/hud';
 import { Compass, type Bearing } from './ui/compass';
 import { openCharacter } from './ui/character';
 import { openSettings } from './ui/settings';
@@ -77,6 +77,10 @@ import { whereabouts } from './ui/whereabouts';
 import { wayTo } from './walkto';
 import { MeetingBoardTexture, MeetingSignTexture, meetingStage } from './world/meeting';
 import { issueMeeting, openMeeting, type MeetingPreset } from './ui/meeting';
+import { t } from './i18n';
+
+// index.html's HUD is written in English: into your language before anything else draws on it.
+localizeHud();
 
 // ---- Renderer & scene ---------------------------------------------------------------------------
 const canvas = $('scene') as HTMLCanvasElement;
@@ -746,22 +750,22 @@ function renderProject() {
   if (store.floor === ROOF) {
     const n = builtFloors().length;
     $('project-meta').classList.remove('lobby');
-    $('project-name').textContent = `🍸 ${ROOF_NAME}`;
-    $('project-meta').textContent = `🛗 on top of ${n} floor${n === 1 ? '' : 's'} · 🎧 drum & bass`;
+    $('project-name').textContent = `🍸 ${t('menus.roofName')}`;
+    $('project-meta').textContent = t('menus.roofMeta', { n });
     return;
   }
   if (!p) {
     $('project-name').textContent = '🏢 Agent Office';
-    $('project-meta').textContent = store.floors.length ? '🛗 Take the elevator to a floor' : '🛗 No floors yet — add a project in the elevator';
+    $('project-meta').textContent = t(store.floors.length ? 'menus.lobbyPick' : 'menus.lobbyEmpty');
     // Where to go next, so it shows even with the floor details turned off.
     $('project-meta').classList.add('lobby');
-    office.setProjectName(store.floors.length ? 'Pick a floor' : 'Lobby');
+    office.setProjectName(t(store.floors.length ? 'menus.signPick' : 'menus.signLobby'));
     return;
   }
   const n = store.floors.findIndex((f) => f.id === store.floor);
   $('project-meta').classList.remove('lobby');
   $('project-name').textContent = `🏢 ${p.name}`;
-  $('project-meta').textContent = [n >= 0 && `🛗 floor ${n + 1} of ${store.floors.length}`, p.branch && `⎇ ${p.branch}`, p.dir, `default: ${providerLabel(p.defaultProvider, p)}`].filter(Boolean).join(' · ');
+  $('project-meta').textContent = [n >= 0 && t('menus.floorOf', { n: n + 1, of: store.floors.length }), p.branch && `⎇ ${p.branch}`, p.dir, t('menus.defaultAgent', { agent: providerLabel(p.defaultProvider, p) })].filter(Boolean).join(' · ');
   office.setProjectName(p.name);
 }
 store.on('floors', renderProject);
@@ -985,7 +989,7 @@ function noticeWaiting() {
   const badge = $('floors-waiting');
   badge.textContent = elsewhere ? String(elsewhere) : '';
   badge.classList.toggle('hidden', !elsewhere);
-  $('project').title = elsewhere ? `${elsewhere} worker${elsewhere === 1 ? '' : 's'} on other floors waiting on someone — click to go there` : 'Floors: go to another project';
+  $('project').title = elsewhere ? t('menus.floorsWaitingTitle', { n: elsewhere }) : t('menus.floorsTitle');
 }
 
 // ---- Peers --------------------------------------------------------------------------------------
@@ -2624,7 +2628,7 @@ function renderCrosshair() {
   el.classList.toggle('hidden', !show);
   el.classList.toggle('on', !!target);
   el.classList.toggle('free', free);
-  el.querySelector('.look-hint')!.textContent = relookOnKey ? 'Press a key or click to look around' : 'Click to look around';
+  el.querySelector('.look-hint')!.textContent = t(relookOnKey ? 'menus.lookAroundKey' : 'menus.lookAround');
 }
 
 // ---- Reaching out ---------------------------------------------------------------------------------
@@ -3053,68 +3057,68 @@ $('project').addEventListener('click', () => {
 
 // ---- The HUD: a few buttons on the top bar, everything else in the ☰ menu ----------------------------
 const waitingNow = () => waitingInOrder(store.workers.values());
-const noMedia = () => (window.isSecureContext ? undefined : 'Voice and screen sharing need HTTPS or localhost — use a TLS proxy, --self-signed, or an SSH tunnel');
+const noMedia = () => (window.isSecureContext ? undefined : t('menus.noMedia'));
 const hud = mountHud(
   [
-    { id: 'issues', icon: '📌', label: 'Issues', section: 'Open', count: () => store.issues.items.filter((i) => i.state === 'OPEN').length, run: () => openBoard('issues', net, boardActions()) },
-    { id: 'pulls', icon: '🔀', label: 'Pull requests', section: 'Open', count: () => store.pulls.items.filter((p) => p.state === 'OPEN').length, run: () => openBoard('pulls', net, boardActions()) },
-    { id: 'queue', icon: '📋', label: 'Task queue', section: 'Open', count: () => store.queue.tasks.filter((t) => t.status !== 'done').length, title: () => 'Issues and tasks waiting for a worker', run: showQueue },
-    { id: 'services', icon: '🌐', label: 'Services', section: 'Open', count: () => store.services.items.length, title: () => 'Web servers the workers are running', run: () => openServices() },
-    { id: 'whiteboard', icon: '📝', label: 'Whiteboard', section: 'Open', title: () => 'Draw together, live', run: () => openWhiteboard(net) },
+    { id: 'issues', icon: '📌', label: t('menus.issues'), section: 'Open', count: () => store.issues.items.filter((i) => i.state === 'OPEN').length, run: () => openBoard('issues', net, boardActions()) },
+    { id: 'pulls', icon: '🔀', label: t('menus.pulls'), section: 'Open', count: () => store.pulls.items.filter((p) => p.state === 'OPEN').length, run: () => openBoard('pulls', net, boardActions()) },
+    { id: 'queue', icon: '📋', label: t('menus.queue'), section: 'Open', count: () => store.queue.tasks.filter((task) => task.status !== 'done').length, title: () => t('menus.queueTitle'), run: showQueue },
+    { id: 'services', icon: '🌐', label: t('menus.services'), section: 'Open', count: () => store.services.items.length, title: () => t('menus.servicesTitle'), run: () => openServices() },
+    { id: 'whiteboard', icon: '📝', label: t('menus.whiteboard'), section: 'Open', title: () => t('menus.whiteboardTitle'), run: () => openWhiteboard(net) },
     // Up on the top bar while a meeting is on: what's being worked through in the meeting room.
     {
       id: 'meeting',
       icon: '🤝',
-      label: 'Meeting room',
+      label: t('menus.meeting'),
       section: 'Open',
       status: () => store.meeting.current?.status === 'running',
-      chip: () => 'In a meeting',
-      title: () => 'Call a meeting: workers work through a question or a task together',
+      chip: () => t('menus.meetingChip'),
+      title: () => t('menus.meetingTitle'),
       run: () => showMeeting(),
     },
-    { id: 'search', icon: '🔎', label: 'Search', section: 'Open', key: '/', title: () => 'Search the chat and every terminal', run: showSearch },
-    { id: 'elevator', icon: '🛗', label: 'Elevator', section: 'Open', count: () => store.floors.reduce((n, f) => n + (f.id === store.floor ? 0 : f.waiting), 0), title: () => 'Ride to another project', run: showElevator },
-    { id: 'roof', icon: '🍸', label: 'Rooftop bar', section: 'Open', shown: () => !upTop && builtFloors().length > 0, title: () => 'Ride the elevator up to the roof: a DJ, drinks and the city', run: () => ride(ROOF) },
+    { id: 'search', icon: '🔎', label: t('menus.search'), section: 'Open', key: '/', title: () => t('menus.searchTitle'), run: showSearch },
+    { id: 'elevator', icon: '🛗', label: t('menus.elevator'), section: 'Open', count: () => store.floors.reduce((n, f) => n + (f.id === store.floor ? 0 : f.waiting), 0), title: () => t('menus.elevatorTitle'), run: showElevator },
+    { id: 'roof', icon: '🍸', label: t('menus.roof'), section: 'Open', shown: () => !upTop && builtFloors().length > 0, title: () => t('menus.roofTitle'), run: () => ride(ROOF) },
     // In voice, V is push to talk, so leaving is only from here.
-    { id: 'voice', icon: '🎙️', label: () => (voice.inVoice ? 'Leave voice' : 'Join voice'), section: 'Together', key: () => (voice.inVoice ? undefined : 'V'), on: () => voice.inVoice, blocked: noMedia, run: () => void toggleVoice() },
+    { id: 'voice', icon: '🎙️', label: () => t(voice.inVoice ? 'menus.leaveVoice' : 'menus.joinVoice'), section: 'Together', key: () => (voice.inVoice ? undefined : 'V'), on: () => voice.inVoice, blocked: noMedia, run: () => void toggleVoice() },
     // While you're in voice, the top bar keeps the mute button handy. Muted is the usual with push to talk, so it doesn't stand out then.
     {
       id: 'mute',
       icon: () => (voice.muted ? '🔇' : '🎙️'),
-      label: () => (voice.muted ? 'Unmute' : 'Mute'),
+      label: () => t(voice.muted ? 'menus.unmute' : 'menus.mute'),
       section: 'Together',
       key: 'M',
       shown: () => voice.inVoice,
       status: () => voice.inVoice,
       on: () => voice.inVoice,
       tone: () => (voice.muted && !settings.pushToTalk ? 'danger' : undefined),
-      title: () => (voice.muted ? 'Muted: hold V to talk, or M to unmute' : 'Mute (M) · hold V to talk'),
+      title: () => t(voice.muted ? 'menus.mutedTitle' : 'menus.muteTitle'),
       run: () => voice.toggleMute(),
     },
-    { id: 'share', icon: '🖥️', label: () => (voice.sharing ? 'Stop sharing' : 'Share screen'), section: 'Together', on: () => voice.sharing, status: () => voice.sharing, chip: () => 'Sharing', blocked: noMedia, run: () => void toggleShare() },
-    { id: 'decor', icon: '🖼️', label: () => (hanger.active ? 'Stop hanging the picture' : 'Hang a picture'), section: 'Together', key: 'F', on: () => hanger.active, status: () => hanger.active, run: () => (hanger.active ? hanger.cancel() : startHanging()) },
-    { id: 'team', icon: '👥', label: 'Invite teammates', section: 'Together', shown: () => store.invites, run: () => openTeam(net) },
-    { id: 'accounts', icon: '🔑', label: 'Accounts', section: 'Together', shown: () => store.me.admin, title: () => 'Invite people, see who has an account, revoke them', run: () => openAccounts(net) },
-    { id: 'settings', icon: '⚙️', label: 'Settings', section: 'Office', run: showSettings },
-    { id: 'help', icon: '❓', label: 'Controls', section: 'Office', key: 'H', run: openHelp },
+    { id: 'share', icon: '🖥️', label: () => t(voice.sharing ? 'menus.stopSharing' : 'menus.shareScreen'), section: 'Together', on: () => voice.sharing, status: () => voice.sharing, chip: () => t('menus.sharingChip'), blocked: noMedia, run: () => void toggleShare() },
+    { id: 'decor', icon: '🖼️', label: () => t(hanger.active ? 'menus.stopHanging' : 'menus.hangPicture'), section: 'Together', key: 'F', on: () => hanger.active, status: () => hanger.active, run: () => (hanger.active ? hanger.cancel() : startHanging()) },
+    { id: 'team', icon: '👥', label: t('menus.invite'), section: 'Together', shown: () => store.invites, run: () => openTeam(net) },
+    { id: 'accounts', icon: '🔑', label: t('menus.accounts'), section: 'Together', shown: () => store.me.admin, title: () => t('menus.accountsTitle'), run: () => openAccounts(net) },
+    { id: 'settings', icon: '⚙️', label: t('menus.settings'), section: 'Office', run: showSettings },
+    { id: 'help', icon: '❓', label: t('menus.controls'), section: 'Office', key: 'H', run: openHelp },
     {
       id: 'upgrade',
       icon: '⬆️',
-      label: () => (store.upgrade.phase === 'building' ? 'Upgrading…' : store.upgrade.latest ? 'Update the office' : 'Upgrade the office'),
+      label: () => t(store.upgrade.phase === 'building' ? 'menus.upgrading' : store.upgrade.latest ? 'menus.update' : 'menus.upgrade'),
       section: 'Office',
       shown: () => store.upgrade.available,
       // A new version, or one being built, gets a place on the top bar until it's in.
       status: () => !!store.upgrade.latest || store.upgrade.phase === 'building',
-      chip: () => (store.upgrade.phase === 'building' ? 'Upgrading…' : 'Update'),
+      chip: () => t(store.upgrade.phase === 'building' ? 'menus.upgrading' : 'menus.updateChip'),
       tone: () => (store.upgrade.latest && store.upgrade.phase !== 'building' ? 'primary' : undefined),
-      title: () => (store.upgrade.latest ? `New version: ${store.upgrade.latest.subject}` : 'Upgrade the office'),
+      title: () => (store.upgrade.latest ? t('menus.newVersion', { subject: store.upgrade.latest.subject }) : t('menus.upgrade')),
       run: () => openUpgrade(net),
     },
     // Up on the top bar while workers wait on someone (N does the same), next to the Workers button.
     {
       id: 'waiting',
       icon: () => (waitingNow().some((w) => w.status === 'needs_input') ? '🙋' : '✅'),
-      label: 'Next worker that needs you',
+      label: t('menus.nextWaiting'),
       section: 'Open',
       key: 'N',
       shown: () => waitingNow().length > 0,
@@ -3122,7 +3126,7 @@ const hud = mountHud(
       chip: () => waitingLabel(waitingNow()).replace(/^(🙋|✅) /, ''),
       on: () => waitingNow().every((w) => w.status === 'done'),
       tone: () => (waitingNow().some((w) => w.status === 'needs_input') ? 'danger' : undefined),
-      title: () => 'Go to the worker that has waited longest on someone (N)',
+      title: () => t('menus.nextWaitingTitle'),
       run: goToNextWaiting,
     },
   ],
