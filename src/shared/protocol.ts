@@ -981,6 +981,8 @@ export type ClientMsg =
   | { t: 'carry'; issue?: number; title?: string }
   /** An emote (hold G, or 1–7): everyone else on your floor sees your character do it. Rate limited, see EmoteBucket. */
   | { t: 'emote'; emote: EmoteId }
+  /** X: your emote stops (a looping one would keep going otherwise). Not rate limited, and only passed on after an emote. */
+  | { t: 'emote.stop' }
   | { t: 'profile'; name: string; color: string; look: Look }
   /** With `issue`, the worker is there for that GitHub issue: it's assigned on GitHub (so it moves to In progress) and taken off the queue. */
   | { t: 'worker.spawn'; deskId: string; prompt?: string; worktree?: boolean; kind?: WorkerKind; provider?: AgentProvider; model?: string; effort?: AgentEffort; issue?: number }
@@ -1014,6 +1016,10 @@ export type ClientMsg =
   | { t: 'gong' }
   /** Blow the DJ's air horn on the roof; everyone up there hears it. */
   | { t: 'horn' }
+  /** Blow the whistle (L), anywhere: everyone else on your floor hears it. Held, it trills until 'whistle.stop'. */
+  | { t: 'whistle' }
+  /** Let go of L: the trill stops. */
+  | { t: 'whistle.stop' }
   /** Close an issue, or a pull request without merging it; the answer comes back as gh.closed. */
   | { t: 'gh.close'; kind: 'issue' | 'pull'; number: number; comment?: string; reason?: GhCloseReason; deleteBranch?: boolean }
   /** Put labels on an issue or PR and take others off, as the server's gh account; answered with gh.labeled. */
@@ -1172,6 +1178,7 @@ export type ServerMsg =
   /** Someone on your floor hit a golf ball off the tee (see the client's 'golf'). */
   | { t: 'golf'; id: string; yaw: number; loft: number; power: number }
   | { t: 'peer.emote'; id: string; emote: EmoteId }
+  | { t: 'peer.emote.stop'; id: string }
   | { t: 'worker.update'; worker: WorkerInfo }
   | { t: 'worker.remove'; workerId: string }
   | { t: 'worker.worktree'; workerId: string; state: WorktreeState }
@@ -1193,6 +1200,10 @@ export type ServerMsg =
   | { t: 'gong'; why: GongWhy; by?: string; pr?: number }
   /** Someone on the roof blew the DJ's air horn (sent to everyone up there, them too). */
   | { t: 'horn'; by: string }
+  /** Someone on your floor blew the whistle (not sent to them: they hear their own straight away). */
+  | { t: 'whistle'; id: string; by: string }
+  /** They let go of it again. */
+  | { t: 'whistle.stop'; id: string }
   /** Sent to whoever asked to close it. */
   | { t: 'gh.closed'; kind: 'issue' | 'pull'; number: number; error?: string }
   /** Sent to whoever changed them: the labels it has now, or why they didn't change. */
