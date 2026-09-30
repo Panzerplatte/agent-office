@@ -981,6 +981,8 @@ export type ClientMsg =
   | { t: 'carry'; issue?: number; title?: string }
   /** An emote (hold G, or 1–6): everyone else on your floor sees your character do it. Rate limited, see EmoteBucket. */
   | { t: 'emote'; emote: EmoteId }
+  /** X: your emote stops (a looping one would keep going otherwise). Not rate limited, and only passed on after an emote. */
+  | { t: 'emote.stop' }
   | { t: 'profile'; name: string; color: string; look: Look }
   /** With `issue`, the worker is there for that GitHub issue: it's assigned on GitHub (so it moves to In progress) and taken off the queue. */
   | { t: 'worker.spawn'; deskId: string; prompt?: string; worktree?: boolean; kind?: WorkerKind; provider?: AgentProvider; model?: string; effort?: AgentEffort; issue?: number }
@@ -1172,6 +1174,7 @@ export type ServerMsg =
   /** Someone on your floor hit a golf ball off the tee (see the client's 'golf'). */
   | { t: 'golf'; id: string; yaw: number; loft: number; power: number }
   | { t: 'peer.emote'; id: string; emote: EmoteId }
+  | { t: 'peer.emote.stop'; id: string }
   | { t: 'worker.update'; worker: WorkerInfo }
   | { t: 'worker.remove'; workerId: string }
   | { t: 'worker.worktree'; workerId: string; state: WorktreeState }

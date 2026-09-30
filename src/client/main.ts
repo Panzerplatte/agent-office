@@ -43,7 +43,7 @@ import { DesktopNotifier, askNotifyPermission, notifyPermission, waitingOnSomeon
 import { NextUp, waitingInOrder, waitingLabel } from './nextup';
 import { $, h, clip, closeAllModals, doingNow, modalOpen, onDoingChange, onModalChange, openModal, readingNow, toast, STATUS_LABEL } from './ui/dom';
 import { noticeText, t } from './i18n';
-import { deskLabel, deskLabelOf, drinkName, patternLabel, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
+import { deskLabel, deskLabelOf, drinkName, emoteLabel, patternLabel, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
 import { openTerminal, openTerminalFor, routeTerminalMessage, type TerminalFind } from './ui/terminal';
 import { openSearch } from './ui/search';
 import { openChanges, openChangesFor, routeChangesMessage } from './ui/changes';
@@ -74,7 +74,7 @@ import { Arcade } from './ui/arcade';
 import { Cabinet } from './ui/cabinet';
 import { trackTitle } from '../shared/jukebox';
 import { GAME, scoreText } from '../shared/cabinet';
-import { EMOTES, EMOTE_BY_ID, EmoteBucket, type EmoteId } from '../shared/emotes';
+import { EMOTES, EMOTE_BY_ID, EMOTE_EASE_OUT, EmoteBucket, type EmoteId } from '../shared/emotes';
 import { EmoteWheel } from './ui/emotes';
 import { whereabouts } from './ui/whereabouts';
 import { wayTo } from './walkto';
@@ -725,6 +725,9 @@ net.onMessage((msg) => {
     }
     case 'peer.emote':
       remotes.get(msg.id)?.person.emote(msg.emote);
+      break;
+    case 'peer.emote.stop':
+      remotes.get(msg.id)?.person.stopEmote();
       break;
     case 'golf':
       theirShot(msg.id, { yaw: msg.yaw, loft: msg.loft, power: msg.power });
@@ -2392,19 +2395,33 @@ function renderHint() {
   if (climber.active && !modalOpen()) return renderClimbHint(el);
   if (golf.active && !modalOpen()) return renderGolfHint(el);
   const withBall = holdingBall();
-  if ((!target && !carrying && !withBall) || modalOpen()) {
+  const emoting = me.emoteLooping ? me.emoteId : null;
+  if ((!target && !carrying && !withBall && !emoting) || modalOpen()) {
     if (hintKey) {
       el.classList.add('hidden');
       hintKey = '';
     }
     return;
   }
-  const hint = withBall ? ballHint() : carrying ? carryHint(carrying, target) : hintFor(target!);
-  const k = `${withBall ? 'ball!' : `${target?.kind}${target?.deskId ?? ''}`}|${carrying?.issue ?? ''}|${hint.k}`;
+  const hint = withBall ? ballHint() : carrying ? carryHint(carrying, target) : target ? hintFor(target) : emoteHint(emoting!);
+  const k = `${withBall ? 'ball!' : `${target?.kind}${target?.deskId ?? ''}`}|${carrying?.issue ?? ''}|${hint.k}|${emoting ?? ''}`;
   if (k === hintKey) return;
   hintKey = k;
-  el.replaceChildren(...hint.parts);
+  el.replaceChildren(...(emoting ? withStop(hint.parts) : hint.parts));
   el.classList.remove('hidden');
+}
+
+/** The hint bar while your looping emote plays and there's nothing else to say. */
+function emoteHint(id: EmoteId): Hint {
+  const e = EMOTE_BY_ID.get(id)!;
+  return { k: id, parts: [h('span.title', {}, `${e.emoji} ${emoteLabel(e)}`)] };
+}
+
+/** While your looping emote plays, X stops it: that's what the X in the hint bar says, instead of what X does here otherwise. */
+function withStop(parts: (HTMLElement | string)[]): (HTMLElement | string)[] {
+  const stop = key('X', t('menus.emoteStop'));
+  const isX = (p: HTMLElement | string) => typeof p !== 'string' && p.querySelector('.key')?.textContent === 'X';
+  return parts.some(isX) ? parts.map((p) => (isX(p) ? stop : p)) : [...parts, stop];
 }
 
 /** What the hint bar says about the thing you're facing. */
@@ -2739,13 +2756,33 @@ function emote(id: EmoteId) {
 const emoteWheel = new EmoteWheel(emote, (open) => (player.mouseLook = !open));
 $('hud').append(emoteWheel.el);
 
+/** X while your emote plays: it eases out, for you and everyone else on the floor. */
+function stopEmote() {
+  me.stopEmote();
+  hands.stopEmote();
+  fadeEmoji();
+  net.send({ t: 'emote.stop' });
+}
+
+/** The emoji popped up on the screen in first person, while it's there. */
+let emojiPop: HTMLElement | null = null;
+
 /** In first person you can't see the emoji over your head, so it pops up on the screen instead. */
 function popEmoji(id: EmoteId) {
   const e = EMOTE_BY_ID.get(id)!;
-  document.querySelector('.emote-pop')?.remove();
-  const el = h('div.emote-pop', { style: `--secs:${e.seconds}s`, 'aria-hidden': 'true' }, e.emoji);
-  el.addEventListener('animationend', () => el.remove());
+  emojiPop?.remove();
+  // A one-shot fades by itself at the end; a looping one stays up until it's stopped or runs out.
+  const el = h(`div.emote-pop${e.loop ? '.loop' : ''}`, { style: `--secs:${e.seconds}s;--out:${EMOTE_EASE_OUT}s`, 'aria-hidden': 'true' }, e.emoji);
+  el.addEventListener('animationend', () => {
+    if (!e.loop || el.classList.contains('out')) el.remove();
+    if (emojiPop === el && !el.isConnected) emojiPop = null;
+  });
   $('hud').append(el);
+  emojiPop = el;
+}
+
+function fadeEmoji() {
+  emojiPop?.classList.add('out');
 }
 
 /** G opens the emote wheel (hold it and point, or tap it and click); 1–6 play one straight away. */
@@ -2762,6 +2799,13 @@ function emoteKey(e: KeyboardEvent): boolean {
   if (!n) return false;
   emoteWheel.close();
   emote(EMOTES[Number(n[1]) - 1].id);
+  return true;
+}
+
+/** X stops your own emote while it plays (the desk's X waits till it's over). */
+function stopEmoteKey(e: KeyboardEvent): boolean {
+  if (e.code !== 'KeyX' || !me.emoteId) return false;
+  if (!e.repeat) stopEmote();
   return true;
 }
 
@@ -2784,6 +2828,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  if (stopEmoteKey(e)) return;
   // On the ladder, E gets you off it (and nothing else is in reach); W, S and Space climb.
   if (climber.active && (e.code === 'KeyE' || e.code === 'KeyF' || e.code in DESK_KEYS)) {
     if (e.code === 'KeyE') climber.letGo();
@@ -3306,6 +3351,8 @@ function frame(ts?: number) {
   // Pulled away from the tee (sat down, off up the ladder, into the elevator): the club goes back.
   if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop)) golf.stop();
   golf.update(dt);
+  // A dance that keeps going doesn't go with a club in your hands or up the ladder: it stops for everyone.
+  if ((golf.active || climber.active) && me.emoteLooping) stopEmote();
   balls.update(dt);
   office.tee.ball.visible = golf.doing !== 'watch' && now > teeEmptyUntil;
   me.root.position.copy(player.pos);
@@ -3316,6 +3363,13 @@ function frame(ts?: number) {
   me.update(dt, t, (player.moving && player.grounded) || (grip === 'ladder' && player.moving), !player.grounded && !grip && !golf.active, player.speedBoost);
   me.setVoiceLevel(voice.inVoice ? voice.localLevel : 0);
   const firstPerson = player.view === 'first';
+  // Its emoji is over your head again once you can see it there, and back on the screen when you can't.
+  if (emojiPop && !firstPerson) {
+    emojiPop.remove();
+    emojiPop = null;
+  } else if (!emojiPop && firstPerson && me.emoteLooping) popEmoji(me.emoteId!);
+  // A looping one's goes when the emote does: stopped, or run out.
+  else if (emojiPop?.classList.contains('loop') && !me.emoteLooping) fadeEmoji();
   // In first person you are the camera; in third, hide yourself when it's zoomed in right behind your head.
   // At the tee the camera's behind the ball, and you're the one holding the club.
   me.root.visible = golf.active || (!firstPerson && camera.position.distanceTo(headPos.set(player.pos.x, player.pos.y + 1.3, player.pos.z)) > 1.5);

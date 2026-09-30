@@ -84,6 +84,8 @@ interface Client {
   /** When they last blew the DJ's air horn on the roof. */
   lastHornAt: number;
   emotes: EmoteBucket;
+  /** An emote of theirs went out that they haven't stopped: the only time a stop is worth passing on. */
+  emoting: boolean;
   /** Has the floor's whiteboard open. */
   whiteboard: boolean;
   lastWbPointerAt: number;
@@ -914,6 +916,7 @@ export async function startServer(cfg: Config) {
       lastHornAt: 0,
       // A little more lenient than the page's own, so emotes it let through aren't dropped for arriving bunched up.
       emotes: new EmoteBucket(EMOTE_EVERY * 0.8),
+      emoting: false,
       whiteboard: false,
       lastWbPointerAt: 0,
       playing: false,
@@ -1184,7 +1187,16 @@ export async function startServer(cfg: Config) {
         break;
       }
       case 'emote':
-        if (isEmote(msg.emote) && c.emotes.take(Date.now())) toNeighbors(c, { t: 'peer.emote', id: c.id, emote: msg.emote }, true);
+        if (isEmote(msg.emote) && c.emotes.take(Date.now())) {
+          c.emoting = true;
+          toNeighbors(c, { t: 'peer.emote', id: c.id, emote: msg.emote }, true);
+        }
+        break;
+      case 'emote.stop':
+        if (!c.emoting) break;
+        c.emoting = false;
+        // Never dropped for a slow connection, or an endless dance would never end for them.
+        toNeighbors(c, { t: 'peer.emote.stop', id: c.id });
         break;
       case 'sit': {
         // Everyone sees them sit down (or get up), and anyone who comes in later finds them sitting.
