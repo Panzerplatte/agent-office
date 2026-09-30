@@ -181,6 +181,7 @@ export function openHelp() {
     ['O', t('menus.helpPr')],
     ['T', t('menus.helpChat')],
     ['G / 1–6', t('menus.helpEmote')],
+    ['L', t('menus.helpWhistle')],
     ['/', t('menus.helpSearch')],
     ['V', t('menus.helpVoice')],
     ['M', t('menus.helpMute')],

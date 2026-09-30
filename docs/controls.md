@@ -19,6 +19,7 @@ Back to the [README](../README.md).
 | Q | Put back the issue card you're carrying, or drop the basketball |
 | T / Enter | Chat |
 | G / 1–6 | Emote: hold G for the wheel (point and let go) or press 1–6 to wave, give a thumbs up, clap, dance, point or facepalm; everyone on your floor sees it |
+| L | Blow the whistle, anywhere: hold for a long trill, tap for a short tweet; everyone on your floor hears it |
 | / | Search the chat and every terminal on your floor |
 | V | Join voice; in voice, hold to talk (you're muted when you let go) |
 | M | Mute / unmute in voice |
