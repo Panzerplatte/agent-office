@@ -140,7 +140,7 @@ export default strings(
     // Emotes
     emotes: 'Emotes',
     emote: 'Emote',
-    emotePoint: 'Point at one, or 1–6',
+    emotePoint: 'Point at one, or 1–7',
     emoteLetGo: 'Let go of G',
     emoteClick: 'Click',
 
@@ -205,7 +205,7 @@ export default strings(
     helpDog: 'Walk up to the office dog and press E to pet it. When a worker needs input, it runs to that desk and barks. Name it in ⚙️ Settings',
     helpPr: 'Open a pull request for a worker on its own branch, or see the one it has',
     helpChat: 'Chat',
-    helpEmote: 'Emote: hold G, point at one and let go (or tap G and click one), or press 1–6: wave, thumbs up, clap, dance, point, facepalm. Everyone on your floor sees it',
+    helpEmote: 'Emote: hold G, point at one and let go (or tap G and click one), or press 1–7: wave, thumbs up, clap, dance, point, facepalm, middle finger. Everyone on your floor sees it',
     helpSearch: 'Search the chat and every terminal on your floor, back to before the office last restarted',
     helpVoice: 'Join voice. In voice, hold V to talk (push to talk): you’re muted once you let go. Leave voice from the ☰ menu',
     helpMute: 'Mute or unmute your mic in voice. ⚙️ Settings can have you join muted, for push to talk',
@@ -350,7 +350,7 @@ export default strings(
     // Emotes
     emotes: 'Emotes',
     emote: 'Emote',
-    emotePoint: 'Zeig auf eins, oder 1–6',
+    emotePoint: 'Zeig auf eins, oder 1–7',
     emoteLetGo: 'G loslassen',
     emoteClick: 'Klicken',
 
@@ -415,7 +415,7 @@ export default strings(
     helpDog: 'Geh zum Bürohund und drück E, um ihn zu streicheln. Braucht ein Worker eine Eingabe, rennt er zu dem Schreibtisch und bellt. Gib ihm in ⚙️ Einstellungen einen Namen',
     helpPr: 'Einen Pull Request für einen Worker auf seinem eigenen Branch öffnen, oder den ansehen, den er hat',
     helpChat: 'Chat',
-    helpEmote: 'Emote: G halten, auf eins zeigen und loslassen (oder G tippen und eins anklicken), oder 1–6 drücken: winken, Daumen hoch, klatschen, tanzen, zeigen, Facepalm. Alle auf deiner Etage sehen es',
+    helpEmote: 'Emote: G halten, auf eins zeigen und loslassen (oder G tippen und eins anklicken), oder 1–7 drücken: winken, Daumen hoch, klatschen, tanzen, zeigen, Facepalm, Mittelfinger. Alle auf deiner Etage sehen es',
     helpSearch: 'Den Chat und jedes Terminal auf deiner Etage durchsuchen, zurück bis vor den letzten Neustart des Büros',
     helpVoice: 'Sprachchat beitreten. Im Sprachchat V halten zum Sprechen (Push-to-Talk): Sobald du loslässt, bist du stumm. Verlassen über das ☰-Menü',
     helpMute: 'Dein Mikro im Sprachchat stumm- oder lautschalten. In ⚙️ Einstellungen kannst du stumm beitreten, für Push-to-Talk',

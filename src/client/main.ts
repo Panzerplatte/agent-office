@@ -2748,7 +2748,7 @@ function popEmoji(id: EmoteId) {
   $('hud').append(el);
 }
 
-/** G opens the emote wheel (hold it and point, or tap it and click); 1–6 play one straight away. */
+/** G opens the emote wheel (hold it and point, or tap it and click); 1–7 play one straight away. */
 function emoteKey(e: KeyboardEvent): boolean {
   if (e.code === 'KeyG') {
     if (!e.repeat) emoteWheel.press();
@@ -2758,7 +2758,7 @@ function emoteKey(e: KeyboardEvent): boolean {
     emoteWheel.close();
     return true;
   }
-  const n = /^(?:Digit|Numpad)([1-6])$/.exec(e.code);
+  const n = /^(?:Digit|Numpad)([1-7])$/.exec(e.code);
   if (!n) return false;
   emoteWheel.close();
   emote(EMOTES[Number(n[1]) - 1].id);
@@ -2790,7 +2790,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   // At the golf tee, E puts the club back (Space swings, see Golfer); nothing else is in reach, and no emotes mid-swing.
-  if (golf.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-6]$/.test(e.code))) {
+  if (golf.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
     if (e.code === 'KeyE') golf.stop();
     return;
   }

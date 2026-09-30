@@ -202,7 +202,7 @@ button { font-family: inherit; }
 }
 .crosshair.free .look-hint { display: block; }
 .crosshair.on .look-hint { transform: translateX(-50%) scale(.625); transform-origin: top center; }
-/* The emote wheel (hold G): six emotes round a ring in the middle of the screen, over the crosshair. */
+/* The emote wheel (hold G): seven emotes round a ring in the middle of the screen, over the crosshair. */
 .emote-wheel { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(circle, rgba(43,45,66,.28), transparent 45%); }
 .emote-wheel .ring {
   position: relative; width: 288px; height: 288px; border-radius: 50%;

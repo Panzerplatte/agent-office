@@ -180,7 +180,7 @@ export function openHelp() {
     ['🐶', t('menus.helpDog')],
     ['O', t('menus.helpPr')],
     ['T', t('menus.helpChat')],
-    ['G / 1–6', t('menus.helpEmote')],
+    ['G / 1–7', t('menus.helpEmote')],
     ['/', t('menus.helpSearch')],
     ['V', t('menus.helpVoice')],
     ['M', t('menus.helpMute')],
