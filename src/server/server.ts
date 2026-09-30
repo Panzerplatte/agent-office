@@ -39,6 +39,7 @@ import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
 import { lookFromSeed, sanitizeLook } from '../shared/avatar.js';
 import { EMOTE_EVERY, EmoteBucket, isEmote } from '../shared/emotes.js';
+import { WHISTLE_SERVER_EVERY, WhistleGate, whistleHearers } from '../shared/whistle.js';
 import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
@@ -83,6 +84,9 @@ interface Client {
   lastGolfAt: number;
   /** When they last blew the DJ's air horn on the roof. */
   lastHornAt: number;
+  /** When they may blow the whistle again (see 'whistle'), and whether it's still trilling. */
+  whistle: WhistleGate;
+  whistling: boolean;
   emotes: EmoteBucket;
   /** An emote of theirs went out that they haven't stopped: the only time a stop is worth passing on. */
   emoting: boolean;
@@ -914,6 +918,8 @@ export async function startServer(cfg: Config) {
       lastGongAt: 0,
       lastGolfAt: 0,
       lastHornAt: 0,
+      whistle: new WhistleGate(WHISTLE_SERVER_EVERY),
+      whistling: false,
       // A little more lenient than the page's own, so emotes it let through aren't dropped for arriving bunched up.
       emotes: new EmoteBucket(EMOTE_EVERY * 0.8),
       emoting: false,
@@ -1496,6 +1502,17 @@ export async function startServer(cfg: Config) {
         for (const o of clients.values()) if (o.peer.floor === ROOF) sendTo(o, { t: 'horn', by: who });
         break;
       }
+      case 'whistle': {
+        if (!c.peer.floor || !c.whistle.take(Date.now())) break;
+        c.whistling = true;
+        for (const o of whistleHearers(clients.values(), c, (p) => p.peer.floor)) sendTo(o, { t: 'whistle', id: c.id, by: who });
+        break;
+      }
+      case 'whistle.stop':
+        if (!c.whistling) break;
+        c.whistling = false;
+        toNeighbors(c, { t: 'whistle.stop', id: c.id });
+        break;
       case 'gh.close': {
         const floor = here();
         const n = num(msg.number);

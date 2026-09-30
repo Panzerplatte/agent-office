@@ -18,7 +18,8 @@ Back to the [README](../README.md).
 | F | Hang a picture from the web on a wall (scroll to size it, click to hang it); at the ashtray on the balcony, pick a joint to smoke |
 | Q | Put back the issue card you're carrying, or drop the basketball |
 | T / Enter | Chat |
-| G / 1–6 | Emote: hold G for the wheel (point and let go) or press 1–6 to wave, give a thumbs up, clap, dance, point or facepalm; everyone on your floor sees it. Wave, clap and dance keep going until you press X (wave stops by itself after 8 seconds, clap after 10, dance never); a new emote takes over from the one playing |
+| G / 1–6 | Emote: hold G for the wheel (point and let go) or press 1–6 to wave, give a thumbs up, clap, dance, point or facepalm; everyone on your floor sees it |
+| L | Blow the whistle, anywhere: hold for a long trill, tap for a short tweet; everyone on your floor hears it |
 | / | Search the chat and every terminal on your floor |
 | V | Join voice; in voice, hold to talk (you're muted when you let go) |
 | M | Mute / unmute in voice |

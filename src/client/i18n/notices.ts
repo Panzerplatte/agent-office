@@ -105,6 +105,7 @@ const texts = strings(
     'arcadeLostGame': "🕹️ The office lost track of your game, so here's a new one",
     'arcadeLeft': '{name} stepped away from the arcade',
     'airHorn': '📯 {name} blew the air horn!',
+    'whistle': '📣 {name} blew the whistle!',
 
     // Breaks: the balcony, the bar and the coffee machine
     'smokeBreak': '🚬 Smoke break',
@@ -227,6 +228,7 @@ const texts = strings(
     'arcadeLostGame': '🕹️ Das Büro hat dein Spiel aus den Augen verloren, hier ist ein neues',
     'arcadeLeft': '{name} hat den Automaten verlassen',
     'airHorn': '📯 {name} hat das Signalhorn geblasen!',
+    'whistle': '📣 {name} hat in die Trillerpfeife geblasen!',
 
     'smokeBreak': '🚬 Raucherpause',
     'smokeStubbed': 'Du drückst sie im Aschenbecher aus',
