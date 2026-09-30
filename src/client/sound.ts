@@ -1223,6 +1223,80 @@ export class OfficeSound {
     this.count('horn');
   }
 
+  /**
+   * A referee's whistle (Trillerpfeife), yours or from `at`: a shrill tone near 3 kHz that the pea
+   * inside rattles, pitch and loudness wobbling some 30 times a second, with a little breath through
+   * it. It trills until the returned function stops it (a tap is still a short "tweet"), and for at
+   * most `maxSecs`.
+   */
+  whistle(at?: Pos, maxSecs = 3): () => void {
+    const ctx = this.ctx;
+    if (!ctx) return () => {};
+    this.count('whistle');
+    const out = at ? this.panner(at, 3, 0.8) : ctx.createGain();
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.01;
+    const f = rand(2900, 3300);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t0);
+    // Sharp: full blast in a few milliseconds.
+    env.gain.linearRampToValueAtTime(0.32, t0 + 0.008);
+    env.connect(out);
+    // The pea: amplitude and pitch wobble together, a touch unevenly.
+    const trill = ctx.createGain();
+    trill.gain.value = 0.62;
+    trill.connect(env);
+    const pea = ctx.createOscillator();
+    pea.type = 'triangle';
+    pea.frequency.setValueAtTime(rand(26, 34), t0);
+    pea.frequency.linearRampToValueAtTime(rand(28, 38), t0 + maxSecs);
+    const amDepth = ctx.createGain();
+    amDepth.gain.value = 0.38;
+    pea.connect(amDepth).connect(trill.gain);
+    const fmDepth = ctx.createGain();
+    fmDepth.gain.value = f * 0.05;
+    pea.connect(fmDepth);
+    const sources: AudioScheduledSourceNode[] = [pea];
+    // The tone, with a quieter octave above to make it shrill; each scoops up into the note as you blow.
+    for (const [mul, gain] of [
+      [1, 1],
+      [2, 0.12],
+    ]) {
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(f * mul * 0.9, t0);
+      o.frequency.exponentialRampToValueAtTime(f * mul, t0 + 0.04);
+      const d = ctx.createGain();
+      d.gain.value = mul;
+      fmDepth.connect(d).connect(o.frequency);
+      const g = ctx.createGain();
+      g.gain.value = gain;
+      o.connect(g).connect(trill);
+      sources.push(o);
+    }
+    // Breath through the mouthpiece.
+    const breath = this.noise(this.buf.white, true);
+    const hiss = ctx.createGain();
+    hiss.gain.value = 0.05;
+    breath.connect(biquad(ctx, 'bandpass', f, 1.2)).connect(hiss).connect(env);
+    sources.push(breath);
+    for (const s of sources) s.start(t0);
+    let stopped = false;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      clearTimeout(timer);
+      // A tap still gets a whole tweet.
+      const end = Math.max(ctx.currentTime, t0 + 0.14);
+      env.gain.cancelScheduledValues(end);
+      env.gain.setValueAtTime(0.32, end);
+      env.gain.linearRampToValueAtTime(0, end + 0.04);
+      for (const s of sources) s.stop(end + 0.06);
+      sources[0].onended = () => out.disconnect();
+    };
+    const timer = window.setTimeout(stop, maxSecs * 1000);
+    return stop;
+  }
+
   /** A drink poured at the bar: ice into the glass, a splash, and a clink. */
   pour(at: Pos) {
     const ctx = this.ctx;

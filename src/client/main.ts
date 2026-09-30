@@ -76,6 +76,7 @@ import { trackTitle } from '../shared/jukebox';
 import { GAME, scoreText } from '../shared/cabinet';
 import { EMOTES, EMOTE_BY_ID, EmoteBucket, type EmoteId } from '../shared/emotes';
 import { EmoteWheel } from './ui/emotes';
+import { WHISTLE_MAX_SECS, WhistleGate } from '../shared/whistle';
 import { whereabouts } from './ui/whereabouts';
 import { wayTo } from './walkto';
 import { MeetingBoardTexture, MeetingSignTexture, meetingStage } from './world/meeting';
@@ -736,6 +737,18 @@ net.onMessage((msg) => {
       if (!upTop) break;
       sound.horn();
       if (msg.by !== store.profile.name) toast(t('notices.airHorn', { name: msg.by }));
+      break;
+    case 'whistle': {
+      // From their mouth, where they stand.
+      whistles.get(msg.id)?.();
+      const at = remotes.get(msg.id)?.person.root.position ?? store.peers.get(msg.id);
+      whistles.set(msg.id, sound.whistle(at && { x: at.x, y: at.y + 1.5, z: at.z }, WHISTLE_MAX_SECS));
+      toast(t('notices.whistle', { name: msg.by }));
+      break;
+    }
+    case 'whistle.stop':
+      whistles.get(msg.id)?.();
+      whistles.delete(msg.id);
       break;
   }
 });
@@ -1748,6 +1761,29 @@ function orderDrink(d: Drink) {
     if (player.view === 'first') hands.sip();
     if (!cut) toast(t('notices.barDrink', { emoji: drink.emoji, drink: drinkName(drink), cheers: CHEERS[drink.id]?.() ?? t('notices.cheers') }));
   }, 1500);
+}
+
+// ---- The whistle ---------------------------------------------------------------------------------
+/** The same limit the server keeps, so a whistle you hear yourself blow is one everyone else hears too. */
+const whistleLimit = new WhistleGate();
+/** Stops your own trill, while you hold L. */
+let myWhistle: (() => void) | null = null;
+/** Stops each trill someone else on your floor is blowing, by who. */
+const whistles = new Map<string, () => void>();
+
+/** L: the whistle, anywhere, for everyone on your floor. You hear it straight away; it trills until you let go. */
+function blowWhistle() {
+  if (!store.floor || myWhistle || !whistleLimit.take(performance.now())) return;
+  myWhistle = sound.whistle(undefined, WHISTLE_MAX_SECS);
+  reach();
+  net.send({ t: 'whistle' });
+}
+
+function stopWhistle() {
+  if (!myWhistle) return;
+  myWhistle();
+  myWhistle = null;
+  net.send({ t: 'whistle.stop' });
 }
 
 let lastHorn = 0;
@@ -2802,6 +2838,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (emoteKey(e)) return;
+  // Not an office key, so you can whistle on the move.
+  if (e.code === 'KeyL') {
+    if (!e.repeat) blowWhistle();
+    return;
+  }
   if (officeKey(e)) player.clearKeys();
 });
 window.addEventListener('keyup', (e) => {
@@ -2809,6 +2850,9 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'KeyE') letFly();
 });
 window.addEventListener('blur', () => (windFrom = 0));
+// Like V, letting go of L stops the whistle wherever the key comes up.
+window.addEventListener('keyup', (e) => e.code === 'KeyL' && stopWhistle(), true);
+window.addEventListener('blur', stopWhistle);
 // First person with the mouse captured, the button winds up a shot like E does (see player.onClick).
 window.addEventListener('pointerup', (e) => {
   if (e.button === 0 && windFrom && player.locked) letFly();
