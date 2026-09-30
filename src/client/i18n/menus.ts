@@ -143,6 +143,8 @@ export default strings(
     emotePoint: 'Point at one, or 1–6',
     emoteLetGo: 'Let go of G',
     emoteClick: 'Click',
+    /** In the hint bar while your looping emote plays: X stops it. */
+    emoteStop: 'Stop',
 
     // The rooftop bar's menu
     close: 'Close',
@@ -354,6 +356,7 @@ export default strings(
     emotePoint: 'Zeig auf eins, oder 1–6',
     emoteLetGo: 'G loslassen',
     emoteClick: 'Klicken',
+    emoteStop: 'Aufhören',
 
     // Die Karte der Dachbar
     close: 'Schließen',

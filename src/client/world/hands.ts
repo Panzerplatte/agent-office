@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EMOTE_BY_ID, type Emote, type EmoteId } from '../../shared/emotes';
+import { EMOTE_BY_ID, stoppedAt, type Emote, type EmoteId } from '../../shared/emotes';
 import type { CarriedIssue, Smokable, Theme } from '../../shared/protocol';
 import type { Drink } from '../../shared/rooftop';
 import { OpenBook } from './book';
@@ -85,8 +85,8 @@ export class Hands {
   private lightLevel = 1;
   /** Seconds into a smoke break, or -1. Runs in step with your character's (see Person.setSmoking). */
   private smokeT = -1;
-  /** The emote your character is doing, and how far into it (see Person.emote). */
-  private emoting: { emote: Emote; t: number } | null = null;
+  /** The emote your character is doing, how far into it and when it ends (see Person.emote). */
+  private emoting: { emote: Emote; t: number; end: number } | null = null;
   /** Sticks up out of the right fist for a thumbs up. */
   private thumbUp: THREE.Mesh;
   /** Your shirt and skin, under whatever costume the hands wear. */
@@ -295,8 +295,14 @@ export class Hands {
   /** Your hands' half of an emote: a wave, a thumbs up, a clap… in front of your eyes. */
   emote(id: EmoteId) {
     const emote = EMOTE_BY_ID.get(id);
-    this.emoting = emote ? { emote, t: 0 } : null;
+    this.emoting = emote ? { emote, t: 0, end: emote.seconds } : null;
     this.thumbUp.visible = id === 'thumbs';
+  }
+
+  /** Stops the emote (X), easing out as Person.stopEmote does. */
+  stopEmote() {
+    const e = this.emoting;
+    if (e) e.end = stoppedAt(e.t, e.end);
   }
 
   /** Raise the mug for a sip, once the right hand is back from the coffee machine. */
@@ -481,13 +487,13 @@ export class Hands {
     const e = this.emoting!;
     e.t += dt;
     const u = e.t;
-    const { seconds, id } = e.emote;
-    if (u >= seconds) {
+    const { id } = e.emote;
+    if (u >= e.end) {
       this.emoting = null;
       this.thumbUp.visible = false;
       return;
     }
-    const k = emoteEnvelope(u, seconds);
+    const k = emoteEnvelope(u, e.end);
     const r = this.right.group;
     switch (id) {
       case 'wave':

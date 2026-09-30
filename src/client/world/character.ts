@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { HAIR_COLORS, HAIR_STYLES, SKIN_TONES, type Look } from '../../shared/avatar';
-import { EMOTE_BY_ID, type Emote, type EmoteId } from '../../shared/emotes';
+import { EMOTE_BY_ID, EMOTE_EASE_OUT, stoppedAt, type Emote, type EmoteId } from '../../shared/emotes';
 import type { CarriedIssue, Smokable, Theme, WorkerAction, WorkerStatus, WorkerTask } from '../../shared/protocol';
 import type { Drink } from '../../shared/rooftop';
 import { isAsleep, type WorkerPr } from '../../shared/status';
@@ -28,9 +28,12 @@ export function reachCurve(p: number): number {
   return 1 - u * u * (3 - 2 * u);
 }
 
-/** 0 → 1 → 0 over an emote `t` seconds into it: eased in quickly, out a little slower at the end. */
-export function emoteEnvelope(t: number, seconds: number): number {
-  const k = THREE.MathUtils.clamp(Math.min(t / 0.18, (seconds - t) / 0.3), 0, 1);
+/**
+ * 0 → 1 → 0 over an emote `t` seconds into it, ending `end` seconds in: eased in quickly, out a
+ * little slower at the end. A looping emote stays at 1 all the way to its end (Infinity: never).
+ */
+export function emoteEnvelope(t: number, end: number): number {
+  const k = THREE.MathUtils.clamp(Math.min(t / 0.18, (end - t) / 0.3), 0, 1);
   return k * k * (3 - 2 * k);
 }
 
@@ -387,8 +390,11 @@ export class Person {
   private wispIn = 0;
   /** Where smoke comes off: the lit end (a wisp) or the mouth, blowing it out along `dir`; a joint's is thicker. */
   onSmoke: ((kind: 'wisp' | 'exhale', at: THREE.Vector3, dir: THREE.Vector3, what: Smokable) => void) | null = null;
-  /** The emote being played, how far into it (seconds), and its emoji over their head. */
-  private emoting: { emote: Emote; t: number; pop: THREE.Sprite; size: THREE.Vector2 } | null = null;
+  /**
+   * The emote being played, how far into it (seconds), when it ends (its `seconds`, sooner once
+   * it's stopped), and its emoji over their head.
+   */
+  private emoting: { emote: Emote; t: number; end: number; pop: THREE.Sprite; size: THREE.Vector2 } | null = null;
   /** A thumb up and a pointing finger on the right hand, out only for those emotes. */
   private thumb: THREE.Mesh;
   private finger: THREE.Mesh;
@@ -742,14 +748,26 @@ export class Person {
     const size = new THREE.Vector2(pop.scale.x, pop.scale.y);
     pop.scale.set(0.001, 0.001, 1);
     this.root.add(pop);
-    this.emoting = { emote, t: 0, pop, size };
+    this.emoting = { emote, t: 0, end: emote.seconds, pop, size };
     this.thumb.visible = id === 'thumbs';
     this.finger.visible = id === 'point';
   }
 
-  /** The emote playing now, if any. */
+  /** The emote playing now, if any, even while it eases out. */
   get emoteId(): EmoteId | null {
     return this.emoting?.emote.id ?? null;
+  }
+
+  /** A looping emote is playing, and hasn't been stopped or run out yet. */
+  get emoteLooping(): boolean {
+    const e = this.emoting;
+    return !!e && e.emote.loop && e.end === e.emote.seconds && e.t < e.end - EMOTE_EASE_OUT;
+  }
+
+  /** Stops the emote (X): it eases out the way it does when it runs out. */
+  stopEmote() {
+    const e = this.emoting;
+    if (e) e.end = stoppedAt(e.t, e.end);
   }
 
   private endEmote() {
@@ -768,9 +786,10 @@ export class Person {
   private emoteStep(dt: number, still: number) {
     const e = this.emoting!;
     e.t += dt;
-    const { seconds, id } = e.emote;
-    if (e.t >= seconds) return this.endEmote();
-    const k = emoteEnvelope(e.t, seconds);
+    const { id } = e.emote;
+    const { end } = e;
+    if (e.t >= end) return this.endEmote();
+    const k = emoteEnvelope(e.t, end);
     const u = e.t;
     const pose = (arm: THREE.Object3D, x: number, z: number) => {
       arm.rotation.x = THREE.MathUtils.lerp(arm.rotation.x, x, k);
@@ -822,12 +841,12 @@ export class Person {
         this.head.rotation.y = Math.sin(u * 5) * 0.15 * k;
         break;
     }
-    // The emoji pops in over their head, rises a little, wobbles, and fades at the end.
+    // The emoji pops in over their head, rises a little, wobbles, and fades at the end (a looping one stays up till then).
     const pop = popCurve(u / 0.3);
     e.pop.scale.set(e.size.x * pop, e.size.y * pop, 1);
     e.pop.position.y = 2.42 + this.emojiLift + Math.min(u, 1.5) * 0.12;
     e.pop.material.rotation = Math.sin(u * 7) * 0.12;
-    e.pop.material.opacity = THREE.MathUtils.clamp((seconds - u) / 0.4, 0, 1);
+    e.pop.material.opacity = THREE.MathUtils.clamp((end - u) / EMOTE_EASE_OUT, 0, 1);
   }
 
   get smoking(): Smokable | false {

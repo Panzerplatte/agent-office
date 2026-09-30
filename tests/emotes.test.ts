@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EMOTES, EMOTE_BURST, EMOTE_EVERY, EmoteBucket, isEmote } from '../src/shared/emotes.js';
+import { EMOTES, EMOTE_BURST, EMOTE_EASE_OUT, EMOTE_EVERY, EmoteBucket, isEmote, stoppedAt } from '../src/shared/emotes.js';
+import { emoteEnvelope } from '../src/client/world/character.js';
 
 test('the wheel has the six emotes from the issue, each with an emoji', () => {
   assert.deepEqual(
@@ -47,4 +48,47 @@ test("the server's more lenient bucket lets through everything the page's does, 
     assert.ok(server.take(t + delay), `emote ${sent} sent at ${t} arrives at ${t + delay}`);
   }
   assert.ok(sent > EMOTE_BURST + 3);
+});
+
+test('dance, clap and wave loop; dance for as long as you like, the others up to a cap', () => {
+  const loops = EMOTES.filter((e) => e.loop).map((e) => e.id);
+  assert.deepEqual(loops, ['wave', 'clap', 'dance']);
+  for (const e of EMOTES.filter((e) => e.loop)) {
+    if (e.id === 'dance') assert.equal(e.seconds, Infinity, 'dance is endless');
+    else assert.ok(Number.isFinite(e.seconds) && e.seconds >= 5 && e.seconds <= 30, `${e.id} stops by itself after ${e.seconds}s`);
+  }
+  assert.deepEqual(EMOTES.filter((e) => e.seconds === Infinity).map((e) => e.id), ['dance'], 'only a looping emote can be endless');
+});
+
+test('the one-shots are as they were', () => {
+  const oneShots = Object.fromEntries(EMOTES.filter((e) => !e.loop).map((e) => [e.id, e.seconds]));
+  assert.deepEqual(oneShots, { thumbs: 1.8, point: 2, facepalm: 2.4 });
+});
+
+test('a looping emote stays at full swing, with no dip from one cycle to the next', () => {
+  for (const end of [10, Infinity]) {
+    for (let t = 0.2; t < Math.min(end - EMOTE_EASE_OUT, 600); t += 0.01) assert.equal(emoteEnvelope(t, end), 1, `at ${t.toFixed(2)}s`);
+  }
+});
+
+test('stopping eases out the way running out does', () => {
+  const t = 123.4;
+  const end = stoppedAt(t, Infinity);
+  assert.equal(end, t + EMOTE_EASE_OUT);
+  // Just the same curve as an emote that was always going to end then.
+  for (let d = 0; d <= EMOTE_EASE_OUT; d += 0.05) assert.ok(Math.abs(emoteEnvelope(t + d, end) - emoteEnvelope(1 + d, 1 + EMOTE_EASE_OUT)) < 1e-9);
+  assert.equal(emoteEnvelope(t, end), 1, 'no jump when X goes down');
+  assert.equal(emoteEnvelope(end, end), 0, 'all the way out at the end');
+  let last = 1;
+  for (let d = 0; d <= EMOTE_EASE_OUT; d += 0.02) {
+    const k = emoteEnvelope(t + d, end);
+    assert.ok(k <= last + 1e-9, 'only ever on its way down');
+    last = k;
+  }
+});
+
+test('stopping near the end, or stopping twice, never makes an emote last longer', () => {
+  assert.equal(stoppedAt(9.9, 10), 10);
+  const once = stoppedAt(3, 10);
+  assert.equal(stoppedAt(3.2, once), once);
 });
