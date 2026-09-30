@@ -139,6 +139,7 @@ export default strings(
     'emote.dance': 'Dance',
     'emote.point': 'Point',
     'emote.facepalm': 'Facepalm',
+    'emote.finger': 'Middle finger',
     // Hair styles and colors (shared/avatar), by their English names.
     'hairStyle.short': 'Short',
     'hairStyle.long': 'Long',
@@ -282,6 +283,7 @@ export default strings(
     'emote.dance': 'Tanzen',
     'emote.point': 'Zeigen',
     'emote.facepalm': 'Facepalm',
+    'emote.finger': 'Mittelfinger',
     'hairStyle.short': 'Kurz',
     'hairStyle.long': 'Lang',
     'hairStyle.bun': 'Dutt',

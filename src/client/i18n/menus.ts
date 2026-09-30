@@ -140,7 +140,7 @@ export default strings(
     // Emotes
     emotes: 'Emotes',
     emote: 'Emote',
-    emotePoint: 'Point at one, or 1–6',
+    emotePoint: 'Point at one, or 1–7',
     emoteLetGo: 'Let go of G',
     emoteClick: 'Click',
     /** In the hint bar while your looping emote plays: X stops it. */
@@ -353,7 +353,7 @@ export default strings(
     // Emotes
     emotes: 'Emotes',
     emote: 'Emote',
-    emotePoint: 'Zeig auf eins, oder 1–6',
+    emotePoint: 'Zeig auf eins, oder 1–7',
     emoteLetGo: 'G loslassen',
     emoteClick: 'Klicken',
     emoteStop: 'Aufhören',

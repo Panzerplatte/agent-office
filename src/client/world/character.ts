@@ -750,7 +750,7 @@ export class Person {
     this.root.add(pop);
     this.emoting = { emote, t: 0, end: emote.seconds, pop, size };
     this.thumb.visible = id === 'thumbs';
-    this.finger.visible = id === 'point';
+    this.finger.visible = id === 'point' || id === 'finger';
   }
 
   /** The emote playing now, if any, even while it eases out. */
@@ -839,6 +839,11 @@ export class Person {
         this.body.rotation.x += 0.1 * k;
         this.head.rotation.x += 0.3 * k;
         this.head.rotation.y = Math.sin(u * 5) * 0.15 * k;
+        break;
+      case 'finger':
+        // Arm up and out in front, the middle finger pointing up past the fist, with a jab to start.
+        pose(this.armL, -2.2 - Math.exp(-u * 4) * Math.sin(u * 16) * 0.15, 0.15);
+        this.head.rotation.z = 0.08 * k;
         break;
     }
     // The emoji pops in over their head, rises a little, wobbles, and fades at the end (a looping one stays up till then).

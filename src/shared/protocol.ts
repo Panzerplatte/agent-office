@@ -979,7 +979,7 @@ export type ClientMsg =
   | { t: 'sit'; seat?: string }
   /** You picked an issue card up off the board (or put it down again, no issue): everyone sees it in your hands. */
   | { t: 'carry'; issue?: number; title?: string }
-  /** An emote (hold G, or 1–6): everyone else on your floor sees your character do it. Rate limited, see EmoteBucket. */
+  /** An emote (hold G, or 1–7): everyone else on your floor sees your character do it. Rate limited, see EmoteBucket. */
   | { t: 'emote'; emote: EmoteId }
   /** X: your emote stops (a looping one would keep going otherwise). Not rate limited, and only passed on after an emote. */
   | { t: 'emote.stop' }

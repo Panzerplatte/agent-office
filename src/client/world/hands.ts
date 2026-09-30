@@ -89,6 +89,8 @@ export class Hands {
   private emoting: { emote: Emote; t: number; end: number } | null = null;
   /** Sticks up out of the right fist for a thumbs up. */
   private thumbUp: THREE.Mesh;
+  /** Sticks up out of the right fist for the middle finger. */
+  private middleUp: THREE.Mesh;
   /** Your shirt and skin, under whatever costume the hands wear. */
   private shirt: string;
   private skinTone: string;
@@ -126,6 +128,9 @@ export class Hands {
     this.thumbUp.rotation.z = 0.3;
     this.thumbUp.visible = false;
     this.right.group.add(this.thumbUp);
+    this.middleUp = mesh(new THREE.CapsuleGeometry(0.02, 0.06, 4, 10), this.skin, -0.005, 0.08, -0.03, false);
+    this.middleUp.visible = false;
+    this.right.group.add(this.middleUp);
     // Tipped back, so you look down onto its front.
     this.holder.rotation.x = -0.35;
     this.scene.add(this.holder);
@@ -297,6 +302,7 @@ export class Hands {
     const emote = EMOTE_BY_ID.get(id);
     this.emoting = emote ? { emote, t: 0, end: emote.seconds } : null;
     this.thumbUp.visible = id === 'thumbs';
+    this.middleUp.visible = id === 'finger';
   }
 
   /** Stops the emote (X), easing out as Person.stopEmote does. */
@@ -490,7 +496,7 @@ export class Hands {
     const { id } = e.emote;
     if (u >= e.end) {
       this.emoting = null;
-      this.thumbUp.visible = false;
+      this.thumbUp.visible = this.middleUp.visible = false;
       return;
     }
     const k = emoteEnvelope(u, e.end);
@@ -546,6 +552,12 @@ export class Hands {
         r.position.y += (0.17 + Math.sin(u * 5) * 0.01) * k;
         r.position.z += 0.2 * k;
         r.rotation.x += 0.9 * k;
+        break;
+      case 'finger':
+        // Up in front of you, fist level and middle finger up, with a jab that settles.
+        r.position.x -= 0.12 * k;
+        r.position.y += (0.14 + Math.exp(-u * 4) * Math.sin(u * 16) * 0.03) * k;
+        r.rotation.z += 0.2 * k;
         break;
     }
   }
