@@ -29,7 +29,7 @@ import { MAX_PLAYERS, type DartsState } from '../shared/darts';
 import { Cueist } from './pool';
 import { PoolBalls, seatColor } from './world/pool';
 import { sideName } from './ui/pool';
-import { MAX_PLAYERS as POOL_PLAYERS, type PoolState } from '../shared/pool';
+import { MAX_PLAYERS as POOL_PLAYERS, isSolo, type PoolState } from '../shared/pool';
 import { Hands } from './world/hands';
 import { Basketball, IN_HANDS } from './world/hoop';
 import { HOOP, SWEET, idealSpeed, lookAtRim, meter, shotSpeed, throwPitch, tossSpeed, underCeiling } from '../shared/hoop';
@@ -510,8 +510,10 @@ function stepUpToDarts() {
 const poolBalls = new PoolBalls(office.poolTable);
 scene.add(poolBalls.group);
 const cueist = new Cueist(player, camera, canvas, office.poolTable, poolBalls, () => pointer, () => reduceMotion.matches, {
-  join: () => net.send({ t: 'pool.join' }),
+  join: (key) => net.send({ t: 'pool.join', key }),
   leave: () => net.send({ t: 'pool.leave' }),
+  away: () => net.send({ t: 'pool.away' }),
+  skip: () => net.send({ t: 'pool.skip' }),
   shoot: (s) => net.send({ t: 'pool.shoot', angle: s.angle, power: s.power, top: s.top, side: s.side }),
   place: (x, y) => net.send({ t: 'pool.place', x, y }),
   team: (team) => net.send({ t: 'pool.team', team }),
@@ -569,11 +571,11 @@ function showTheirCue() {
   poolBalls.aimCue(cue, Math.atan2(cue.y - at.y, cue.x - at.x), 0.06, seatColor(g.players, up.id));
 }
 
-/** E at the pool table: step up to it, if there's room. */
+/** E at the pool table: step up to it, if there's room (or a seat that's away might be yours: the office knows). */
 function stepUpToPool() {
   if (cueist.active || darter.active || golf.active || trip || climber.active) return;
   const d = store.pool;
-  if (d.lobby.length >= POOL_PLAYERS && !d.lobby.some((s) => s.id === store.you)) return toast(t('notices.poolFull'), 'warn');
+  if (d.lobby.length >= POOL_PLAYERS && !d.lobby.some((s) => s.id === store.you || s.away)) return toast(t('notices.poolFull'), 'warn');
   if (carrying) return toast(t('notices.handsFullCard', { issue: carrying.issue }), 'warn');
   if (player.seat) standUp();
   if (hanger.active) hanger.cancel();
@@ -2677,8 +2679,15 @@ function hintFor(it: Interactable): Hint {
     case 'pool': {
       const d = store.pool;
       const g = d.game;
-      const full = d.lobby.length >= POOL_PLAYERS && !d.lobby.some((s) => s.id === store.you);
-      const about = g && !g.over ? t('main.poolPlaying', { a: clip(sideName(g.players, 0), 30), b: clip(sideName(g.players, 1), 30) }) : d.lobby.length ? t('main.poolAtTable', { n: d.lobby.length }) : t('main.poolAbout');
+      const full = d.lobby.length >= POOL_PLAYERS && !d.lobby.some((s) => s.id === store.you || s.away);
+      const about =
+        g && !g.over
+          ? isSolo(g)
+            ? t('main.poolSoloPlaying', { a: clip(g.players[0].name, 30) })
+            : t('main.poolPlaying', { a: clip(sideName(g.players, 0), 30), b: clip(sideName(g.players, 1), 30) })
+          : d.lobby.length
+            ? t('main.poolAtTable', { n: d.lobby.length })
+            : t('main.poolAbout');
       return { k: `${about}|${full}`, parts: [title(t('main.poolTable')), aside(about), full ? aside(t('main.poolFull')) : key('E', t('main.playPool'))] };
     }
     case 'jukebox': {
@@ -2946,7 +2955,7 @@ function renderPoolHint(el: HTMLElement) {
   const k = `pool|${stage}|${up?.name}|${hand}|${!!store.pool.game}|${store.pool.game?.over}`;
   if (k === hintKey) return;
   hintKey = k;
-  const done = key('E', t('main.done'));
+  const done = key(t('main.keyEsc'), t('main.poolStepAway'));
   const round = key('Q', t('main.poolOtherSide'));
   const parts =
     stage === 'draw'
@@ -3117,11 +3126,9 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyE' && !e.repeat) darter.stop();
     return;
   }
-  // At the pool table, the same: E steps away (the mouse or Space shoots, Q goes round, see Cueist).
-  if (cueist.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'KeyQ' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
-    if (e.code === 'KeyE' && !e.repeat) cueist.stop();
-    return;
-  }
+  // At the pool table, the same, but E does nothing: it brought you here, and mustn't take you out of
+  // the game. Esc or walking off steps away, Leave in the panel leaves (the mouse or Space shoots, Q goes round, see Cueist).
+  if (cueist.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'KeyQ' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) return;
   // With the ball in your hands, E winds up a shot (let go to shoot) and Q drops it.
   if (holdingBall() && (e.code === 'KeyE' || e.code === 'KeyQ')) {
     if (e.repeat) return;

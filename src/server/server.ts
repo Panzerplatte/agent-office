@@ -1008,7 +1008,8 @@ export async function startServer(cfg: Config) {
         f.changes.unwatchAll(id);
         if (f.court.left(id)) ballChanged(f);
         if (f.darts.left(id)) dartsChanged(f);
-        if (f.pool.left(id)) poolChanged(f);
+        // Their seat in a pool game that's running is kept for them, away, until they're back.
+        if (f.pool.away(id)) poolChanged(f);
       }
       broadcast({ t: 'peer.leave', id });
       if (account) accountsChanged();
@@ -1021,6 +1022,8 @@ export async function startServer(cfg: Config) {
   const ballChanged = (floor: Floor) => toFloor(floor, { t: 'ball', ball: floor.court.state() });
   const dartsChanged = (floor: Floor) => toFloor(floor, { t: 'darts', darts: floor.darts.state() });
   const poolChanged = (floor: Floor, shot?: PoolPlayback) => toFloor(floor, { t: 'pool', pool: floor.pool.state(), ...(shot && { shot }) });
+  /** Who's at the pool table, whatever their connection: their account, or their browser's own key (or, without one, just this connection). */
+  const poolKey = (c: Client, key: unknown) => (c.accountId ? `account:${c.accountId}` : typeof key === 'string' && key ? `browser:${key.slice(0, 64)}` : `conn:${c.id}`);
   const jukeboxChanged = (floor: Floor) => toFloor(floor, { t: 'jukebox', state: floor.jukebox.state() });
   const teamChanged = async () => broadcast({ t: 'team', state: await team.state() });
 
@@ -1106,8 +1109,8 @@ export async function startServer(cfg: Config) {
     const ballLeft = !!was?.court.left(c.id);
     // So does their place at the dartboard, and in its game.
     const dartsLeft = !!was?.darts.left(c.id);
-    // And at the pool table.
-    const poolLeft = !!was?.pool.left(c.id);
+    // At the pool table, they're away: their seat in a game that's running waits for them.
+    const poolLeft = !!was?.pool.away(c.id);
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1364,6 +1367,8 @@ export async function startServer(cfg: Config) {
       }
       case 'pool.join':
       case 'pool.leave':
+      case 'pool.away':
+      case 'pool.skip':
       case 'pool.team':
       case 'pool.start':
       case 'pool.place':
@@ -1372,8 +1377,10 @@ export async function startServer(cfg: Config) {
         if (!floor) break;
         const p = floor.pool;
         const changed =
-          msg.t === 'pool.join' ? p.join(c.id, c.peer.name)
+          msg.t === 'pool.join' ? p.join(c.id, c.peer.name, poolKey(c, msg.key))
           : msg.t === 'pool.leave' ? p.left(c.id)
+          : msg.t === 'pool.away' ? p.away(c.id)
+          : msg.t === 'pool.skip' ? p.skip(c.id)
           : msg.t === 'pool.team' ? p.setTeam(c.id, msg.team)
           : msg.t === 'pool.start' ? p.start(c.id)
           : msg.t === 'pool.place' ? p.place(c.id, { x: msg.x, y: msg.y })
