@@ -1,22 +1,19 @@
 import * as THREE from 'three';
+import { RINGS, SECTORS, SECTOR_ANGLE, emptyDarts, type Dart, type DartsState } from '../../shared/darts';
+import { t } from '../i18n';
 import { DARTBOARD, FLOOR } from '../../shared/layout';
 import type { Collider } from './office';
 import { bulb, type NightParts } from './outside';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
 
 // The dartboard on the lounge's east wall: a regulation bristle board in an open wooden cabinet, with
-// chalkboards on the insides of its doors, a little lamp over it, and a metal oche on the floor.
+// chalkboards on the insides of its doors (the scores go up on them while there's a game on), a little lamp over it, and a metal oche on the floor.
 
 /**
- * A regulation board, in meters from the middle of its face: the sectors clockwise from the top, and
- * how far out each ring is. (Until shared/darts.ts has the rules, the board's own geometry lives here.)
+ * The board's size, in meters: its sectors and rings are the rules' own (SECTORS and RINGS in
+ * shared/darts.ts), so a dart scores what it looks like it hit.
  */
 export const BOARD = {
-  sectors: [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5],
-  innerBull: 0.00635,
-  outerBull: 0.016,
-  triple: [0.099, 0.107],
-  double: [0.162, 0.17],
   /** The whole board, out to the edge of the number ring: 451 mm across. */
   radius: 0.2255,
   thick: 0.038,
@@ -45,6 +42,16 @@ export interface DartboardView {
   toBoard(p: THREE.Vector3): { x: number; y: number; out: number };
   /** The way the face looks, out into the room. */
   readonly normal: THREE.Vector3;
+  /** Puts the game up on the doors' chalkboards: the scores on the left, the turn (`turn`, the darts in the board) on the right. */
+  chalk(d: DartsState, turn: ShownTurn | null): void;
+}
+
+/** A turn as the board shows it: whose it is, the darts of it that are in the board, whether it went bust, and whether it's over (its last dart is in). */
+export interface ShownTurn {
+  player: string;
+  darts: Dart[];
+  bust: boolean;
+  done: boolean;
 }
 
 /** The face, drawn to a canvas: the sectors and rings, the wire, and the numbers round the edge. */
@@ -56,7 +63,7 @@ function faceTexture(): THREE.CanvasTexture {
   const g = c.getContext('2d')!;
   const mid = S / 2;
   const px = mid / BOARD.radius;
-  const step = (Math.PI * 2) / 20;
+  const step = SECTOR_ANGLE;
   // Canvas angles run clockwise from +x; sector i is centred i steps clockwise from straight up.
   const from = (i: number) => -Math.PI / 2 + (i - 0.5) * step;
   const wedge = (r0: number, r1: number, i: number, color: string) => {
@@ -76,32 +83,31 @@ function faceTexture(): THREE.CanvasTexture {
 
   // The black number ring, then each sector out from the bull: single, triple, single, double.
   disc(BOARD.radius, BLACK);
-  const [t0, t1] = BOARD.triple;
-  const [d0, d1] = BOARD.double;
-  for (let i = 0; i < 20; i++) {
+  const { bull, outerBull, tripleIn: t0, tripleOut: t1, doubleIn: d0, doubleOut: d1 } = RINGS;
+  for (let i = 0; i < SECTORS.length; i++) {
     const even = i % 2 === 0;
     const single = even ? BLACK : CREAM;
     const ring = even ? RED : GREEN;
-    wedge(BOARD.outerBull, t0, i, single);
+    wedge(outerBull, t0, i, single);
     wedge(t0, t1, i, ring);
     wedge(t1, d0, i, single);
     wedge(d0, d1, i, ring);
   }
-  disc(BOARD.outerBull, GREEN);
-  disc(BOARD.innerBull, RED);
+  disc(outerBull, GREEN);
+  disc(bull, RED);
 
   // The wire: round every ring, and out along the sector edges from the bull to the double.
   g.strokeStyle = WIRE;
   g.lineWidth = 2.2;
-  for (const r of [BOARD.innerBull, BOARD.outerBull, t0, t1, d0, d1]) {
+  for (const r of [bull, outerBull, t0, t1, d0, d1]) {
     g.beginPath();
     g.arc(mid, mid, r * px, 0, Math.PI * 2);
     g.stroke();
   }
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < SECTORS.length; i++) {
     const a = from(i);
     g.beginPath();
-    g.moveTo(mid + Math.cos(a) * BOARD.outerBull * px, mid + Math.sin(a) * BOARD.outerBull * px);
+    g.moveTo(mid + Math.cos(a) * outerBull * px, mid + Math.sin(a) * outerBull * px);
     g.lineTo(mid + Math.cos(a) * d1 * px, mid + Math.sin(a) * d1 * px);
     g.stroke();
   }
@@ -112,7 +118,7 @@ function faceTexture(): THREE.CanvasTexture {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.font = `800 ${Math.round(0.032 * px)}px Nunito, ui-rounded, system-ui, sans-serif`;
-  BOARD.sectors.forEach((n, i) => {
+  SECTORS.forEach((n, i) => {
     const a = -Math.PI / 2 + i * step;
     g.fillText(String(n), mid + Math.cos(a) * numR, mid + Math.sin(a) * numR + 2);
   });
@@ -129,37 +135,137 @@ function faceTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-/** A door's chalkboard, ruled up for a game of 301 (the scores go up when there's a game on). */
-function chalkTexture(): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 320;
-  const g = c.getContext('2d')!;
+/** A door's chalkboard: its canvas, the smudges of old games wiped off it, and the texture it shows. */
+interface Chalk {
+  canvas: HTMLCanvasElement;
+  smudges: HTMLCanvasElement;
+  tex: THREE.CanvasTexture;
+}
+
+const CHALK_W = 192;
+const CHALK_H = 480;
+const CHALK_INK = 'rgba(240,240,232,0.88)';
+const CHALK_FONT = (px: number) => `800 ${px}px Nunito, ui-rounded, system-ui, sans-serif`;
+
+function chalkboard(): Chalk {
+  const smudges = document.createElement('canvas');
+  smudges.width = CHALK_W;
+  smudges.height = CHALK_H;
+  const g = smudges.getContext('2d')!;
   g.fillStyle = CHALK;
-  g.fillRect(0, 0, 128, 320);
-  // Smudges of old games, wiped off.
-  for (let i = 0; i < 14; i++) {
+  g.fillRect(0, 0, CHALK_W, CHALK_H);
+  for (let i = 0; i < 16; i++) {
     g.fillStyle = `rgba(255,255,255,${0.025 + Math.random() * 0.03})`;
     g.beginPath();
-    g.ellipse(Math.random() * 128, Math.random() * 320, 10 + Math.random() * 30, 6 + Math.random() * 14, Math.random() * 3, 0, Math.PI * 2);
+    g.ellipse(Math.random() * CHALK_W, Math.random() * CHALK_H, 15 + Math.random() * 45, 9 + Math.random() * 21, Math.random() * 3, 0, Math.PI * 2);
     g.fill();
   }
-  g.strokeStyle = 'rgba(240,240,232,0.8)';
-  g.fillStyle = 'rgba(240,240,232,0.85)';
-  g.lineWidth = 3;
-  g.font = '800 34px Nunito, ui-rounded, system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.fillText('301', 64, 42);
-  g.beginPath();
-  g.moveTo(14, 60);
-  g.lineTo(114, 60);
-  g.moveTo(64, 60);
-  g.lineTo(64, 300);
-  g.stroke();
-  const tex = new THREE.CanvasTexture(c);
+  const canvas = document.createElement('canvas');
+  canvas.width = CHALK_W;
+  canvas.height = CHALK_H;
+  const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  return tex;
+  return { canvas, smudges, tex };
+}
+
+/** Writes `text` at (x, y) `px` high, smaller if that's what it takes to fit across the door. */
+function chalkText(g: CanvasRenderingContext2D, text: string, x: number, y: number, px: number) {
+  g.font = CHALK_FONT(px);
+  const w = g.measureText(text).width;
+  const room = CHALK_W - 24;
+  if (w > room) g.font = CHALK_FONT(Math.floor((px * room) / w));
+  g.fillText(text, x, y);
+}
+
+/** A name short enough for a door: chalk takes room. */
+const chalkName = (name: string) => (name.length > 9 ? `${name.slice(0, 8)}…` : name);
+
+/**
+ * The left door keeps the scores: the game at the top (301 or 501, and D/O for double-out), then
+ * each player in their colour with what they have left, the one who's up marked. With no game on,
+ * it's ruled up for the next one.
+ */
+function drawScores(c: Chalk, d: DartsState) {
+  const g = c.canvas.getContext('2d')!;
+  g.drawImage(c.smudges, 0, 0);
+  const game = d.game;
+  const mid = CHALK_W / 2;
+  g.textAlign = 'center';
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = CHALK_INK;
+  g.strokeStyle = CHALK_INK;
+  g.lineWidth = 4;
+  g.font = CHALK_FONT(50);
+  const mode = game?.mode ?? d.mode;
+  const doubleOut = game?.doubleOut ?? d.doubleOut;
+  g.fillText(String(mode), doubleOut ? mid - 22 : mid, 62);
+  if (doubleOut) {
+    g.font = CHALK_FONT(22);
+    g.fillText('D/O', mid + 52, 60);
+  }
+  g.beginPath();
+  g.moveTo(20, 88);
+  g.lineTo(CHALK_W - 20, 88);
+  if (!game) {
+    g.moveTo(mid, 88);
+    g.lineTo(mid, CHALK_H - 30);
+  }
+  g.stroke();
+  if (!game) return;
+  const row = Math.min(96, (CHALK_H - 110) / Math.max(1, game.players.length));
+  game.players.forEach((p, i) => {
+    const y = 104 + i * row;
+    const up = !game.over && i === game.up;
+    g.fillStyle = p.color;
+    chalkText(g, `${up ? '▸ ' : ''}${chalkName(p.name)}`, mid, y + 26, 26);
+    g.font = CHALK_FONT(46);
+    g.fillText(String(p.score), mid, y + 72);
+  });
+}
+
+/**
+ * The right door says what's going on: whose turn it is and their darts so far ("T20", "5", "D16"),
+ * BUST, or who won. With no game on, who's at the board.
+ */
+function drawTurn(c: Chalk, d: DartsState, turn: ShownTurn | null) {
+  const g = c.canvas.getContext('2d')!;
+  g.drawImage(c.smudges, 0, 0);
+  const game = d.game;
+  const mid = CHALK_W / 2;
+  g.textAlign = 'center';
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = CHALK_INK;
+  g.strokeStyle = CHALK_INK;
+  g.lineWidth = 4;
+  const winner = game?.winner ? game.players.find((p) => p.id === game.winner) : undefined;
+  if (!game) {
+    g.font = CHALK_FONT(40);
+    g.fillText('🎯', mid, 62);
+    d.lobby.forEach((s, i) => {
+      g.fillStyle = s.color;
+      chalkText(g, chalkName(s.name), mid, 140 + i * 52, 28);
+    });
+    return;
+  }
+  const who = game.players.find((p) => p.id === (turn?.player ?? game.players[game.up]?.id));
+  g.fillStyle = who?.color ?? CHALK_INK;
+  if (who) chalkText(g, chalkName(who.name), mid, 52, 28);
+  g.fillStyle = CHALK_INK;
+  g.beginPath();
+  g.moveTo(20, 76);
+  g.lineTo(CHALK_W - 20, 76);
+  g.stroke();
+  g.font = CHALK_FONT(48);
+  (turn?.darts ?? []).forEach((dart, i) => g.fillText(dart.label === 'MISS' ? '–' : dart.label, mid, 140 + i * 64));
+  if (turn?.bust) {
+    g.fillStyle = '#ff8fa3';
+    chalkText(g, t('world.dartsBust'), mid, 360, 52);
+  } else if (winner && (!turn || turn.done)) {
+    g.fillStyle = winner.color;
+    chalkText(g, `🏆 ${chalkName(winner.name)}`, mid, 350, 30);
+    chalkText(g, t('world.dartsWins'), mid, 400, 40);
+  }
 }
 
 /** A toon material with a picture on it, lit like the room. */
@@ -193,9 +299,10 @@ export function buildDartboard(night: NightParts): DartboardView {
   }
 
   // Its doors, swung right open flat by the wall either side, with a chalkboard on the inside of each.
-  const chalk = toonMap(chalkTexture());
+  const chalks = [chalkboard(), chalkboard()];
   const doorT = 0.022;
   for (const s of [-1, 1]) {
+    const chalk = toonMap(chalks[s < 0 ? 0 : 1].tex);
     const x = s * (hw + cab.door / 2 + 0.005);
     const z = wall + 0.018 + doorT / 2;
     parts.add(mesh(new THREE.BoxGeometry(cab.door, cab.height, doorT), wood, x, 0, z));
@@ -249,12 +356,27 @@ export function buildDartboard(night: NightParts): DartboardView {
   const span = hw + cab.door + 0.01;
   const colliders: Collider[] = [{ minX: FLOOR.maxX - cab.depth, maxX: FLOOR.maxX, minZ: DARTBOARD.z - span, maxZ: DARTBOARD.z + span, bottom: DARTBOARD.y - hh, top: DARTBOARD.y + lampY + 0.05 }];
 
+  const last: { d: DartsState; turn: ShownTurn | null } = { d: emptyDarts(), turn: null };
+  const chalk = (d: DartsState, turn: ShownTurn | null) => {
+    drawScores(chalks[0], d);
+    drawTurn(chalks[1], d, turn);
+    for (const c of chalks) c.tex.needsUpdate = true;
+  };
+  chalk(last.d, last.turn);
+  // Canvas text only picks up the office's font once it has loaded.
+  void document.fonts.ready.then(() => chalk(last.d, last.turn));
+
   const v = new THREE.Vector3();
   const normal = new THREE.Vector3(Math.sin(DARTBOARD.rotY), 0, Math.cos(DARTBOARD.rotY));
   return {
     group,
     colliders,
     normal,
+    chalk(d, turn) {
+      last.d = d;
+      last.turn = turn;
+      chalk(d, turn);
+    },
     toWorld(x, y, o = 0, target = new THREE.Vector3()) {
       group.updateWorldMatrix(true, false);
       return group.localToWorld(target.set(x, y, o));
