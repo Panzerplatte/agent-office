@@ -272,7 +272,11 @@ button { font-family: inherit; }
 .golf-rest { position: absolute; inset: 0 0 0 auto; width: 100%; background: #f1e4d3; }
 .golf-last { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1px; background: var(--ink); }
 .golf-info { font-weight: 800; font-variant-numeric: tabular-nums; }
-#hud:has(.golf:not(.hidden)) #toasts { translate: 0 48px; }
+.golf-score { font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; }
+/* The panel lets the mouse through to the aim, all but its buttons. */
+.golf-actions { display: flex; gap: 6px; justify-content: center; }
+.golf-actions .btn { pointer-events: auto; padding: 3px 10px; font-size: 12px; }
+#hud:has(.golf:not(.hidden)) #toasts { translate: 0 100px; }
 /* At the dartboard: the lobby, then the scoreboard, at the top over the board. */
 .darts { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: min(320px, calc(100vw - 32px)); padding: 8px 12px 10px; display: grid; gap: 6px; font-size: 13px; font-weight: 800; }
 .darts-title { font-weight: 900; text-align: center; }

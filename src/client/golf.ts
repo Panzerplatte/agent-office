@@ -1,22 +1,43 @@
 import * as THREE from 'three';
 import { BALCONY, GOLF_HOLE } from '../shared/layout';
 import { isTyping, type PlayerController } from './player';
+import { t } from './i18n';
 import { $, h, modalOpen } from './ui/dom';
 import { IMPACT, type Person } from './world/character';
-import { AIM_MAX, LOFT_MAX, LOFT_MIN, PIN_DISTANCE, PIN_YAW, TEE_BALL, stance, type Flight, type Shot } from './world/golf';
+import {
+  AIM_MAX,
+  LOFT_MAX,
+  LOFT_MIN,
+  LOFT_START,
+  PIN_DISTANCE,
+  PIN_YAW,
+  TEE_BALL,
+  newRound,
+  roundFromJson,
+  roundLanded,
+  roundShot,
+  roundText,
+  roundToJson,
+  stance,
+  type Flight,
+  type GolfRound,
+  type Landed,
+  type Shot,
+} from './world/golf';
 
 // Teeing off from the balcony (E at the tee): you stand over the ball with a club, and the camera
 // goes down low behind the ball, looking down the line at the hole. The mouse (or A and D) aims, W
 // and S pick the loft, and holding Space takes the club back while the power meter runs up and down:
 // let go to hit it. The camera follows the ball out to wherever it stops, then comes back to the tee
-// for the next one. E puts the club back in the bag.
+// for the next one. Esc (or Leave on the panel) puts the club back in the bag; E does nothing more,
+// so pressing it again doesn't throw you off the tee. Your round (shots, closest, where the last one
+// went, your aim and loft) is kept when you step away and across a reload: back at the tee, you carry on.
 
 /** The power meter runs from nothing to full in this long, then back down again. */
 const METER = 1.3;
 /** A and D (and the arrow keys) turn the aim this fast, in radians a second; W and S change the loft. */
 const TURN = 0.3;
 const LOFT_RATE = THREE.MathUtils.degToRad(25);
-export const LOFT_START = THREE.MathUtils.degToRad(42);
 /** How far off line (radians) and off the power meter (a fraction of it) a shot can come off the club, either way in all. */
 const MISHIT_AIM = THREE.MathUtils.degToRad(1.4);
 const MISHIT_POWER = 0.025;
@@ -58,6 +79,9 @@ const target = new THREE.Vector3();
 const turn = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
 
+/** Your round, kept in this browser (see GolfRound). */
+const ROUND_KEY = 'agent-office.golf.round';
+
 /** Wraps an angle into -π..π. */
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -83,7 +107,11 @@ export class Golfer {
   private readonly rest: HTMLElement;
   private readonly mark: HTMLElement;
   private readonly info: HTMLElement;
+  private readonly score: HTMLElement;
   private shown = '';
+  private scored = '';
+  /** Your round so far: kept while you're away from the tee, and in localStorage. */
+  private round: GolfRound;
 
   constructor(
     private readonly player: PlayerController,
@@ -94,8 +122,40 @@ export class Golfer {
     this.rest = h('span.golf-rest');
     this.mark = h('span.golf-last');
     this.info = h('div.golf-info');
-    this.panel = h('div.golf.panel.hidden', { id: 'golf', 'aria-label': 'Golf' }, h('div.golf-title', {}, `⛳ Hole 1 · ${Math.round(PIN_DISTANCE)} m · Par 1`), h('div.golf-meter', {}, this.rest, this.mark), this.info);
+    this.score = h('div.golf-score');
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(ROUND_KEY);
+    } catch {
+      // private window: a fresh round
+    }
+    this.round = roundFromJson(stored) ?? newRound(PIN_YAW, LOFT_START);
+    this.aim = this.round.aim;
+    this.loft = this.round.loft;
+    const button = (cls: string, text: string, click: () => void) => {
+      const b = h(`button.btn${cls}`, { type: 'button' }, text);
+      // Never focused, or Space (which swings) would press it again.
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        b.blur();
+        click();
+      });
+      return b;
+    };
+    const fresh = button('.golf-new', t('main.golfNewRound'), () => this.newRound());
+    const leave = button('.golf-leave', t('main.golfLeave'), () => this.stop());
+    this.panel = h(
+      'div.golf.panel.hidden',
+      { id: 'golf', 'aria-label': 'Golf' },
+      h('div.golf-title', {}, t('main.golfHole', { m: Math.round(PIN_DISTANCE) })),
+      this.score,
+      h('div.golf-meter', {}, this.rest, this.mark),
+      this.info,
+      h('div.golf-actions', {}, fresh, leave),
+    );
     $('hud').append(this.panel);
+    window.addEventListener('keydown', (e) => this.escape(e));
     window.addEventListener('keydown', (e) => this.key(e, true));
     window.addEventListener('keyup', (e) => this.key(e, false));
     // Tabbed away mid-swing: the key never comes back up, so it's no swing.
@@ -118,11 +178,15 @@ export class Golfer {
     return p > 1 ? 2 - p : p;
   }
 
-  /** Up to the tee with a club, over the ball, aiming at the pin. */
+  /** Your round so far (see GolfRound). */
+  get card(): Readonly<GolfRound> {
+    return this.round;
+  }
+
+  /** Up to the tee with a club, over the ball, aimed the way you left it (at the pin, the first time). */
   start(): void {
     if (this.stage) return;
     this.stage = 'aim';
-    this.aim = PIN_YAW;
     const p = this.player;
     p.rig = () => this.stand();
     this.stand();
@@ -133,6 +197,7 @@ export class Golfer {
     this.hooks.holding(true);
     this.panel.classList.remove('hidden');
     this.shown = '';
+    this.scored = '';
   }
 
   /** The club back in the bag, and you back on your feet beside the tee. */
@@ -140,6 +205,7 @@ export class Golfer {
     if (!this.stage) return;
     this.stage = null;
     this.shot = null;
+    this.keep();
     const p = this.player;
     p.rig = null;
     p.lookPitch = -0.08;
@@ -170,6 +236,8 @@ export class Golfer {
       this.swingT += dt;
       if (this.swingT >= IMPACT && this.shot) {
         this.hitAt = performance.now();
+        this.round = roundShot(this.round);
+        this.keep();
         this.hooks.hit(this.shot);
         this.shot = null;
         this.stage = 'watch';
@@ -181,6 +249,37 @@ export class Golfer {
     }
     this.placeCamera(dt);
     this.render();
+  }
+
+  /** Your ball stopped (wherever you are by then): where, for your round. */
+  landed(f: Landed): void {
+    this.round = roundLanded(this.round, f);
+    this.keep();
+  }
+
+  /** Starts counting again from nothing (the button on the panel). */
+  newRound(): void {
+    this.round = newRound(this.aim, this.loft);
+    this.lastPower = -1;
+    this.keep();
+  }
+
+  /** Your round, with the aim and loft you've got, kept for when you're back (or reload). */
+  private keep() {
+    this.round = { ...this.round, aim: this.aim, loft: this.loft };
+    try {
+      localStorage.setItem(ROUND_KEY, roundToJson(this.round));
+    } catch {
+      // private window: it's only for this visit then
+    }
+  }
+
+  /** Esc puts the club back in the bag (once a swing that's charging is let go of, see putBack). */
+  private escape(e: KeyboardEvent) {
+    if (!this.stage || e.code !== 'Escape' || e.repeat || isTyping(e) || modalOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    if (this.stage === 'charge') return this.putBack();
+    this.stop();
   }
 
   /** Where you stand for the aim you've got: square to the line, over the ball. */
@@ -271,10 +370,17 @@ export class Golfer {
     this.mark.style.left = `${this.lastPower * 100}%`;
     this.mark.classList.toggle('hidden', this.lastPower < 0);
     const off = THREE.MathUtils.radToDeg(this.aim - PIN_YAW);
-    const aim = Math.abs(off) < 0.5 ? 'at the pin' : `${Math.abs(off).toFixed(0)}° ${off > 0 ? 'left' : 'right'}`;
-    const text = `Loft ${THREE.MathUtils.radToDeg(this.loft).toFixed(0)}° · Aim ${aim}`;
-    if (text === this.shown) return;
-    this.shown = text;
-    this.info.textContent = text;
+    const n = Math.abs(off).toFixed(0);
+    const aim = Math.abs(off) < 0.5 ? t('main.golfAtPin') : t(off > 0 ? 'main.golfLeft' : 'main.golfRight', { n });
+    const text = t('main.golfLoftAim', { loft: THREE.MathUtils.radToDeg(this.loft).toFixed(0), aim });
+    if (text !== this.shown) {
+      this.shown = text;
+      this.info.textContent = text;
+    }
+    const score = roundText(this.round);
+    if (score === this.scored) return;
+    this.scored = score;
+    this.score.textContent = score;
   }
 }
+
