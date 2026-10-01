@@ -1,7 +1,7 @@
 // Getting around the office floor downstairs (no stairs, no loft, no elevator), round the furniture
 // on a coarse grid: the dog's walks (server/dog.ts), and a worker's way out when it's sent home.
 
-import { BALCONY, BALCONY_DOOR, BEANBAGS, BOOKSHELF, CABINET, DARTBOARD, DESK_SIZE, DESKS, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PARACHUTE, PLANTS, POLE, POLES, ROAD, STAIRS, STATIONS, WHITEBOARD, type DeskDef } from './layout.js';
+import { BALCONY, BALCONY_DOOR, BEANBAGS, BOOKSHELF, CABINET, DARTBOARD, DESK_SIZE, DESKS, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PARACHUTE, PLANTS, POLE, POOL_TABLE, POLES, ROAD, STAIRS, STATIONS, WHITEBOARD, type DeskDef } from './layout.js';
 
 
 export type Pt = [number, number];
@@ -58,6 +58,15 @@ function obstacles(): { rects: Rect[]; circles: Circle[] } {
   const dartSpan = dart.cabinet.width / 2 + dart.cabinet.door + 0.01;
   rects.push([FLOOR.maxX - dart.cabinet.depth, FLOOR.maxX, dart.z - dartSpan, dart.z + dartSpan]);
   rects.push([dart.oche.x + R, FLOOR.maxX, dart.z - 0.35, dart.z + 0.35]);
+  // The pool table, as world/pooltable.ts puts it (the floor round it is left open to play from), and
+  // its cue rack on the south wall.
+  const pool = POOL_TABLE;
+  const along = Math.abs(Math.cos(pool.rotY));
+  const across = Math.abs(Math.sin(pool.rotY));
+  const poolX = (along * pool.outer.length + across * pool.outer.width) / 2;
+  const poolZ = (across * pool.outer.length + along * pool.outer.width) / 2;
+  rects.push([pool.x - poolX, pool.x + poolX, pool.z - poolZ, pool.z + poolZ]);
+  rects.push([pool.rack.x - pool.rack.width / 2, pool.rack.x + pool.rack.width / 2, FLOOR.maxZ - pool.rack.depth, FLOOR.maxZ]);
   // The ladder up the west wall, and the fire poles: a hole with a railing round it, or a landing mat.
   // Which spot has which changes floor by floor, so the dog keeps off both.
   rects.push([FLOOR.minX, FLOOR.minX + 0.3, LADDER.z - LADDER.width / 2 - 0.05, LADDER.z + LADDER.width / 2 + 0.05]);
