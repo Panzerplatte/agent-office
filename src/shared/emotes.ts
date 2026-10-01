@@ -6,13 +6,13 @@
  * or `seconds` runs out; Infinity means it never does by itself.
  */
 export const EMOTES = [
-  { id: 'wave', emoji: '👋', label: 'Wave', seconds: 2.2 },
-  { id: 'thumbs', emoji: '👍', label: 'Thumbs up', seconds: 1.8 },
-  { id: 'clap', emoji: '👏', label: 'Clap', seconds: 2.2 },
-  { id: 'dance', emoji: '🕺', label: 'Dance', seconds: 4 },
-  { id: 'point', emoji: '👉', label: 'Point', seconds: 2 },
-  { id: 'facepalm', emoji: '🤦', label: 'Facepalm', seconds: 2.4 },
-  { id: 'finger', emoji: '🖕', label: 'Middle finger', seconds: 2 },
+  { id: 'wave', emoji: '👋', label: 'Wave', seconds: 8, loop: true },
+  { id: 'thumbs', emoji: '👍', label: 'Thumbs up', seconds: 1.8, loop: false },
+  { id: 'clap', emoji: '👏', label: 'Clap', seconds: 10, loop: true },
+  { id: 'dance', emoji: '🕺', label: 'Dance', seconds: Infinity, loop: true },
+  { id: 'point', emoji: '👉', label: 'Point', seconds: 2, loop: false },
+  { id: 'facepalm', emoji: '🤦', label: 'Facepalm', seconds: 2.4, loop: false },
+  { id: 'finger', emoji: '🖕', label: 'Middle finger', seconds: 2, loop: false },
 ] as const;
 
 /** Stopping an emote (X) lets it ease out over this long, as one does at the end of its `seconds`. */

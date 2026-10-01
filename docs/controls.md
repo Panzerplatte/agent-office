@@ -7,7 +7,8 @@ Back to the [README](../README.md).
 | W A S D / arrows | Walk (hold Shift to run); on the ladder, W and S climb |
 | Space | Jump (you can land on desks, couches and the cars in the garage) |
 | Mouse drag / wheel | Orbit / zoom the camera |
-| E | Interact: hire a worker, open its terminal, read a board, take an issue's note off the board, prompt a board agent, call a meeting in the meeting room, draw on the whiteboard, read the docs at the bookshelf, watch the TV, sit down (or get up), ride the elevator, climb the ladder (or get off it), slide down a fire pole, grab a coffee, take a smoke break, tee off at the golf tee, pet the dog, pick up the basketball (then hold E and let go to shoot), order a drink at the rooftop bar, blow the DJ's air horn |
+| E | Interact: hire a worker, open its terminal, read a board, take an issue's note off the board, prompt a board agent, call a meeting in the meeting room, draw on the whiteboard, read the docs at the bookshelf, watch the TV, sit down (or get up), ride the elevator, climb the ladder (or get off it), slide down a fire pole, grab a coffee, take a smoke break, tee off at the golf tee, step up to the dartboard at the oche (and away again), pet the dog, pick up the basketball (then hold E and let go to shoot), order a drink at the rooftop bar, blow the DJ's air horn |
+| Mouse / Space (at the dartboard) | On your turn, the mouse aims; hold Space and let go when the meter's in the green to throw. E, or walking off, steps away |
 | P | Prompt: give a task to a new worker, or to the one at this desk |
 | C | Changes: the files the worker at this desk changed and their diff; commit, discard or open a PR |
 | B | Open a shared shell at an empty desk |

@@ -273,6 +273,30 @@ button { font-family: inherit; }
 .golf-last { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1px; background: var(--ink); }
 .golf-info { font-weight: 800; font-variant-numeric: tabular-nums; }
 #hud:has(.golf:not(.hidden)) #toasts { translate: 0 48px; }
+/* At the dartboard: the lobby, then the scoreboard, at the top over the board. */
+.darts { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: min(320px, calc(100vw - 32px)); padding: 8px 12px 10px; display: grid; gap: 6px; font-size: 13px; font-weight: 800; }
+.darts-title { font-weight: 900; text-align: center; }
+.darts-players { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.darts-players li { display: flex; align-items: center; gap: 8px; padding: 2px 6px; border-radius: 8px; border: 2px solid transparent; }
+.darts-players li.up { border-color: var(--ink); background: var(--paper-2); }
+.darts-swatch { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); }
+/* Names in the players' own colours, which are bright: an ink edge keeps them readable on paper. */
+.darts-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 900; text-shadow: -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink), 1px 1px 0 var(--ink); }
+.darts-score { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.darts-turn { display: flex; justify-content: center; gap: 8px; font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.darts-who { text-shadow: -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink), 1px 1px 0 var(--ink); }
+.darts-status { text-align: center; font-weight: 800; color: var(--muted); }
+.darts-status.bust { font-size: 20px; font-weight: 900; color: var(--bad); }
+.darts-status.won { font-size: 18px; font-weight: 900; color: var(--ink); }
+.darts-lobby { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.darts-modes { display: flex; gap: 4px; }
+.darts .btn { padding: 4px 10px; font-size: 13px; }
+.darts > .btn.primary { justify-self: center; }
+.darts-meter { margin-top: 2px; }
+/* The meter's sweet spot: let go in it and the dart goes where you aimed. */
+.darts-sweet { position: absolute; top: 0; bottom: 0; background: rgba(6, 214, 160, .55); border-left: 2px solid var(--ink); border-right: 2px solid var(--ink); }
+#hud:has(.darts:not(.hidden)) #toasts { top: auto; bottom: 120px; }
+#scene.aiming { cursor: crosshair; }
 .caffeine.jittery .bar span { background: var(--bad); }
 @keyframes jitters { 50% { transform: translate(1px, -1px) rotate(-1.5deg); } }
 @media (prefers-reduced-motion: reduce) { .caffeine.jittery { animation: none; } }

@@ -515,6 +515,46 @@ export class OfficeSound {
     }
   }
 
+  // ---- Darts --------------------------------------------------------------------------------------
+
+  /**
+   * The dartboard: a dart going into the bristle (`thunk`) or knocking into the cabinet or the wall
+   * (`wall`), a sad slide down for a bust, and a fanfare for a game won. `at` is where.
+   */
+  darts(kind: 'thunk' | 'wall' | 'bust' | 'cheer', at?: Pos) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`darts-${kind}`);
+    const out = at ? this.panner(at, 2.5, 1) : ctx.createGain();
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    switch (kind) {
+      case 'thunk':
+        // A dull thock into the sisal, and the shaft buzzing for a moment after.
+        this.play(pick(this.buf.steps), { gain: 0.5, rate: rand(2.1, 2.4), dest: out });
+        this.blip(out, t0, rand(240, 280), 0.7, 0.07, 0.12, 'triangle');
+        this.blip(out, t0 + 0.02, rand(170, 190), 1, 0.12, 0.02, 'sawtooth');
+        break;
+      case 'wall':
+        this.play(pick(this.buf.steps), { gain: 0.4, rate: rand(2.8, 3.2), dest: out });
+        this.clink(out, t0, rand(900, 1000), 0.04);
+        break;
+      case 'bust':
+        // Wah-wah-waaah.
+        [392, 370, 349].forEach((f, i) => this.blip(out, t0 + 0.15 + i * 0.22, f, i === 2 ? 0.85 : 0.98, i === 2 ? 0.6 : 0.2, 0.08, 'triangle'));
+        break;
+      case 'cheer':
+        // Ta-da-da-DAAA, and again higher.
+        [523, 659, 784, 1047, 1319].forEach((f, i) => {
+          const when = t0 + 0.2 + i * 0.12;
+          const len = i === 4 ? 0.9 : 0.18;
+          this.blip(out, when, f, 1, len, 0.1, 'triangle');
+          this.blip(out, when, f * 2, 1, len * 0.7, 0.03);
+        });
+        break;
+    }
+  }
+
   /** Whoosh: the rush of air and the squeal of hands on brass, all the way down a fire pole. */
   slide(seconds = 1.6) {
     const ctx = this.ctx;

@@ -95,6 +95,8 @@ export class PlayerController {
   enabled = true;
   /** False while the mouse picks something else (an emote on the wheel), so it doesn't turn the camera. */
   mouseLook = true;
+  /** True while the mouse points at something on the screen instead (at the dartboard): it isn't captured, and doesn't turn the camera. */
+  freeMouse = false;
 
   constructor(
     private camera: THREE.PerspectiveCamera,
@@ -134,7 +136,7 @@ export class PlayerController {
 
     dom.addEventListener('pointerdown', (e) => {
       if (!this.enabled) return;
-      if (this.view === 'first' && e.pointerType === 'mouse' && !this.lockFailed) {
+      if (this.view === 'first' && e.pointerType === 'mouse' && !this.lockFailed && !this.freeMouse) {
         if (this.locked) {
           if (e.button === 0) this.onClick?.(CENTER);
           return;
@@ -156,7 +158,7 @@ export class PlayerController {
       }
     });
     window.addEventListener('pointermove', (e) => {
-      if (!this.mouseLook) return;
+      if (!this.mouseLook || this.freeMouse) return;
       if (this.locked) {
         // Held for a moment under a window (see yieldMouse), the mouse doesn't turn your head.
         if (!this.enabled) return;
@@ -189,8 +191,9 @@ export class PlayerController {
       }
       this.everLocked = true;
       this.drag = null;
-      // A lock that lands with a window open (the one yieldMouse takes, or a relock racing the next window) is let go.
-      if (!this.enabled) this.unlock();
+      // A lock that lands with a window open (the one yieldMouse takes, or a relock racing the next window) is let go,
+      // and so is one asked for just before the mouse was freed for pointing (the key that stepped you up to the dartboard).
+      if (!this.enabled || this.freeMouse) this.unlock();
     });
     document.addEventListener('pointerlockerror', () => this.refused());
     dom.addEventListener(
@@ -214,7 +217,7 @@ export class PlayerController {
 
   /** Whether clicking the scene will capture the mouse for looking around. */
   get canLock(): boolean {
-    return this.view === 'first' && !this.lockFailed && typeof this.dom.requestPointerLock === 'function';
+    return this.view === 'first' && !this.lockFailed && !this.freeMouse && typeof this.dom.requestPointerLock === 'function';
   }
 
   setView(view: ViewMode) {
@@ -264,7 +267,7 @@ export class PlayerController {
   lock() {
     // Still being let go of, for a window that closed again at once: taken back once it's free.
     if (this.locked && this.letting) this.lockAfter = true;
-    if (this.locked || this.lockPending) return;
+    if (this.locked || this.lockPending || this.freeMouse) return;
     // The browser lets go of the mouse on Esc coming up as well as going down, so a lock taken
     // between the two (the Esc that closed a window) is gone again at once, and with it the leave
     // to take it back without a click. Asked for once Esc is up instead, from its keyup (see there).

@@ -34,7 +34,7 @@ export interface Collider {
   fence?: boolean;
 }
 
-export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf';
+export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts';
 
 /** Something you can use. Its scene object carries it as `userData.interact`, for clicking. */
 export interface Interactable {
@@ -1259,6 +1259,10 @@ export function buildOffice(): Office {
   const dartboard = buildDartboard(night);
   group.add(dartboard.group);
   colliders.push(...dartboard.colliders);
+  // Step up to it at the oche, or looking at the board from near enough.
+  const darts: Interactable = { kind: 'darts', x: DARTBOARD.oche.x - 0.35, z: DARTBOARD.oche.z, radius: 1.2 };
+  interactables.push(darts);
+  dartboard.group.userData.interact = darts;
   const { cabinet: dartCab } = DARTBOARD;
   fixture('east', DARTBOARD.z, DARTBOARD.y + 0.05, dartCab.width + 2 * dartCab.door + 0.1, dartCab.height + 0.5);
 

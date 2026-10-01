@@ -6,9 +6,10 @@ import { newer, type WbElement } from '../shared/whiteboard';
 import type { DogState } from '../shared/dog';
 import { JUKEBOX_TUNES, type JukeboxState } from '../shared/jukebox';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
+import { emptyDarts, type DartsState } from '../shared/darts';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -176,6 +177,8 @@ class Store {
   dogStart = 0;
   /** The basketball on this floor, as the office last said (see world/hoop.ts). */
   ball: BallState = {};
+  /** The dartboard on this floor: who's at it, the options for the next game, and the game (see shared/darts.ts). */
+  darts: DartsState = emptyDarts();
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -254,7 +257,8 @@ class Store {
     this.setDog(v.dog);
     this.setJukebox(v.jukebox);
     this.ball = v.ball ?? {};
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball'] as Topic[]) this.emit(t);
+    this.darts = v.darts ?? emptyDarts();
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -384,6 +388,10 @@ class Store {
         if (!msg.state.player || msg.state.player.id !== this.cabinet.player?.id) this.cabinetFrame = null;
         this.cabinet = msg.state;
         this.emit('cabinet');
+        break;
+      case 'darts':
+        this.darts = msg.darts;
+        this.emit('darts');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

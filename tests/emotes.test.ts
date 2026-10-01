@@ -62,7 +62,7 @@ test('dance, clap and wave loop; dance for as long as you like, the others up to
 
 test('the one-shots are as they were', () => {
   const oneShots = Object.fromEntries(EMOTES.filter((e) => !e.loop).map((e) => [e.id, e.seconds]));
-  assert.deepEqual(oneShots, { thumbs: 1.8, point: 2, facepalm: 2.4 });
+  assert.deepEqual(oneShots, { thumbs: 1.8, point: 2, facepalm: 2.4, finger: 2 });
 });
 
 test('a looping emote stays at full swing, with no dip from one cycle to the next', () => {
