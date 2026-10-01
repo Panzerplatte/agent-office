@@ -2,6 +2,7 @@
 
 import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
+import type { DartsMode, DartsState } from './darts.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { DogState } from './dog.js';
 import type { EmoteId } from './emotes.js';
@@ -701,6 +702,8 @@ export interface FloorView {
   meeting: MeetingState;
   /** The basketball by the hoop: who has it, or how it was last thrown. */
   ball: BallState;
+  /** The dartboard: who's at it, the options for the next game, and the game with all its darts. */
+  darts: DartsState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1126,6 +1129,17 @@ export type ClientMsg =
   | { t: 'ball.take' }
   /** Throw the basketball in your hands from (x, y, z) at (vx, vy, vz) m/s, or drop it; everyone on the floor sees it fly. */
   | { t: 'ball.throw'; x: number; y: number; z: number; vx: number; vy: number; vz: number }
+  /** Step up to your floor's dartboard (up to four people, each with their own colour), or away from it. */
+  | { t: 'darts.join' }
+  | { t: 'darts.leave' }
+  /** At the dartboard, pick 301 or 501 and double-out or not, for the next game. */
+  | { t: 'darts.options'; mode?: DartsMode; doubleOut?: boolean }
+  /** At the dartboard, start a game for everyone at it, in the order they stepped up. */
+  | { t: 'darts.start' }
+  /** On your turn, throw a dart that lands at board-local (x, y) meters (see shared/darts.ts); the office scores it. */
+  | { t: 'darts.throw'; x: number; y: number }
+  /** Clear the game off the scoreboard, for a new one (a game that's still on, only its players can). */
+  | { t: 'darts.reset' }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1223,6 +1237,8 @@ export type ServerMsg =
   | { t: 'dog'; dog: DogState }
   /** The basketball on your floor was picked up, thrown, or put back under the hoop. */
   | { t: 'ball'; ball: BallState }
+  /** Someone on your floor stepped up to the dartboard or away, changed the options, started, threw or cleared a game. */
+  | { t: 'darts'; darts: DartsState }
   | { t: 'jukebox'; state: JukeboxState }
   /** Who's at the arcade cabinet on your floor now, and the building's high scores. */
   | { t: 'cabinet'; state: CabinetState }
