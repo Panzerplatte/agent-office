@@ -35,7 +35,7 @@ export interface Collider {
   fence?: boolean;
 }
 
-export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts';
+export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts' | 'pool';
 
 /** Something you can use. Its scene object carries it as `userData.interact`, for clicking. */
 export interface Interactable {
@@ -1273,6 +1273,10 @@ export function buildOffice(): Office {
   const poolTable = buildPoolTable(night);
   group.add(poolTable.group);
   colliders.push(...poolTable.colliders);
+  // Step up to it from anywhere round it, or looking at it from near enough.
+  const pool: Interactable = { kind: 'pool', x: POOL_TABLE.x, z: POOL_TABLE.z, radius: 2.1 };
+  interactables.push(pool);
+  poolTable.group.userData.interact = pool;
   const { rack: cueRack } = POOL_TABLE;
   fixture('south', cueRack.x, (cueRack.height + 0.1) / 2, cueRack.width + 0.1, cueRack.height + 0.1);
 

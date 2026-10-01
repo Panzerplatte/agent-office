@@ -8,9 +8,10 @@ import type { DogState } from '../shared/dog';
 import { JUKEBOX_TUNES, type JukeboxState } from '../shared/jukebox';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
+import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'pool';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -183,6 +184,10 @@ class Store {
   ball: BallState = {};
   /** The dartboard on this floor: who's at it, the options for the next game, and the game (see shared/darts.ts). */
   darts: DartsState = emptyDarts();
+  /** The pool table on this floor: who's at it on which side, and the game (see shared/pool.ts). */
+  pool: PoolState = emptyPool();
+  /** The shot that came with the latest news of the table, if one did: to roll it out (see world/pool.ts). */
+  poolShot: PoolPlayback | undefined;
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -263,7 +268,9 @@ class Store {
     this.setJukebox(v.jukebox);
     this.ball = v.ball ?? {};
     this.darts = v.darts ?? emptyDarts();
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts'] as Topic[]) this.emit(t);
+    this.pool = v.pool ?? emptyPool();
+    this.poolShot = undefined;
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -402,6 +409,11 @@ class Store {
       case 'darts':
         this.darts = msg.darts;
         this.emit('darts');
+        break;
+      case 'pool':
+        this.pool = msg.pool;
+        this.poolShot = msg.shot;
+        this.emit('pool');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

@@ -555,6 +555,61 @@ export class OfficeSound {
     }
   }
 
+  // ---- Pool ---------------------------------------------------------------------------------------
+
+  /** When the last pool click went (ctx time): a break's dozens of them in a moment are thinned out. */
+  private poolLast = 0;
+
+  /**
+   * The pool table: the cue's tip on the cue ball (`cue`, `speed` how hard, 0–1), one ball clicking
+   * off another (`click`), a ball into a cushion (`cushion`), one dropping into a pocket and rattling
+   * down the net (`pocket`), at `speed` m/s; and a fanfare for a game won. `at` is where.
+   */
+  pool(kind: 'cue' | 'click' | 'cushion' | 'pocket' | 'cheer', at?: Pos, speed = 1) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t0 = ctx.currentTime + 0.005;
+    if (kind === 'click' || kind === 'cushion') {
+      // Too soft to hear, or right on top of the last one.
+      if (speed < 0.08 || t0 - this.poolLast < 0.012) return;
+      this.poolLast = t0;
+    }
+    this.count(`pool-${kind}`);
+    const out = at ? this.panner(at, 2.5, 1) : ctx.createGain();
+    out.connect(this.ambience);
+    const hard = Math.min(1, speed / 4);
+    switch (kind) {
+      case 'cue':
+        // The leather tip's dull tock on the ball.
+        this.blip(out, t0, rand(1300, 1450), 0.6, 0.05, 0.08 + speed * 0.22, 'triangle');
+        this.play(pick(this.buf.steps), { gain: 0.2 + speed * 0.3, rate: rand(2.8, 3.1), dest: out });
+        break;
+      case 'click':
+        // Phenolic on phenolic: a bright, short clack.
+        this.clink(out, t0, rand(2600, 3100), 0.02 + hard * 0.12);
+        this.blip(out, t0, rand(1800, 2100), 0.8, 0.025, 0.03 + hard * 0.12, 'triangle');
+        break;
+      case 'cushion':
+        // A soft thump into the rubber.
+        this.play(pick(this.buf.steps), { gain: 0.06 + hard * 0.3, rate: rand(1.4, 1.6), dest: out });
+        this.blip(out, t0, rand(170, 200), 0.8, 0.08, 0.04 + hard * 0.1, 'sine');
+        break;
+      case 'pocket':
+        // Clunk into the leather, and the ball rolling down the net.
+        this.blip(out, t0, rand(300, 340), 0.6, 0.1, 0.18, 'triangle');
+        for (let i = 1; i <= 3; i++) this.play(pick(this.buf.steps), { when: t0 + 0.06 + i * 0.07, gain: 0.16 / i, rate: rand(1.8, 2.2), dest: out });
+        break;
+      case 'cheer':
+        [523, 659, 784, 1047, 1319].forEach((f, i) => {
+          const when = t0 + 0.2 + i * 0.12;
+          const len = i === 4 ? 0.9 : 0.18;
+          this.blip(out, when, f, 1, len, 0.1, 'triangle');
+          this.blip(out, when, f * 2, 1, len * 0.7, 0.03);
+        });
+        break;
+    }
+  }
+
   /** Whoosh: the rush of air and the squeal of hands on brass, all the way down a fire pole. */
   slide(seconds = 1.6) {
     const ctx = this.ctx;
