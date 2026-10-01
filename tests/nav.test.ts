@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BALCONY, BALCONY_DOOR, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, MEETING_ROOM, MEETING_SEATS, PARACHUTE, ROAD, SEATS, STATIONS } from '../src/shared/layout.js';
+import { BALCONY, BALCONY_DOOR, BOARDS, DARTBOARD, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, MEETING_ROOM, MEETING_SEATS, PARACHUTE, ROAD, SEATS, STATIONS, TV } from '../src/shared/layout.js';
 import { walkable, wayHome, wayIn, wayToBalcony, type Pt } from '../src/shared/nav.js';
 
 test('a worker sent home walks round the furniture, out the exit door and off along the sidewalk', () => {
@@ -80,4 +80,17 @@ test('upstairs, with no exit door, a worker sent home walks out onto the balcony
     assert.deepEqual([jx, jz], [PARACHUTE.jump.x, PARACHUTE.jump.z]);
     assert.ok(jz < BALCONY.maxZ && jz > BALCONY.maxZ - 0.6, `${seat.id} ends up at the railing`);
   }
+});
+
+test('the dartboard hangs at regulation height between the Services board and the TV, with its lane kept clear', () => {
+  assert.equal(DARTBOARD.y, 1.73);
+  assert.ok(Math.abs(DARTBOARD.x - DARTBOARD.oche.x - 2.37) < 1e-9, 'the oche is 2.37 m from the face');
+  // On the wall, clear of the Services board and the TV (with their frames) either side of it.
+  const half = DARTBOARD.cabinet.width / 2 + DARTBOARD.cabinet.door;
+  const services = BOARDS.services;
+  assert.ok(DARTBOARD.z - half > services.z + (services.width + 0.3) / 2, 'clear of the Services board');
+  assert.ok(DARTBOARD.z + half < TV.z - (TV.width + 0.3) / 2, 'clear of the TV');
+  // The dog keeps out of the lane, but you can walk up to the oche and stand behind it to throw.
+  for (let x = DARTBOARD.oche.x + 0.3; x < FLOOR.maxX; x += 0.1) assert.ok(!walkable(x, DARTBOARD.z), `the lane at x ${x.toFixed(2)} is kept clear`);
+  assert.ok(walkable(DARTBOARD.oche.x - 0.3, DARTBOARD.oche.z), 'you can stand at the oche');
 });

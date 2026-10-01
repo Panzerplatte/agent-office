@@ -96,6 +96,9 @@ const texts = strings(
     'golfHoleInOneAgain': "🏆 HOLE IN ONE! That's {n}",
     'golfBest': '⛳ {distance} from the pin — your best yet!',
     'golfTeeBusy': '🏌️ {name} is on the tee — wait your turn',
+    'dartsFull': '🎯 The dartboard has 4 players already — wait for a spot',
+    'dartsWon': '🎯 {name} won at darts!',
+    'dartsYouWon': '🎯 Game shot! You won',
     'ballLeftBehind': '🏀 The ball stayed behind, back under the other floor’s hoop',
     'ballSwish': 'Swish!',
     'ballBank': 'Off the glass!',
@@ -105,6 +108,7 @@ const texts = strings(
     'arcadeLostGame': "🕹️ The office lost track of your game, so here's a new one",
     'arcadeLeft': '{name} stepped away from the arcade',
     'airHorn': '📯 {name} blew the air horn!',
+    'whistle': '📣 {name} blew the whistle!',
 
     // Breaks: the balcony, the bar and the coffee machine
     'smokeBreak': '🚬 Smoke break',
@@ -218,6 +222,9 @@ const texts = strings(
     'golfHoleInOneAgain': '🏆 HOLE-IN-ONE! Schon das {n}.',
     'golfBest': '⛳ {distance} von der Fahne — dein bester Schlag bisher!',
     'golfTeeBusy': '🏌️ {name} ist am Abschlag — warte, bis du dran bist',
+    'dartsFull': '🎯 An der Dartscheibe sind schon 4 — warte, bis ein Platz frei wird',
+    'dartsWon': '🎯 {name} hat beim Darts gewonnen!',
+    'dartsYouWon': '🎯 Game Shot! Du hast gewonnen',
     'ballLeftBehind': '🏀 Der Ball ist unter dem Korb der anderen Etage geblieben',
     'ballSwish': 'Swish!',
     'ballBank': 'Übers Brett!',
@@ -227,6 +234,7 @@ const texts = strings(
     'arcadeLostGame': '🕹️ Das Büro hat dein Spiel aus den Augen verloren, hier ist ein neues',
     'arcadeLeft': '{name} hat den Automaten verlassen',
     'airHorn': '📯 {name} hat das Signalhorn geblasen!',
+    'whistle': '📣 {name} hat in die Trillerpfeife geblasen!',
 
     'smokeBreak': '🚬 Raucherpause',
     'smokeStubbed': 'Du drückst sie im Aschenbecher aus',

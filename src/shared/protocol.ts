@@ -2,6 +2,7 @@
 
 import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
+import type { DartsMode, DartsState } from './darts.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
 import type { DogState } from './dog.js';
@@ -704,6 +705,8 @@ export interface FloorView {
   meeting: MeetingState;
   /** The basketball by the hoop: who has it, or how it was last thrown. */
   ball: BallState;
+  /** The dartboard: who's at it, the options for the next game, and the game with all its darts. */
+  darts: DartsState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -982,8 +985,10 @@ export type ClientMsg =
   | { t: 'sit'; seat?: string }
   /** You picked an issue card up off the board (or put it down again, no issue): everyone sees it in your hands. */
   | { t: 'carry'; issue?: number; title?: string }
-  /** An emote (hold G, or 1–6): everyone else on your floor sees your character do it. Rate limited, see EmoteBucket. */
+  /** An emote (hold G, or 1–7): everyone else on your floor sees your character do it. Rate limited, see EmoteBucket. */
   | { t: 'emote'; emote: EmoteId }
+  /** X: your emote stops (a looping one would keep going otherwise). Not rate limited, and only passed on after an emote. */
+  | { t: 'emote.stop' }
   | { t: 'profile'; name: string; color: string; look: Look }
   /** With `issue`, the worker is there for that GitHub issue: it's assigned on GitHub (so it moves to In progress) and taken off the queue. */
   | { t: 'worker.spawn'; deskId: string; prompt?: string; worktree?: boolean; kind?: WorkerKind; provider?: AgentProvider; model?: string; effort?: AgentEffort; issue?: number }
@@ -1017,6 +1022,10 @@ export type ClientMsg =
   | { t: 'gong' }
   /** Blow the DJ's air horn on the roof; everyone up there hears it. */
   | { t: 'horn' }
+  /** Blow the whistle (L), anywhere: everyone else on your floor hears it. Held, it trills until 'whistle.stop'. */
+  | { t: 'whistle' }
+  /** Let go of L: the trill stops. */
+  | { t: 'whistle.stop' }
   /** Close an issue, or a pull request without merging it; the answer comes back as gh.closed. */
   | { t: 'gh.close'; kind: 'issue' | 'pull'; number: number; comment?: string; reason?: GhCloseReason; deleteBranch?: boolean }
   /** Put labels on an issue or PR and take others off, as the server's gh account; answered with gh.labeled. */
@@ -1123,6 +1132,17 @@ export type ClientMsg =
   | { t: 'ball.take' }
   /** Throw the basketball in your hands from (x, y, z) at (vx, vy, vz) m/s, or drop it; everyone on the floor sees it fly. */
   | { t: 'ball.throw'; x: number; y: number; z: number; vx: number; vy: number; vz: number }
+  /** Step up to your floor's dartboard (up to four people, each with their own colour), or away from it. */
+  | { t: 'darts.join' }
+  | { t: 'darts.leave' }
+  /** At the dartboard, pick 301 or 501 and double-out or not, for the next game. */
+  | { t: 'darts.options'; mode?: DartsMode; doubleOut?: boolean }
+  /** At the dartboard, start a game for everyone at it, in the order they stepped up. */
+  | { t: 'darts.start' }
+  /** On your turn, throw a dart that lands at board-local (x, y) meters (see shared/darts.ts); the office scores it. */
+  | { t: 'darts.throw'; x: number; y: number }
+  /** Clear the game off the scoreboard, for a new one (a game that's still on, only its players can). */
+  | { t: 'darts.reset' }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1179,6 +1199,7 @@ export type ServerMsg =
   /** Someone on your floor hit a golf ball off the tee (see the client's 'golf'). */
   | { t: 'golf'; id: string; yaw: number; loft: number; power: number }
   | { t: 'peer.emote'; id: string; emote: EmoteId }
+  | { t: 'peer.emote.stop'; id: string }
   | { t: 'worker.update'; worker: WorkerInfo }
   | { t: 'worker.remove'; workerId: string }
   | { t: 'worker.worktree'; workerId: string; state: WorktreeState }
@@ -1200,6 +1221,10 @@ export type ServerMsg =
   | { t: 'gong'; why: GongWhy; by?: string; pr?: number }
   /** Someone on the roof blew the DJ's air horn (sent to everyone up there, them too). */
   | { t: 'horn'; by: string }
+  /** Someone on your floor blew the whistle (not sent to them: they hear their own straight away). */
+  | { t: 'whistle'; id: string; by: string }
+  /** They let go of it again. */
+  | { t: 'whistle.stop'; id: string }
   /** Sent to whoever asked to close it. */
   | { t: 'gh.closed'; kind: 'issue' | 'pull'; number: number; error?: string }
   /** Sent to whoever changed them: the labels it has now, or why they didn't change. */
@@ -1221,6 +1246,8 @@ export type ServerMsg =
   | { t: 'cat'; cat: CatState }
   /** The basketball on your floor was picked up, thrown, or put back under the hoop. */
   | { t: 'ball'; ball: BallState }
+  /** Someone on your floor stepped up to the dartboard or away, changed the options, started, threw or cleared a game. */
+  | { t: 'darts'; darts: DartsState }
   | { t: 'jukebox'; state: JukeboxState }
   /** Who's at the arcade cabinet on your floor now, and the building's high scores. */
   | { t: 'cabinet'; state: CabinetState }

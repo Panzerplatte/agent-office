@@ -17,6 +17,7 @@ import { Docs } from './docs.js';
 import { Cat } from './cat.js';
 import { Dog } from './dog.js';
 import { Court } from './court.js';
+import { Darts } from './darts.js';
 import { Jukebox } from './jukebox.js';
 import { Whiteboard } from './whiteboard.js';
 import { MeetingRoom } from './meetings.js';
@@ -108,6 +109,8 @@ export class Floor {
   readonly cat: Cat;
   /** The basketball by the hoop: who has it, or how it was last thrown. */
   readonly court = new Court();
+  /** The dartboard: who's at it, and their game (see darts.ts). */
+  readonly darts = new Darts();
   private timer: NodeJS.Timeout;
   /** Pull requests merging, to ring the gong for. */
   private merges = new MergeWatch();

@@ -19,6 +19,9 @@ export default strings(
     signGarage: '🏎️  GARAGE',
     signRooftop: '🍸 Rooftop bar',
     signGolf: '⛳ Hole 1 · Par 1',
+    // The dartboard's chalkboards
+    dartsBust: 'BUST',
+    dartsWins: 'WINS!',
     signGong: '🎉 Merge gong',
     signWhiteboard: '📝 Whiteboard',
     signRip: 'R.I.P.',
@@ -155,6 +158,8 @@ export default strings(
     signGarage: '🏎️  GARAGE',
     signRooftop: '🍸 Rooftop-Bar',
     signGolf: '⛳ Loch 1 · Par 1',
+    dartsBust: 'ÜBERWORFEN',
+    dartsWins: 'GEWINNT!',
     signGong: '🎉 Merge-Gong',
     signWhiteboard: '📝 Whiteboard',
     signRip: 'R.I.P.',

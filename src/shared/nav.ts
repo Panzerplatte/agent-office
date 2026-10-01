@@ -1,7 +1,7 @@
 // Getting around the office floor downstairs (no stairs, no loft, no elevator), round the furniture
 // on a coarse grid: the dog's walks (server/dog.ts), and a worker's way out when it's sent home.
 
-import { BALCONY, BALCONY_DOOR, BEANBAGS, BOOKSHELF, CABINET, DESK_SIZE, DESKS, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PARACHUTE, PLANTS, POLE, POLES, ROAD, STAIRS, STATIONS, WHITEBOARD, type DeskDef } from './layout.js';
+import { BALCONY, BALCONY_DOOR, BEANBAGS, BOOKSHELF, CABINET, DARTBOARD, DESK_SIZE, DESKS, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PARACHUTE, PLANTS, POLE, POLES, ROAD, STAIRS, STATIONS, WHITEBOARD, type DeskDef } from './layout.js';
 
 
 export type Pt = [number, number];
@@ -51,6 +51,13 @@ function obstacles(): { rects: Rect[]; circles: Circle[] } {
   rects.push([CABINET.x - 0.45, FLOOR.maxX, CABINET.z - CABINET.width / 2 - 0.02, CABINET.z + CABINET.width / 2 + 0.02]);
   // The bookshelf against the south wall, as world/bookshelf.ts puts it.
   rects.push([BOOKSHELF.x - BOOKSHELF.width / 2 - 0.04, BOOKSHELF.x + BOOKSHELF.width / 2 + 0.04, BOOKSHELF.z - BOOKSHELF.depth / 2 - 0.03, FLOOR.maxZ]);
+  // The dartboard's cabinet on the east wall, as world/dartboard.ts puts it, and the lane in front of
+  // it out to the oche, so the dog doesn't wander in among the darts. The oche itself, where you
+  // stand to throw, stays open floor.
+  const dart = DARTBOARD;
+  const dartSpan = dart.cabinet.width / 2 + dart.cabinet.door + 0.01;
+  rects.push([FLOOR.maxX - dart.cabinet.depth, FLOOR.maxX, dart.z - dartSpan, dart.z + dartSpan]);
+  rects.push([dart.oche.x + R, FLOOR.maxX, dart.z - 0.35, dart.z + 0.35]);
   // The ladder up the west wall, and the fire poles: a hole with a railing round it, or a landing mat.
   // Which spot has which changes floor by floor, so the dog keeps off both.
   rects.push([FLOOR.minX, FLOOR.minX + 0.3, LADDER.z - LADDER.width / 2 - 0.05, LADDER.z + LADDER.width / 2 + 0.05]);

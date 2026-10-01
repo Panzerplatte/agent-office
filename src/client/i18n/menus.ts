@@ -140,9 +140,11 @@ export default strings(
     // Emotes
     emotes: 'Emotes',
     emote: 'Emote',
-    emotePoint: 'Point at one, or 1–6',
+    emotePoint: 'Point at one, or 1–7',
     emoteLetGo: 'Let go of G',
     emoteClick: 'Click',
+    /** In the hint bar while your looping emote plays: X stops it. */
+    emoteStop: 'Stop',
 
     // The rooftop bar's menu
     close: 'Close',
@@ -173,6 +175,21 @@ export default strings(
     strainLight: 'Spark up some {strain}',
     ashtrayFoot: 'It kicks in over a few seconds and hangs about for a minute after you stub it out. The view goes with it. E or F stubs it out.',
 
+    // The panel at the dartboard: the lobby, then the scoreboard
+    darts: 'Darts',
+    dartsDoubleOut: 'Double out',
+    dartsDoubleOutOn: 'Double out: on',
+    dartsDoubleOutOff: 'Double out: off',
+    dartsStart: 'Start',
+    dartsNewGame: 'New game',
+    dartsYou: '(you)',
+    dartsMiss: 'Miss',
+    dartsBust: '💥 BUST',
+    dartsWinner: '🏆 {name} wins!',
+    dartsOver: 'Game over',
+    dartsLobby: (v) => `${v.n} players: you throw in this order`,
+    dartsSolo: 'Just you so far: play on your own, or wait for someone',
+
     // Controls (H)
     helpTitle: '🎮 Controls',
     keySpace: 'Space',
@@ -193,6 +210,7 @@ export default strings(
     helpGong: 'Whenever a pull request merges, the gong next to the PR board rings, confetti rains down all over the floor and every worker gets up on its desk for a quick dance. Walk up to the gong and press E to bang it yourself',
     helpNext: "Next worker that needs you: go to whoever has waited longest (needs input, or done and nobody's looked), and again for the next one. Arrows at the edge of the screen point to the ones out of sight",
     helpHoop: 'The hoop on the west wall, by the exit door: E at the ball picks it up. Hold E (or the mouse, in first person) and let go when the meter is in the green to sink it. In first person it goes where you look. Q drops it. Everyone on your floor sees your shot',
+    helpDarts: 'The dartboard on the lounge\'s east wall: E at the oche steps up (up to 4 players, each in their own colour). Pick 301 or 501 and Double out, then Start. On your turn the mouse aims; hold Space and let go when the meter is in the green. E, or walking off, steps away. Everyone on your floor sees the darts and the scores on the chalkboards',
     helpRoof: 'The elevator goes up to the rooftop bar: a DJ playing drum and bass under the lights, and the city all around. Press E at the bar for a drink (it goes to your head for a bit) and at the DJ booth for the air horn',
     helpOrbit: 'Orbit and zoom the camera in third person',
     helpPrompt: 'Prompt: give a task to a new or existing worker at the desk you face',
@@ -207,6 +225,7 @@ export default strings(
     helpPr: 'Open a pull request for a worker on its own branch, or see the one it has',
     helpChat: 'Chat',
     helpEmote: 'Emote: hold G, point at one and let go (or tap G and click one), or press 1–6: wave, thumbs up, clap, dance, point, facepalm. Everyone on your floor sees it',
+    helpWhistle: 'Blow the whistle, anywhere: hold L for a long trill, tap it for a short tweet. Everyone on your floor hears it (turn it down in ⚙️ Settings)',
     helpSearch: 'Search the chat and every terminal on your floor, back to before the office last restarted',
     helpVoice: 'Join voice. In voice, hold V to talk (push to talk): you’re muted once you let go. Leave voice from the ☰ menu',
     helpMute: 'Mute or unmute your mic in voice. ⚙️ Settings can have you join muted, for push to talk',
@@ -351,9 +370,10 @@ export default strings(
     // Emotes
     emotes: 'Emotes',
     emote: 'Emote',
-    emotePoint: 'Zeig auf eins, oder 1–6',
+    emotePoint: 'Zeig auf eins, oder 1–7',
     emoteLetGo: 'G loslassen',
     emoteClick: 'Klicken',
+    emoteStop: 'Aufhören',
 
     // Die Karte der Dachbar
     close: 'Schließen',
@@ -384,6 +404,21 @@ export default strings(
     strainLight: 'Etwas {strain} anzünden',
     ashtrayFoot: 'Wirkt nach ein paar Sekunden und hält noch etwa eine Minute an, nachdem du ihn ausgedrückt hast. Die Aussicht geht mit. E oder F drückt ihn aus.',
 
+    // Das Panel an der Dartscheibe: erst die Lobby, dann die Anzeigetafel
+    darts: 'Darts',
+    dartsDoubleOut: 'Double Out',
+    dartsDoubleOutOn: 'Double Out: an',
+    dartsDoubleOutOff: 'Double Out: aus',
+    dartsStart: 'Start',
+    dartsNewGame: 'Neues Spiel',
+    dartsYou: '(du)',
+    dartsMiss: 'Daneben',
+    dartsBust: '💥 ÜBERWORFEN',
+    dartsWinner: '🏆 {name} gewinnt!',
+    dartsOver: 'Spiel vorbei',
+    dartsLobby: (v) => `${v.n} Spieler: ihr werft in dieser Reihenfolge`,
+    dartsSolo: 'Bisher nur du: spiel allein oder warte auf jemanden',
+
     // Steuerung (H)
     helpTitle: '🎮 Steuerung',
     keySpace: 'Leertaste',
@@ -404,6 +439,7 @@ export default strings(
     helpGong: 'Immer wenn ein Pull Request gemergt wird, ertönt der Gong neben dem PR-Board, Konfetti regnet über die ganze Etage und jeder Worker steigt auf seinen Schreibtisch für ein kurzes Tänzchen. Geh zum Gong und drück E, um ihn selbst zu schlagen',
     helpNext: 'Nächster Worker, der dich braucht: zu dem, der am längsten wartet (braucht eine Eingabe, oder ist fertig und keiner hat nachgesehen), und noch mal für den nächsten. Pfeile am Bildschirmrand zeigen auf die, die du nicht siehst',
     helpHoop: 'Der Basketballkorb an der Westwand, bei der Ausgangstür: E am Ball hebt ihn auf. Halte E (oder die Maus, in der Ich-Perspektive) und lass los, wenn die Anzeige im Grünen ist, um zu treffen. In der Ich-Perspektive fliegt er dahin, wo du hinsiehst. Q lässt ihn fallen. Alle auf deiner Etage sehen deinen Wurf',
+    helpDarts: 'Die Dartscheibe an der Ostwand der Lounge: E am Oche tritt an (bis zu 4 Spieler, jeder in seiner Farbe). Wähl 301 oder 501 und Double Out, dann Start. Wenn du dran bist, zielt die Maus; halte die Leertaste und lass los, wenn die Anzeige im Grünen ist. E oder Weggehen tritt wieder ab. Alle auf deiner Etage sehen die Darts und den Spielstand auf den Kreidetafeln',
     helpRoof: 'Der Aufzug fährt hoch zur Dachbar: ein DJ legt Drum & Bass unter den Lichtern auf, und rundherum die Stadt. Drück E an der Bar für einen Drink (er steigt dir kurz zu Kopf) und am DJ-Pult für das Signalhorn',
     helpOrbit: 'In der Verfolgerperspektive die Kamera drehen und zoomen',
     helpPrompt: 'Prompt: einem neuen oder vorhandenen Worker am Schreibtisch vor dir eine Aufgabe geben',
@@ -418,6 +454,7 @@ export default strings(
     helpPr: 'Einen Pull Request für einen Worker auf seinem eigenen Branch öffnen, oder den ansehen, den er hat',
     helpChat: 'Chat',
     helpEmote: 'Emote: G halten, auf eins zeigen und loslassen (oder G tippen und eins anklicken), oder 1–6 drücken: winken, Daumen hoch, klatschen, tanzen, zeigen, Facepalm. Alle auf deiner Etage sehen es',
+    helpWhistle: 'In die Trillerpfeife blasen, überall: L halten für einen langen Triller, kurz tippen für einen kurzen Pfiff. Alle auf deiner Etage hören es (leiser stellen in ⚙️ Einstellungen)',
     helpSearch: 'Den Chat und jedes Terminal auf deiner Etage durchsuchen, zurück bis vor den letzten Neustart des Büros',
     helpVoice: 'Sprachchat beitreten. Im Sprachchat V halten zum Sprechen (Push-to-Talk): Sobald du loslässt, bist du stumm. Verlassen über das ☰-Menü',
     helpMute: 'Dein Mikro im Sprachchat stumm- oder lautschalten. In ⚙️ Einstellungen kannst du stumm beitreten, für Push-to-Talk',

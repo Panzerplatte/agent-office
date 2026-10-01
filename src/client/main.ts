@@ -23,6 +23,9 @@ import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
+import { Darter } from './darts';
+import { BoardDarts } from './world/darts';
+import { MAX_PLAYERS, type DartsState } from '../shared/darts';
 import { Hands } from './world/hands';
 import { Basketball, IN_HANDS } from './world/hoop';
 import { HOOP, SWEET, idealSpeed, lookAtRim, meter, shotSpeed, throwPitch, tossSpeed, underCeiling } from '../shared/hoop';
@@ -44,7 +47,7 @@ import { DesktopNotifier, askNotifyPermission, notifyPermission, waitingOnSomeon
 import { NextUp, waitingInOrder, waitingLabel } from './nextup';
 import { $, h, clip, closeAllModals, doingNow, modalOpen, onDoingChange, onModalChange, openModal, readingNow, toast, STATUS_LABEL } from './ui/dom';
 import { noticeText, t } from './i18n';
-import { deskLabel, deskLabelOf, drinkName, patternLabel, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
+import { deskLabel, deskLabelOf, drinkName, emoteLabel, patternLabel, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
 import { openTerminal, openTerminalFor, routeTerminalMessage, type TerminalFind } from './ui/terminal';
 import { openSearch } from './ui/search';
 import { openChanges, openChangesFor, routeChangesMessage } from './ui/changes';
@@ -75,8 +78,9 @@ import { Arcade } from './ui/arcade';
 import { Cabinet } from './ui/cabinet';
 import { trackTitle } from '../shared/jukebox';
 import { GAME, scoreText } from '../shared/cabinet';
-import { EMOTES, EMOTE_BY_ID, EmoteBucket, type EmoteId } from '../shared/emotes';
+import { EMOTES, EMOTE_BY_ID, EMOTE_EASE_OUT, EmoteBucket, type EmoteId } from '../shared/emotes';
 import { EmoteWheel } from './ui/emotes';
+import { WHISTLE_MAX_SECS, WhistleGate } from '../shared/whistle';
 import { whereabouts } from './ui/whereabouts';
 import { wayTo } from './walkto';
 import { MeetingBoardTexture, MeetingSignTexture, meetingStage } from './world/meeting';
@@ -441,6 +445,62 @@ function theirShot(id: string, shot: Shot) {
     sound.golf('hit', TEE_BALL);
   }, (BACKSWING_TIME + IMPACT) * 1000);
 }
+// ---- Darts ------------------------------------------------------------------------------------------
+// The darts in the board, as the office says they were thrown, for everyone on the floor.
+const boardDarts = new BoardDarts(office.dartboard);
+const darter = new Darter(player, me, camera, canvas, office.dartboard, boardDarts, () => pointer, () => reduceMotion.matches, {
+  join: () => net.send({ t: 'darts.join' }),
+  leave: () => net.send({ t: 'darts.leave' }),
+  throw: (x, y) => net.send({ t: 'darts.throw', x, y }),
+  options: (o) => net.send({ t: 'darts.options', ...o }),
+  start: () => net.send({ t: 'darts.start' }),
+  reset: () => net.send({ t: 'darts.reset' }),
+  full: () => toast(t('notices.dartsFull'), 'warn'),
+  done: () => {
+    // Not '': that reads as "no hint shown", and the darts hint would stay up.
+    hintKey = 'stale';
+  },
+});
+/** The floor's darts as the office said last time, to see what changed; and whether the next is all new (you just arrived, or came back). */
+let dartsBefore: DartsState | null = null;
+let dartsFresh = true;
+store.on('darts', () => {
+  const news = boardDarts.follow(dartsBefore, store.darts, dartsFresh);
+  dartsBefore = store.darts;
+  dartsFresh = false;
+  // Their arm goes as their dart does.
+  for (const { by } of news.thrown) remotes.get(by.id)?.person.reach();
+  darter.sync(store.darts);
+  office.dartboard.chalk(store.darts, darter.shownTurn());
+});
+// A dart landed or they came out: the panel and the chalkboards show what's in the board.
+boardDarts.onChange = () => {
+  darter.sync(store.darts);
+  office.dartboard.chalk(store.darts, darter.shownTurn());
+};
+boardDarts.onLand = (dart, by, at, end) => {
+  sound.darts(dart.label === 'MISS' ? 'wall' : 'thunk', at);
+  if (end?.bust) sound.darts('bust', at);
+  if (!end?.won) return;
+  const front = office.dartboard.toWorld(0, 0, 0.5);
+  confetti.burst(front.x, front.y, front.z, 220, 0.9);
+  sound.darts('cheer', at);
+  toast(by.id === store.you ? t('notices.dartsYouWon') : t('notices.dartsWon', { name: by.name }));
+};
+
+/** E at the oche: step up to the dartboard, if there's room. */
+function stepUpToDarts() {
+  if (darter.active || golf.active || trip || climber.active) return;
+  const d = store.darts;
+  if (d.lobby.length >= MAX_PLAYERS && !d.lobby.some((s) => s.id === store.you)) return toast(t('notices.dartsFull'), 'warn');
+  if (carrying) return toast(t('notices.handsFullCard', { issue: carrying.issue }), 'warn');
+  if (player.seat) standUp();
+  if (hanger.active) hanger.cancel();
+  if (walkingTo) stopWalking();
+  if (smokeBreakUntil) setSmoking(false);
+  darter.start(store.darts, store.you);
+}
+
 sky.onThunder = (delay, loud) => sound.thunder(delay, loud);
 const hanger = new Hanger(net, camera, canvas, player, office, gallery);
 scene.add(hanger.ghost.group);
@@ -606,7 +666,11 @@ net.onMessage((msg) => {
     departures.clear();
     arrivals.clear();
     seatedAlready = true;
+    // Whatever's in the dartboard there is just there: nobody threw it as you walked in.
+    dartsFresh = true;
   }
+  // Back after a reconnect, which let go of your place at the dartboard: ask for it again (before the board's news says you're not at it).
+  if (msg.t === 'welcome' && darter.active) darter.rejoin(msg.you);
   if (msg.t === 'worker.remove') sentHome.add(msg.workerId);
   store.apply(msg);
   seatedAlready = false;
@@ -732,6 +796,9 @@ net.onMessage((msg) => {
     case 'peer.emote':
       remotes.get(msg.id)?.person.emote(msg.emote);
       break;
+    case 'peer.emote.stop':
+      remotes.get(msg.id)?.person.stopEmote();
+      break;
     case 'golf':
       theirShot(msg.id, { yaw: msg.yaw, loft: msg.loft, power: msg.power });
       break;
@@ -742,6 +809,18 @@ net.onMessage((msg) => {
       if (!upTop) break;
       sound.horn();
       if (msg.by !== store.profile.name) toast(t('notices.airHorn', { name: msg.by }));
+      break;
+    case 'whistle': {
+      // From their mouth, where they stand.
+      whistles.get(msg.id)?.();
+      const at = remotes.get(msg.id)?.person.root.position ?? store.peers.get(msg.id);
+      whistles.set(msg.id, sound.whistle(at && { x: at.x, y: at.y + 1.5, z: at.z }, WHISTLE_MAX_SECS));
+      toast(t('notices.whistle', { name: msg.by }));
+      break;
+    }
+    case 'whistle.stop':
+      whistles.get(msg.id)?.();
+      whistles.delete(msg.id);
       break;
   }
 });
@@ -828,6 +907,7 @@ function ride(floorId: string) {
   if (hanger.active) hanger.cancel();
   if (climber.active) climber.abort();
   if (golf.active) golf.stop();
+  if (darter.active) darter.stop();
   const inside = inElevator(player.pos.x, player.pos.z);
   trip = { floor: floorId, how: 'elevator', timer: window.setTimeout(tripFailed, 10_000) };
   player.enabled = false;
@@ -864,6 +944,7 @@ function switchFloor(floorId: string) {
   if (hanger.active) hanger.cancel();
   if (climber.active) climber.abort();
   if (golf.active) golf.stop();
+  if (darter.active) darter.stop();
   if (player.seat) standUp();
   // The floor list isn't a window, so nothing else stops a walk over to someone on this floor.
   if (walkingTo) stopWalking();
@@ -1077,6 +1158,7 @@ function walkTo(id: string) {
   if (!store.onMyFloor(p) && !p.floor) return;
   if (player.seat) standUp();
   if (golf.active) golf.stop();
+  if (darter.active) darter.stop();
   walkingTo = { id, replanAt: 0 };
   if (store.onMyFloor(p)) toast(t('notices.walkTo', { name: p.name }));
   else {
@@ -1478,6 +1560,7 @@ function standAt(desk: DeskDef) {
   if (hanger.active) hanger.cancel();
   if (climber.active) climber.abort();
   if (golf.active) golf.stop();
+  if (darter.active) darter.stop();
   if (walkingTo) stopWalking();
   const spot = deskSeat(desk, desk.station ? -1.6 : desk.beanbag ? 1.6 : 2.4);
   player.pos.set(spot.x, 0, spot.z);
@@ -1721,6 +1804,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'dj') blowHorn();
   else if (target.kind === 'golf') teeOff();
   else if (target.kind === 'ball') takeBall();
+  else if (target.kind === 'darts') stepUpToDarts();
 }
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
@@ -1756,6 +1840,29 @@ function orderDrink(d: Drink) {
     if (player.view === 'first') hands.sip();
     if (!cut) toast(t('notices.barDrink', { emoji: drink.emoji, drink: drinkName(drink), cheers: CHEERS[drink.id]?.() ?? t('notices.cheers') }));
   }, 1500);
+}
+
+// ---- The whistle ---------------------------------------------------------------------------------
+/** The same limit the server keeps, so a whistle you hear yourself blow is one everyone else hears too. */
+const whistleLimit = new WhistleGate();
+/** Stops your own trill, while you hold L. */
+let myWhistle: (() => void) | null = null;
+/** Stops each trill someone else on your floor is blowing, by who. */
+const whistles = new Map<string, () => void>();
+
+/** L: the whistle, anywhere, for everyone on your floor. You hear it straight away; it trills until you let go. */
+function blowWhistle() {
+  if (!store.floor || myWhistle || !whistleLimit.take(performance.now())) return;
+  myWhistle = sound.whistle(undefined, WHISTLE_MAX_SECS);
+  reach();
+  net.send({ t: 'whistle' });
+}
+
+function stopWhistle() {
+  if (!myWhistle) return;
+  myWhistle();
+  myWhistle = null;
+  net.send({ t: 'whistle.stop' });
 }
 
 let lastHorn = 0;
@@ -2399,20 +2506,35 @@ function renderHint() {
   if (hanger.active && !modalOpen()) return renderHangHint(el);
   if (climber.active && !modalOpen()) return renderClimbHint(el);
   if (golf.active && !modalOpen()) return renderGolfHint(el);
+  if (darter.active && !modalOpen()) return renderDartsHint(el);
   const withBall = holdingBall();
-  if ((!target && !carrying && !withBall) || modalOpen()) {
+  const emoting = me.emoteLooping ? me.emoteId : null;
+  if ((!target && !carrying && !withBall && !emoting) || modalOpen()) {
     if (hintKey) {
       el.classList.add('hidden');
       hintKey = '';
     }
     return;
   }
-  const hint = withBall ? ballHint() : carrying ? carryHint(carrying, target) : hintFor(target!);
-  const k = `${withBall ? 'ball!' : `${target?.kind}${target?.deskId ?? ''}`}|${carrying?.issue ?? ''}|${hint.k}`;
+  const hint = withBall ? ballHint() : carrying ? carryHint(carrying, target) : target ? hintFor(target) : emoteHint(emoting!);
+  const k = `${withBall ? 'ball!' : `${target?.kind}${target?.deskId ?? ''}`}|${carrying?.issue ?? ''}|${hint.k}|${emoting ?? ''}`;
   if (k === hintKey) return;
   hintKey = k;
-  el.replaceChildren(...hint.parts);
+  el.replaceChildren(...(emoting ? withStop(hint.parts) : hint.parts));
   el.classList.remove('hidden');
+}
+
+/** The hint bar while your looping emote plays and there's nothing else to say. */
+function emoteHint(id: EmoteId): Hint {
+  const e = EMOTE_BY_ID.get(id)!;
+  return { k: id, parts: [h('span.title', {}, `${e.emoji} ${emoteLabel(e)}`)] };
+}
+
+/** While your looping emote plays, X stops it: that's what the X in the hint bar says, instead of what X does here otherwise. */
+function withStop(parts: (HTMLElement | string)[]): (HTMLElement | string)[] {
+  const stop = key('X', t('menus.emoteStop'));
+  const isX = (p: HTMLElement | string) => typeof p !== 'string' && p.querySelector('.key')?.textContent === 'X';
+  return parts.some(isX) ? parts.map((p) => (isX(p) ? stop : p)) : [...parts, stop];
 }
 
 /** What the hint bar says about the thing you're facing. */
@@ -2455,6 +2577,13 @@ function hintFor(it: Interactable): Hint {
       const { best, holes } = golfRecord();
       const about = [holes ? t('main.holesInOne', { n: holes }) : '', best !== null ? t('main.yourBest', { distance: pinText(best) }) : t('main.pinOut', { m: Math.round(PIN_DISTANCE) })].filter(Boolean).join(' · ');
       return { k: about, parts: [title(t('main.golfTee')), aside(about), key('E', t('main.teeOff'))] };
+    }
+    case 'darts': {
+      const d = store.darts;
+      const g = d.game;
+      const full = d.lobby.length >= MAX_PLAYERS && !d.lobby.some((s) => s.id === store.you);
+      const about = g && !g.over ? t('main.dartsPlaying', { names: clip(g.players.map((p) => p.name).join(', '), 40), mode: g.mode }) : d.lobby.length ? t('main.dartsAtBoard', { n: d.lobby.length }) : t('main.dartsAbout');
+      return { k: `${about}|${full}`, parts: [title(t('main.dartboard')), aside(about), full ? aside(t('main.dartsFull')) : key('E', t('main.playDarts'))] };
     }
     case 'jukebox': {
       const j = store.jukebox;
@@ -2691,6 +2820,27 @@ function renderGolfHint(el: HTMLElement) {
   el.classList.remove('hidden');
 }
 
+/** At the dartboard: how to aim and throw on your turn, whose turn it is otherwise, and how to step away. */
+function renderDartsHint(el: HTMLElement) {
+  const title = (text: string) => h('span.title', {}, text);
+  const stage = darter.doing;
+  const up = darter.thrower;
+  const k = `darts|${stage}|${up?.name}|${darter.pulling}|${!!store.darts.game}`;
+  if (k === hintKey) return;
+  hintKey = k;
+  const done = key('E', t('main.done'));
+  const parts =
+    stage === 'charge'
+      ? [title(t('main.dartsLetGo')), aside(t('main.dartsMeterNote'))]
+      : stage === 'aim'
+        ? [key(t('main.keyMouse'), t('main.aim')), key(t('main.keySpace'), t('main.dartsHoldToThrow')), done]
+        : stage === 'watch' || stage === 'thrown'
+          ? [title(up ? t('main.dartsTheirTurn', { name: clip(up.name, 24) }) : t('main.dartsYourTurn')), ...(darter.pulling ? [aside(t('main.dartsPulling'))] : []), done]
+          : [title(t('main.dartboard')), aside(t(store.darts.game?.over ? 'main.dartsGameOver' : 'main.dartsPickGame')), done];
+  el.replaceChildren(...parts);
+  el.classList.remove('hidden');
+}
+
 function renderHangHint(el: HTMLElement) {
   const spot = hanger.spot;
   const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}`;
@@ -2704,7 +2854,7 @@ function renderHangHint(el: HTMLElement) {
 let crossKey = '';
 const finePointer = window.matchMedia('(pointer: fine)').matches;
 function renderCrosshair() {
-  const show = player.view === 'first' && !modalOpen() && !golf.active;
+  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active;
   const free = show && finePointer && player.canLock && !player.locked;
   const k = `${show}|${!!target}|${free}|${relookOnKey}`;
   if (k === crossKey) return;
@@ -2751,16 +2901,36 @@ function emote(id: EmoteId) {
 const emoteWheel = new EmoteWheel(emote, (open) => (player.mouseLook = !open));
 $('hud').append(emoteWheel.el);
 
+/** X while your emote plays: it eases out, for you and everyone else on the floor. */
+function stopEmote() {
+  me.stopEmote();
+  hands.stopEmote();
+  fadeEmoji();
+  net.send({ t: 'emote.stop' });
+}
+
+/** The emoji popped up on the screen in first person, while it's there. */
+let emojiPop: HTMLElement | null = null;
+
 /** In first person you can't see the emoji over your head, so it pops up on the screen instead. */
 function popEmoji(id: EmoteId) {
   const e = EMOTE_BY_ID.get(id)!;
-  document.querySelector('.emote-pop')?.remove();
-  const el = h('div.emote-pop', { style: `--secs:${e.seconds}s`, 'aria-hidden': 'true' }, e.emoji);
-  el.addEventListener('animationend', () => el.remove());
+  emojiPop?.remove();
+  // A one-shot fades by itself at the end; a looping one stays up until it's stopped or runs out.
+  const el = h(`div.emote-pop${e.loop ? '.loop' : ''}`, { style: `--secs:${e.seconds}s;--out:${EMOTE_EASE_OUT}s`, 'aria-hidden': 'true' }, e.emoji);
+  el.addEventListener('animationend', () => {
+    if (!e.loop || el.classList.contains('out')) el.remove();
+    if (emojiPop === el && !el.isConnected) emojiPop = null;
+  });
   $('hud').append(el);
+  emojiPop = el;
 }
 
-/** G opens the emote wheel (hold it and point, or tap it and click); 1–6 play one straight away. */
+function fadeEmoji() {
+  emojiPop?.classList.add('out');
+}
+
+/** G opens the emote wheel (hold it and point, or tap it and click); 1–7 play one straight away. */
 function emoteKey(e: KeyboardEvent): boolean {
   if (e.code === 'KeyG') {
     if (!e.repeat) emoteWheel.press();
@@ -2770,10 +2940,17 @@ function emoteKey(e: KeyboardEvent): boolean {
     emoteWheel.close();
     return true;
   }
-  const n = /^(?:Digit|Numpad)([1-6])$/.exec(e.code);
+  const n = /^(?:Digit|Numpad)([1-7])$/.exec(e.code);
   if (!n) return false;
   emoteWheel.close();
   emote(EMOTES[Number(n[1]) - 1].id);
+  return true;
+}
+
+/** X stops your own emote while it plays (the desk's X waits till it's over). */
+function stopEmoteKey(e: KeyboardEvent): boolean {
+  if (e.code !== 'KeyX' || !me.emoteId) return false;
+  if (!e.repeat) stopEmote();
   return true;
 }
 
@@ -2796,14 +2973,20 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  if (stopEmoteKey(e)) return;
   // On the ladder, E gets you off it (and nothing else is in reach); W, S and Space climb.
   if (climber.active && (e.code === 'KeyE' || e.code === 'KeyF' || e.code in DESK_KEYS)) {
     if (e.code === 'KeyE') climber.letGo();
     return;
   }
   // At the golf tee, E puts the club back (Space swings, see Golfer); nothing else is in reach, and no emotes mid-swing.
-  if (golf.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-6]$/.test(e.code))) {
+  if (golf.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
     if (e.code === 'KeyE') golf.stop();
+    return;
+  }
+  // At the dartboard, the same: E steps away (Space throws, see Darter).
+  if (darter.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
+    if (e.code === 'KeyE' && !e.repeat) darter.stop();
     return;
   }
   // With the ball in your hands, E winds up a shot (let go to shoot) and Q drops it.
@@ -2814,6 +2997,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (emoteKey(e)) return;
+  // Not an office key, so you can whistle on the move.
+  if (e.code === 'KeyL') {
+    if (!e.repeat) blowWhistle();
+    return;
+  }
   if (officeKey(e)) player.clearKeys();
 });
 window.addEventListener('keyup', (e) => {
@@ -2821,6 +3009,9 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'KeyE') letFly();
 });
 window.addEventListener('blur', () => (windFrom = 0));
+// Like V, letting go of L stops the whistle wherever the key comes up.
+window.addEventListener('keyup', (e) => e.code === 'KeyL' && stopWhistle(), true);
+window.addEventListener('blur', stopWhistle);
 // First person with the mouse captured, the button winds up a shot like E does (see player.onClick).
 window.addEventListener('pointerup', (e) => {
   if (e.button === 0 && windFrom && player.locked) letFly();
@@ -2985,7 +3176,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -3024,8 +3215,8 @@ canvas.addEventListener('pointermove', (e) => {
 canvas.addEventListener('pointerleave', () => (pointer = null));
 
 player.onClick = (ndc) => {
-  // At the tee, a click is you steadying the mouse to aim: nothing else is in reach.
-  if (modalOpen() || golf.active) return;
+  // At the tee, a click is you steadying the mouse to aim: nothing else is in reach. At the dartboard, the mouse aims.
+  if (modalOpen() || golf.active || darter.active) return;
   if (emoteWheel.isOpen) return emoteWheel.click();
   // The ball in your hands: press to wind up, let go (or click again, with no mouse captured) to shoot.
   if (holdingBall()) {
@@ -3318,6 +3509,11 @@ function frame(ts?: number) {
   // Pulled away from the tee (sat down, off up the ladder, into the elevator): the club goes back.
   if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop)) golf.stop();
   golf.update(dt);
+  if (darter.active && (trip || hanger.active || climber.active || player.seat || upTop)) darter.stop();
+  darter.update(dt);
+  boardDarts.update(dt);
+  // A dance that keeps going doesn't go with a club in your hands or up the ladder: it stops for everyone.
+  if ((golf.active || climber.active || darter.active) && me.emoteLooping) stopEmote();
   balls.update(dt);
   office.tee.ball.visible = golf.doing !== 'watch' && now > teeEmptyUntil;
   me.root.position.copy(player.pos);
@@ -3328,10 +3524,17 @@ function frame(ts?: number) {
   me.update(dt, t, (player.moving && player.grounded) || (grip === 'ladder' && player.moving), !player.grounded && !grip && !golf.active, player.speedBoost);
   me.setVoiceLevel(voice.inVoice ? voice.localLevel : 0);
   const firstPerson = player.view === 'first';
+  // Its emoji is over your head again once you can see it there, and back on the screen when you can't.
+  if (emojiPop && !firstPerson) {
+    emojiPop.remove();
+    emojiPop = null;
+  } else if (!emojiPop && firstPerson && me.emoteLooping) popEmoji(me.emoteId!);
+  // A looping one's goes when the emote does: stopped, or run out.
+  else if (emojiPop?.classList.contains('loop') && !me.emoteLooping) fadeEmoji();
   // In first person you are the camera; in third, hide yourself when it's zoomed in right behind your head.
   // At the tee the camera's behind the ball, and you're the one holding the club.
   me.root.visible = golf.active || (!firstPerson && camera.position.distanceTo(headPos.set(player.pos.x, player.pos.y + 1.3, player.pos.z)) > 1.5);
-  if (firstPerson && !golf.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
+  if (firstPerson && !golf.active && !darter.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
   // Down a pole: the view widens and the edges streak past.
   const rush = reduceMotion.matches ? 0 : climber.rush;
   const fov = 55 + rush * 16;
@@ -3436,7 +3639,7 @@ function frame(ts?: number) {
   }
 
   aimedNote = null;
-  if (modalOpen() || hanger.active || climber.active || golf.active) target = null;
+  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active) target = null;
   else if (firstPerson) {
     const aim = aimedAt(CROSSHAIR);
     target = aim?.near ? aim.it : (mySeat() ?? ballAtFeet());
@@ -3475,7 +3678,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active) {
+  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
@@ -3528,7 +3731,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

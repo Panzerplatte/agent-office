@@ -1,14 +1,27 @@
 // Emotes: a quick reaction (a wave, a thumbs up…) your character does for everyone on your floor.
 // Server and client share the list, so an emote is just its id on the wire.
 
+/**
+ * `seconds` is how long a one-shot plays. A looping one (`loop`) keeps going until you stop it (X)
+ * or `seconds` runs out; Infinity means it never does by itself.
+ */
 export const EMOTES = [
-  { id: 'wave', emoji: '👋', label: 'Wave', seconds: 2.2 },
-  { id: 'thumbs', emoji: '👍', label: 'Thumbs up', seconds: 1.8 },
-  { id: 'clap', emoji: '👏', label: 'Clap', seconds: 2.2 },
-  { id: 'dance', emoji: '🕺', label: 'Dance', seconds: 4 },
-  { id: 'point', emoji: '👉', label: 'Point', seconds: 2 },
-  { id: 'facepalm', emoji: '🤦', label: 'Facepalm', seconds: 2.4 },
+  { id: 'wave', emoji: '👋', label: 'Wave', seconds: 8, loop: true },
+  { id: 'thumbs', emoji: '👍', label: 'Thumbs up', seconds: 1.8, loop: false },
+  { id: 'clap', emoji: '👏', label: 'Clap', seconds: 10, loop: true },
+  { id: 'dance', emoji: '🕺', label: 'Dance', seconds: Infinity, loop: true },
+  { id: 'point', emoji: '👉', label: 'Point', seconds: 2, loop: false },
+  { id: 'facepalm', emoji: '🤦', label: 'Facepalm', seconds: 2.4, loop: false },
+  { id: 'finger', emoji: '🖕', label: 'Middle finger', seconds: 2, loop: false },
 ] as const;
+
+/** Stopping an emote (X) lets it ease out over this long, as one does at the end of its `seconds`. */
+export const EMOTE_EASE_OUT = 0.4;
+
+/** When an emote that was going to end at `end` (seconds into it) ends if it's stopped `t` seconds in. */
+export function stoppedAt(t: number, end: number): number {
+  return Math.min(end, t + EMOTE_EASE_OUT);
+}
 
 export type Emote = (typeof EMOTES)[number];
 export type EmoteId = Emote['id'];
