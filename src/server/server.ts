@@ -35,6 +35,7 @@ import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layou
 import { JUKEBOX_TUNES, STREAM } from '../shared/jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
 import { emptyDarts } from '../shared/darts.js';
+import { emptyPool, type PoolPlayback } from '../shared/pool.js';
 import { SEARCH_MAX, SEARCH_MIN, searchKey } from '../shared/search.js';
 import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
@@ -533,6 +534,7 @@ export async function startServer(cfg: Config) {
     cat: floor?.cat.view() ?? null,
     ball: floor?.court.state() ?? {},
     darts: floor?.darts.state() ?? emptyDarts(),
+    pool: floor?.pool.state() ?? emptyPool(),
     jukebox: floor?.jukebox.state() ?? { on: false, track: JUKEBOX_TUNES[0].id, startedAt: Date.now(), elapsed: 0 },
     whiteboard: { elements: floor?.whiteboard.scene() ?? [], people: floor ? drawing(floor) : [] },
     meeting: floor?.meetings.state() ?? { current: null, past: [] },
@@ -1006,6 +1008,7 @@ export async function startServer(cfg: Config) {
         f.changes.unwatchAll(id);
         if (f.court.left(id)) ballChanged(f);
         if (f.darts.left(id)) dartsChanged(f);
+        if (f.pool.left(id)) poolChanged(f);
       }
       broadcast({ t: 'peer.leave', id });
       if (account) accountsChanged();
@@ -1017,6 +1020,7 @@ export async function startServer(cfg: Config) {
   const decorChanged = (floor: Floor) => toFloor(floor, { t: 'decor', items: floor.decor.list() });
   const ballChanged = (floor: Floor) => toFloor(floor, { t: 'ball', ball: floor.court.state() });
   const dartsChanged = (floor: Floor) => toFloor(floor, { t: 'darts', darts: floor.darts.state() });
+  const poolChanged = (floor: Floor, shot?: PoolPlayback) => toFloor(floor, { t: 'pool', pool: floor.pool.state(), ...(shot && { shot }) });
   const jukeboxChanged = (floor: Floor) => toFloor(floor, { t: 'jukebox', state: floor.jukebox.state() });
   const teamChanged = async () => broadcast({ t: 'team', state: await team.state() });
 
@@ -1102,6 +1106,8 @@ export async function startServer(cfg: Config) {
     const ballLeft = !!was?.court.left(c.id);
     // So does their place at the dartboard, and in its game.
     const dartsLeft = !!was?.darts.left(c.id);
+    // And at the pool table.
+    const poolLeft = !!was?.pool.left(c.id);
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1116,7 +1122,7 @@ export async function startServer(cfg: Config) {
     // An issue card belongs to the board it came off, which is on the floor they left; a drink stays at the bar.
     delete c.peer.carrying;
     delete c.peer.drink;
-    return { was, wasDrawing, ballLeft, dartsLeft };
+    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft };
   };
 
   const arrived = (c: Client, left: ReturnType<typeof leave>) => {
@@ -1124,6 +1130,7 @@ export async function startServer(cfg: Config) {
     if (left.wasDrawing) drawingChanged(left.was);
     if (left.ballLeft && left.was) ballChanged(left.was);
     if (left.dartsLeft && left.was) dartsChanged(left.was);
+    if (left.poolLeft && left.was) poolChanged(left.was);
   };
 
   /**
@@ -1345,6 +1352,35 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (not their turn, the board was full) is told how it really is.
         if (changed) dartsChanged(floor);
         else sendTo(c, { t: 'darts', darts: d.state() });
+        break;
+      }
+      case 'pool.shoot': {
+        const floor = floorOf(c);
+        if (!floor) break;
+        const shot = floor.pool.shoot(c.id, { angle: msg.angle, power: msg.power, top: msg.top, side: msg.side });
+        if (shot) poolChanged(floor, shot);
+        else sendTo(c, { t: 'pool', pool: floor.pool.state() });
+        break;
+      }
+      case 'pool.join':
+      case 'pool.leave':
+      case 'pool.team':
+      case 'pool.start':
+      case 'pool.place':
+      case 'pool.reset': {
+        const floor = floorOf(c);
+        if (!floor) break;
+        const p = floor.pool;
+        const changed =
+          msg.t === 'pool.join' ? p.join(c.id, c.peer.name)
+          : msg.t === 'pool.leave' ? p.left(c.id)
+          : msg.t === 'pool.team' ? p.setTeam(c.id, msg.team)
+          : msg.t === 'pool.start' ? p.start(c.id)
+          : msg.t === 'pool.place' ? p.place(c.id, { x: msg.x, y: msg.y })
+          : p.reset(c.id);
+        // Whoever it didn't work for (not their shot, the table was full) is told how it really is.
+        if (changed) poolChanged(floor);
+        else sendTo(c, { t: 'pool', pool: p.state() });
         break;
       }
       case 'dog.pet':

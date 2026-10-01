@@ -3,6 +3,7 @@
 import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { DartsMode, DartsState } from './darts.js';
+import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
 import type { DogState } from './dog.js';
@@ -707,6 +708,8 @@ export interface FloorView {
   ball: BallState;
   /** The dartboard: who's at it, the options for the next game, and the game with all its darts. */
   darts: DartsState;
+  /** The pool table: who's at it on which side, and the game of 8-ball with every ball where it came to rest. */
+  pool: PoolState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1143,6 +1146,22 @@ export type ClientMsg =
   | { t: 'darts.throw'; x: number; y: number }
   /** Clear the game off the scoreboard, for a new one (a game that's still on, only its players can). */
   | { t: 'darts.reset' }
+  /** Step up to your floor's pool table (up to four people, on the side with fewer), or away from it. */
+  | { t: 'pool.join' }
+  | { t: 'pool.leave' }
+  /** At the pool table, move to side 0 or 1 for the next game (two a side at most). */
+  | { t: 'pool.team'; team: PoolTeam }
+  /** At the pool table, start a game of 8-ball for everyone at it: one a side, or two a side. */
+  | { t: 'pool.start' }
+  /**
+   * On your shot, strike the cue ball (see Shot in shared/pool.ts): `angle` radians from the table's +x,
+   * `power` 0–1, `top` and `side` spin -1–1. The office rolls it and scores it.
+   */
+  | { t: 'pool.shoot'; angle: number; power: number; top?: number; side?: number }
+  /** On your shot, with ball in hand, put the cue ball at table-local (x, y) meters. */
+  | { t: 'pool.place'; x: number; y: number }
+  /** Clear the game off the table, for a new one (a game that's still on, only its players can). */
+  | { t: 'pool.reset' }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1248,6 +1267,12 @@ export type ServerMsg =
   | { t: 'ball'; ball: BallState }
   /** Someone on your floor stepped up to the dartboard or away, changed the options, started, threw or cleared a game. */
   | { t: 'darts'; darts: DartsState }
+  /**
+   * Someone on your floor stepped up to the pool table or away, changed sides, started, placed the cue
+   * ball or cleared a game; or took a shot, which comes as `shot`, for every page to play back, with
+   * `pool` already as it is once the balls have stopped.
+   */
+  | { t: 'pool'; pool: PoolState; shot?: PoolPlayback }
   | { t: 'jukebox'; state: JukeboxState }
   /** Who's at the arcade cabinet on your floor now, and the building's high scores. */
   | { t: 'cabinet'; state: CabinetState }
