@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BALCONY, BALCONY_DOOR, BOARDS, DARTBOARD, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, MEETING_ROOM, MEETING_SEATS, PARACHUTE, ROAD, SEATS, STATIONS, TV } from '../src/shared/layout.js';
+import { BALCONY, BALCONY_DOOR, BOARDS, DARTBOARD, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, MEETING_ROOM, MEETING_SEATS, PARACHUTE, POOL_TABLE, ROAD, SEATS, STATIONS, TV, WINDOWS } from '../src/shared/layout.js';
 import { walkable, wayHome, wayIn, wayToBalcony, type Pt } from '../src/shared/nav.js';
 
 test('a worker sent home walks round the furniture, out the exit door and off along the sidewalk', () => {
@@ -93,4 +93,36 @@ test('the dartboard hangs at regulation height between the Services board and th
   // The dog keeps out of the lane, but you can walk up to the oche and stand behind it to throw.
   for (let x = DARTBOARD.oche.x + 0.3; x < FLOOR.maxX; x += 0.1) assert.ok(!walkable(x, DARTBOARD.z), `the lane at x ${x.toFixed(2)} is kept clear`);
   assert.ok(walkable(DARTBOARD.oche.x - 0.3, DARTBOARD.oche.z), 'you can stand at the oche');
+});
+
+test('the pool table stands out on open floor, with room to cue from every side', () => {
+  const pool = POOL_TABLE;
+  assert.ok(pool.y >= 0.74 && pool.y <= 0.8, 'the cloth is at table height');
+  assert.ok(pool.outer.length > pool.length && pool.outer.width > pool.width, 'the rails go round the cloth');
+  // Its frame, in the room's axes.
+  const along = Math.abs(Math.cos(pool.rotY));
+  const across = Math.abs(Math.sin(pool.rotY));
+  const hx = (along * pool.outer.length + across * pool.outer.width) / 2;
+  const hz = (across * pool.outer.length + along * pool.outer.width) / 2;
+  assert.ok(!walkable(pool.x, pool.z), 'nobody walks through the table');
+  // Everywhere round it, from just off the frame (past how far the dog keeps from it) out to `clear`,
+  // is open floor: no desk, chair, bean bag, plant or wall is near enough to get in the way of a cue.
+  assert.ok(pool.clear >= 1.5, 'a cue (1.47 m) fits behind the cue ball from any rail');
+  assert.ok(pool.x - hx - pool.clear > FLOOR.minX && pool.x + hx + pool.clear < FLOOR.maxX, 'clear of the east and west walls');
+  assert.ok(pool.z - hz - pool.clear > FLOOR.minZ && pool.z + hz + pool.clear < FLOOR.maxZ, 'clear of the north and south walls');
+  for (let x = pool.x - hx - pool.clear; x <= pool.x + hx + pool.clear + 1e-9; x += 0.05) {
+    for (let z = pool.z - hz - pool.clear; z <= pool.z + hz + pool.clear + 1e-9; z += 0.05) {
+      const out = Math.max(Math.abs(x - pool.x) - hx, Math.abs(z - pool.z) - hz);
+      if (out < 0.6) continue;
+      assert.ok(walkable(x, z), `the floor round the table is open at (${x.toFixed(2)}, ${z.toFixed(2)})`);
+    }
+  }
+  // The cue rack hangs on the south wall between the balcony doors and the next window, clear of both.
+  const r0 = pool.rack.x - pool.rack.width / 2;
+  const r1 = pool.rack.x + pool.rack.width / 2;
+  for (const o of [BALCONY_DOOR, ...WINDOWS.filter((w) => w.wall === 'south')]) {
+    assert.ok(r1 < o.u - o.width / 2 - 0.2 || r0 > o.u + o.width / 2 + 0.2, `the rack is clear of the opening at ${o.u}`);
+  }
+  // You can still walk up to it and to the balcony doors past the table.
+  assert.ok(walkable(pool.rack.x, FLOOR.maxZ - pool.rack.depth - 0.5), 'you can walk up to the cue rack');
 });

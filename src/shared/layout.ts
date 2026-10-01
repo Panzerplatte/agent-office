@@ -222,6 +222,27 @@ export const DARTBOARD = {
 } as const;
 
 /**
+ * The pool table: an 8-ft table out on the open floor between the south desks and the balcony doors,
+ * its long side along x (rotY 0; at rotY PI/2 it would run along z). (x, z) is the middle of the
+ * cloth, `y` how high the cloth is off the floor. `length` × `width` is the playing surface, between
+ * the cushions' noses; `outer` is the whole frame from the outside of one rail to the other, what
+ * stands on the floor. There's `clear` meters of open floor all the way round the frame, room to cue
+ * from every side. Its cue rack hangs on the south wall at `rack.x`, between the balcony doors and
+ * the next window east; `rack.width` runs along the wall.
+ */
+export const POOL_TABLE = {
+  x: -4,
+  z: 8.9,
+  y: 0.775,
+  rotY: 0,
+  length: 2.24,
+  width: 1.12,
+  outer: { length: 2.56, width: 1.44 },
+  clear: 1.5,
+  rack: { x: -1.5, width: 0.9, depth: 0.12, height: 1.85 },
+} as const;
+
+/**
  * The bookshelf of the project's docs (every Markdown file in it, see shared/docs.ts): against the
  * south wall between the middle window and the balcony doors, facing into the room (-z). `width`
  * runs along the wall.

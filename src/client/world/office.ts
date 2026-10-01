@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ASHTRAY, BALCONY, BALCONY_DOOR, BEANBAGS, BOARDS, BOOKSHELF, CABINET, DARTBOARD, DESKS, DESK_SIZE, ELEVATOR, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MACHINE_MONITOR, MEETING_BOARD, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PLANTS, SEATING_BY_ID, SLAB, STAIRS, STATIONS, STATION_AGENT, STOREY, STREET_Y, TV, WALL_HEIGHT, WALL_T, WINDOWS, deskSeat, streetBelow, type DeskDef, type Opening, type Side, type StationKind } from '../../shared/layout';
+import { ASHTRAY, BALCONY, BALCONY_DOOR, BEANBAGS, BOARDS, BOOKSHELF, CABINET, DARTBOARD, DESKS, DESK_SIZE, ELEVATOR, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MACHINE_MONITOR, MEETING_BOARD, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PLANTS, POOL_TABLE, SEATING_BY_ID, SLAB, STAIRS, STATIONS, STATION_AGENT, STOREY, STREET_Y, TV, WALL_HEIGHT, WALL_T, WINDOWS, deskSeat, streetBelow, type DeskDef, type Opening, type Side, type StationKind } from '../../shared/layout';
 import { wallFacing, type WallId, type WallRect } from '../../shared/decor';
 import { deskPoint } from '../../shared/nav';
 import { FLOOR_PALETTES, type FloorPalette } from '../../shared/floors';
@@ -16,6 +16,7 @@ import { buildStack, type Stack } from './stack';
 import { buildTower } from './tower';
 import { buildHoop, type HoopView } from './hoop';
 import { buildDartboard, type DartboardView } from './dartboard';
+import { buildPoolTable, type PoolTableView } from './pooltable';
 import { HOOP } from '../../shared/hoop';
 import { t, type Key } from '../i18n';
 
@@ -107,6 +108,8 @@ export interface Office {
   hoop: HoopView;
   /** The dartboard on the lounge's east wall, with the oche on the floor in front of it. */
   dartboard: DartboardView;
+  /** The pool table out in front of the balcony doors, with the lamp over it and the cue rack on the south wall. */
+  poolTable: PoolTableView;
   /** The ceiling, the floor, and the ladder and fire poles between the floors of the building. */
   stack: Stack;
   /** The sign over the elevator doors: which floor you're on. */
@@ -1266,6 +1269,13 @@ export function buildOffice(): Office {
   const { cabinet: dartCab } = DARTBOARD;
   fixture('east', DARTBOARD.z, DARTBOARD.y + 0.05, dartCab.width + 2 * dartCab.door + 0.1, dartCab.height + 0.5);
 
+  // The pool table, out in front of the balcony doors, and its cue rack on the south wall east of them.
+  const poolTable = buildPoolTable(night);
+  group.add(poolTable.group);
+  colliders.push(...poolTable.colliders);
+  const { rack: cueRack } = POOL_TABLE;
+  fixture('south', cueRack.x, (cueRack.height + 0.1) / 2, cueRack.width + 0.1, cueRack.height + 0.1);
+
   // The whiteboard, out on the floor between the desks and the lounge.
   const whiteboard = buildWhiteboard();
   group.add(whiteboard.group);
@@ -1330,7 +1340,7 @@ export function buildOffice(): Office {
     hoop.update(dt);
   };
 
-  return { group, colliders, interactables, desks, setBeanbags, boardMeshes, tvScreen, bossScreen, machineScreen, meetingBoard: meeting.board, meetingSign: meeting.sign, fixtures: () => fixtures, elevator, gong, jukebox, cabinet, whiteboard, tee, green, hoop, dartboard, stack, setProjectName, setLook, setLevel, night, plants, update };
+  return { group, colliders, interactables, desks, setBeanbags, boardMeshes, tvScreen, bossScreen, machineScreen, meetingBoard: meeting.board, meetingSign: meeting.sign, fixtures: () => fixtures, elevator, gong, jukebox, cabinet, whiteboard, tee, green, hoop, dartboard, poolTable, stack, setProjectName, setLook, setLevel, night, plants, update };
 }
 
 /** A chair at the meeting table, with its laptop on the table in front of it. */
