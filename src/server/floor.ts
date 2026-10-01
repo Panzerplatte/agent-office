@@ -14,6 +14,7 @@ import { TaskQueue } from './queue.js';
 import { Changes } from './changes.js';
 import { Decor } from './decor.js';
 import { Docs } from './docs.js';
+import { Cat } from './cat.js';
 import { Dog } from './dog.js';
 import { Court } from './court.js';
 import { Darts } from './darts.js';
@@ -105,6 +106,7 @@ export class Floor {
   /** Settles once the workers whose terminals outlived the last office are picked back up, and the rest woken. */
   readonly ready: Promise<void>;
   readonly dog: Dog;
+  readonly cat: Cat;
   /** The basketball by the hoop: who has it, or how it was last thrown. */
   readonly court = new Court();
   /** The dartboard: who's at it, and their game (see darts.ts). */
@@ -132,6 +134,11 @@ export class Floor {
       workers: () => this.workers?.list() ?? [],
       people: () => ctx.peers(this),
       send: (dog) => ctx.emit(this, { t: 'dog', dog }),
+    });
+    this.cat = new Cat(def.id, dataDir, {
+      people: () => ctx.peers(this),
+      dog: () => this.dog.here(),
+      send: (cat) => ctx.emit(this, { t: 'cat', cat }),
     });
 
     this.workers = new WorkerManager(
@@ -317,6 +324,7 @@ export class Floor {
     clearInterval(this.timer);
     clearTimeout(this.landedTimer);
     this.dog.stop();
+    this.cat.stop();
     this.github.stop();
     this.queue.shutdown();
     this.meetings.shutdown();

@@ -34,6 +34,7 @@ import { HAZE_MAX, Sky, describeSky } from './world/sky';
 import { Laptop } from './world/laptop';
 import { BoardTexture, QueueBoardTexture, ServicesBoardTexture } from './world/boards';
 import { Gallery } from './world/gallery';
+import { Cat } from './world/cat';
 import { Dog } from './world/dog';
 import { Holiday } from './world/holiday';
 import { Arrivals, Departures } from './world/leaving';
@@ -327,6 +328,11 @@ const dog = new Dog(sound, (id) => (store.workers.get(id)?.viewers.length ?? 0) 
 scene.add(dog.root);
 noOutline(dog.root);
 store.on('dog', () => dog.sync(store.dog, store.dogStart));
+// And the floor's cat.
+const cat = new Cat(sound);
+scene.add(cat.root);
+noOutline(cat.root);
+store.on('cat', () => cat.sync(store.cat, store.catStart));
 sound.setMusicVolume(settings.music, settings.musicMuted);
 sound.onMusicError = (text) => toast(text, 'warn');
 // The jukebox on your floor: everyone there hears it from the same bar, and its lights say what's on.
@@ -1017,7 +1023,7 @@ function setPlace() {
 
 /** What you can use where you are, and what's in the way of looking at it. */
 function usable(): Interactable[][] {
-  return upTop && roof ? [roof.interactables] : [office.interactables, gallery.interactables, dog.interactables, ball.interactables];
+  return upTop && roof ? [roof.interactables] : [office.interactables, gallery.interactables, dog.interactables, cat.interactables, ball.interactables];
 }
 
 /** You're on a floor (or in the building without one): paint it, and open the doors (or carry on down the pole…). */
@@ -1342,13 +1348,14 @@ store.on('workers', renderUsage);
 
 /**
  * Dresses the building up for the holiday it's set to (⚙️ Settings), or takes it all down: the sky and
- * the decorations, the dog, your hands and your character, everyone else, and every worker.
+ * the decorations, the dog and the cat, your hands and your character, everyone else, and every worker.
  */
 function dressUp() {
   const theme = store.theme.active;
   holiday.set(theme);
   sky.setTheme(theme);
   dog.setCostume(theme);
+  cat.setCostume(theme);
   hands.setCostume(theme);
   me.setCostume(theme);
   for (const r of remotes.values()) r.person.setCostume(theme);
@@ -1784,6 +1791,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'decor' && target.decorId) hanger.view(target.decorId);
   else if (target.kind === 'seat' && target.seatId) useSeat(target.seatId);
   else if (target.kind === 'dog') net.send({ t: 'dog.pet' });
+  else if (target.kind === 'cat') net.send({ t: 'cat.pet' });
   else if (target.kind === 'coffee') drinkCoffee();
   else if (target.kind === 'smoke') lightUp();
   else if (target.kind === 'gong') hitGong();
@@ -2660,6 +2668,10 @@ function hintFor(it: Interactable): Hint {
       );
       return { k: `${dog.name}|${doing}`, parts: [title(`🐶 ${dog.name}`), doing ? aside(doing) : '', key('E', t('main.pet'))] };
     }
+    case 'cat': {
+      const doing = cat.doing();
+      return { k: `${cat.name}|${doing}`, parts: [title(`🐱 ${cat.name}`), doing ? aside(doing) : '', key('E', t('main.pet'))] };
+    }
   }
 }
 
@@ -3164,14 +3176,14 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
 function aimedAt(ndc: THREE.Vector2, slack = 0): { it: Interactable; near: boolean; hit: THREE.Intersection } | null {
   raycaster.setFromCamera(ndc, camera);
   eye.set(player.pos.x, player.pos.y + EYE_HEIGHT, player.pos.z);
-  for (const hit of raycaster.intersectObjects(upTop && roof ? roof.pickables : [office.group, dog.root], true)) {
+  for (const hit of raycaster.intersectObjects(upTop && roof ? roof.pickables : [office.group, dog.root, cat.root], true)) {
     let it: Interactable | undefined;
     let shown = true;
     for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
@@ -3605,6 +3617,7 @@ function frame(ts?: number) {
   departures.update(dt, t);
   arrivals.update(dt);
   dog.update(dt);
+  cat.update(dt);
   if (!upTop) updateBall(now, dt);
   if (!upTop) {
     office.update(t, dt, [player.pos, ...[...remotes.values()].map((r) => r.person.root.position), ...departures.positions(), ...arrivals.positions()]);
@@ -3718,7 +3731,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, elevatorPanelOpen, confetti, dog, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

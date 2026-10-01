@@ -3,13 +3,14 @@ import type { ScreenState } from './world/laptop';
 import { randomLook, sanitizeLook, type Look } from '../shared/avatar';
 import type { Decoration } from '../shared/decor';
 import { newer, type WbElement } from '../shared/whiteboard';
+import type { CatState } from '../shared/cat';
 import type { DogState } from '../shared/dog';
 import { JUKEBOX_TUNES, type JukeboxState } from '../shared/jukebox';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -175,6 +176,9 @@ class Store {
   /** The dog on your floor, and when (performance.now()) the leg it's on began. */
   dog: DogState | null = null;
   dogStart = 0;
+  /** The cat on your floor, and when (performance.now()) the leg it's on began. */
+  cat: CatState | null = null;
+  catStart = 0;
   /** The basketball on this floor, as the office last said (see world/hoop.ts). */
   ball: BallState = {};
   /** The dartboard on this floor: who's at it, the options for the next game, and the game (see shared/darts.ts). */
@@ -255,15 +259,21 @@ class Store {
     this.cabinet = { player: v.cabinet.player, scores: v.cabinet.scores };
     this.cabinetFrame = v.cabinet.frame;
     this.setDog(v.dog);
+    this.setCat(v.cat);
     this.setJukebox(v.jukebox);
     this.ball = v.ball ?? {};
     this.darts = v.darts ?? emptyDarts();
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts'] as Topic[]) this.emit(t);
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
     this.dog = dog;
     this.dogStart = performance.now() - (dog?.elapsed ?? 0);
+  }
+
+  private setCat(cat: CatState | null) {
+    this.cat = cat;
+    this.catStart = performance.now() - (cat?.elapsed ?? 0);
   }
 
   /** When the track started on this page's clock: from the office's clock once it's known, else from `elapsed`. */
@@ -441,6 +451,10 @@ class Store {
       case 'dog':
         this.setDog(msg.dog);
         this.emit('dog');
+        break;
+      case 'cat':
+        this.setCat(msg.cat);
+        this.emit('cat');
         break;
       case 'ball':
         this.ball = msg.ball;

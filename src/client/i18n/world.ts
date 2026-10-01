@@ -3,7 +3,7 @@ import { strings } from './table';
 const s = (n: string | number, one: string, many: string) => (Number(n) === 1 ? one : many);
 
 /**
- * The office's own things (world/): the signs on its walls, the bubbles over workers and the dog,
+ * The office's own things (world/): the signs on its walls, the bubbles over workers, the dog and the cat,
  * the machine monitor, the meeting room's screens, golf, the sky and the pictures, plus the odd
  * line from voice.ts, markdown and the character and arcade windows.
  */
@@ -71,6 +71,19 @@ export default strings(
     dogSitting: 'sitting',
     woof3: 'Woof! Woof! Woof!',
     woof2: 'Woof! Woof!',
+
+    // The cat, in the hint bar and over its head
+    catStrolling: 'strolling about',
+    catDashing: 'zooming across the office',
+    catOffToNap: 'off for a nap',
+    catNapping: 'curled up asleep',
+    catLoafing: 'loafing, paws tucked in',
+    catGrooming: 'washing a paw',
+    catStretching: 'having a good stretch',
+    catSitting: 'sitting',
+    catPurringAt: 'purring at {who}',
+    catPurring: 'purring',
+    catPurr: 'Purrr…',
 
     // Golf: where the ball stopped
     lieHoled: 'In the hole!',
@@ -193,6 +206,18 @@ export default strings(
     dogSitting: 'sitzt',
     woof3: 'Wuff! Wuff! Wuff!',
     woof2: 'Wuff! Wuff!',
+
+    catStrolling: 'streift umher',
+    catDashing: 'flitzt quer durchs Büro',
+    catOffToNap: 'geht ein Nickerchen machen',
+    catNapping: 'schläft zusammengerollt',
+    catLoafing: 'liegt gemütlich da, Pfoten eingezogen',
+    catGrooming: 'putzt sich die Pfote',
+    catStretching: 'streckt sich genüsslich',
+    catSitting: 'sitzt',
+    catPurringAt: 'schnurrt {who} an',
+    catPurring: 'schnurrt',
+    catPurr: 'Schnurrr…',
 
     lieHoled: 'Eingelocht!',
     lieLost: 'Verloren',

@@ -179,6 +179,7 @@ export function openHelp() {
     ['F', t('menus.helpPicture')],
     ['Q', t('menus.helpPutBack')],
     ['🐶', t('menus.helpDog')],
+    ['🐱', t('menus.helpCat')],
     ['O', t('menus.helpPr')],
     ['T', t('menus.helpChat')],
     ['G / 1–6', t('menus.helpEmote')],

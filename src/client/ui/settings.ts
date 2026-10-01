@@ -3,6 +3,7 @@ import { store, type Settings, type ViewMode } from '../state';
 import { askNotifyPermission, notifyPermission, type DesktopNotifier } from '../notify';
 import type { ThemePick, WebhookKind } from '../../shared/protocol';
 import { THEME_PICKS } from '../../shared/theme';
+import { CAT_NAME_MAX, cleanCatName } from '../../shared/cat';
 import { DOG_NAME_MAX, cleanDogName } from '../../shared/dog';
 import { h, openModal, timeAgo } from './dom';
 import { agentFields, choiceLabel, officeChoice } from './provider';
@@ -445,6 +446,30 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     if (e.key === 'Enter') renameDog();
   });
 
+  // And the cat.
+  const catInput = h('input', { type: 'text', maxlength: CAT_NAME_MAX, 'aria-label': t('windows.settings.catName'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
+  const catSave = h('button.btn.primary', { type: 'button' }, t('windows.settings.rename'));
+  const catNote = h('p.setting-note');
+  const catSection = h('div', {}, h('label', { style: 'margin-top:18px' }, t('windows.settings.officeCat')), h('div.webhook', {}, catInput, catSave), catNote);
+  const paintCat = () => {
+    const cat = store.cat;
+    catSection.classList.toggle('hidden', !cat);
+    if (!cat) return;
+    catInput.placeholder = cat.name;
+    catNote.textContent = t('windows.settings.catNote', { name: cat.name });
+  };
+  paintCat();
+  const renameCat = () => {
+    const name = cleanCatName(catInput.value);
+    if (!name) return catInput.focus();
+    net.send({ t: 'cat.name', name });
+    catInput.value = '';
+  };
+  catSave.addEventListener('click', renameCat);
+  catInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') renameCat();
+  });
+
   const account = store.me.account;
   const signOut = h('button.btn', { type: 'button' }, t('windows.settings.signOut'));
   signOut.addEventListener('click', onSignOut);
@@ -508,6 +533,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
       dirActions,
       dirNote,
       dogSection,
+      catSection,
       h('label', { style: 'margin-top:18px' }, t('windows.settings.yourCharacter')),
       character,
       h('label', { style: 'margin-top:18px' }, t('windows.settings.signedIn')),
@@ -517,6 +543,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   );
   const offNotify = store.on('notify', paintHook);
   const offDog = store.on('dog', paintDog);
+  const offCat = store.on('cat', paintCat);
   const offTheme = store.on('theme', paintTheme);
   const offLeave = store.on('leaveOnMerge', paintLeave);
   const offLimit = [store.on('machine', paintLimit), store.on('me', paintLimit)];
@@ -527,6 +554,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     onClose: () => {
       offNotify();
       offDog();
+      offCat();
       offTheme();
       offLeave();
       offLimit.forEach((off) => off());

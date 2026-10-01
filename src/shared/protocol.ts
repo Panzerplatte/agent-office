@@ -4,6 +4,7 @@ import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { DecorPlacement, Decoration } from './decor.js';
+import type { CatState } from './cat.js';
 import type { DogState } from './dog.js';
 import type { EmoteId } from './emotes.js';
 import type { BallState } from './hoop.js';
@@ -692,6 +693,8 @@ export interface FloorView {
   services: ServicesState;
   /** The floor's dog; null in a building with no floors yet. */
   dog: DogState | null;
+  /** The floor's cat; null in a building with no floors yet. */
+  cat: CatState | null;
   /** What the lounge jukebox is playing. */
   jukebox: JukeboxState;
   /** Who's at the arcade cabinet, what's on its screen, and the building's high scores. */
@@ -1144,6 +1147,10 @@ export type ClientMsg =
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
   | { t: 'dog.name'; name: string }
+  /** Give the cat on your floor a pat; it has to be within reach. */
+  | { t: 'cat.pet' }
+  /** Name the cat on your floor ('' gives it back its first name). */
+  | { t: 'cat.name'; name: string }
   | { t: 'ping'; at: number };
 
 export type ServerMsg =
@@ -1235,6 +1242,8 @@ export type ServerMsg =
   | { t: 'decor'; items: Decoration[] }
   /** What the dog on your floor is up to now: sent at the start of each leg of its day. */
   | { t: 'dog'; dog: DogState }
+  /** What the cat on your floor is up to now: sent at the start of each leg of its day. */
+  | { t: 'cat'; cat: CatState }
   /** The basketball on your floor was picked up, thrown, or put back under the hoop. */
   | { t: 'ball'; ball: BallState }
   /** Someone on your floor stepped up to the dartboard or away, changed the options, started, threw or cleared a game. */
