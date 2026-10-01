@@ -297,6 +297,28 @@ button { font-family: inherit; }
 .darts-sweet { position: absolute; top: 0; bottom: 0; background: rgba(6, 214, 160, .55); border-left: 2px solid var(--ink); border-right: 2px solid var(--ink); }
 #hud:has(.darts:not(.hidden)) #toasts { top: auto; bottom: 120px; }
 #scene.aiming { cursor: crosshair; }
+/* At the pool table: the two sides, their groups and the balls they've still to pot, and the cue's power and spin. */
+.pool { width: min(380px, calc(100vw - 32px)); }
+.pool > .btn { justify-self: center; }
+.pool-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pool-side { display: grid; gap: 3px; align-content: start; }
+.pool-side-head { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
+.pool-group { color: var(--ink); }
+.pool-empty { color: var(--muted); text-align: center; }
+.pool-left { display: flex; flex-wrap: wrap; gap: 2px; }
+.pool-ball { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--ink); display: grid; place-items: center; }
+.pool-ball span { width: 10px; height: 10px; border-radius: 50%; background: #f8f4e8; color: #111; font-size: 7px; line-height: 10px; text-align: center; font-weight: 900; }
+.pool-status { display: grid; gap: 2px; text-align: center; color: var(--muted); }
+.pool-status .up { color: var(--ink); font-weight: 900; }
+.pool-status .foul { color: var(--bad); font-weight: 900; }
+.pool-status .won { color: var(--ink); font-size: 18px; font-weight: 900; }
+.pool-shooting { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; }
+.pool-label { font-size: 12px; color: var(--muted); }
+.pool-meter { margin: 0; }
+/* The cue ball, seen from behind the cue: click where the tip goes. */
+.pool-spin { position: relative; width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #e6e0d0 70%); border: 2px solid var(--ink); cursor: pointer; }
+.pool-spin-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #c0262d; pointer-events: none; }
+#hud:has(.pool:not(.hidden)) #toasts { top: auto; bottom: 120px; }
 .caffeine.jittery .bar span { background: var(--bad); }
 @keyframes jitters { 50% { transform: translate(1px, -1px) rotate(-1.5deg); } }
 @media (prefers-reduced-motion: reduce) { .caffeine.jittery { animation: none; } }

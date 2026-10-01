@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FLOOR, POOL_TABLE, WALL_HEIGHT } from '../../shared/layout';
+import { BALL_R, POCKETS, TABLE as SHARED } from '../../shared/pool';
 import type { Collider } from './office';
 import { bulb, type NightParts } from './outside';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
@@ -9,41 +10,34 @@ import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
 // diamonds on the rails, the head string and the foot spot. A billiard lamp hangs over it, and the
 // cues and the triangle wait in a rack on the south wall.
 
-const L = POOL_TABLE.length;
-const W = POOL_TABLE.width;
-const CUSHION_W = 0.05;
+const L = SHARED.length;
+const W = SHARED.width;
+const CUSHION_W = SHARED.cushion;
 
 /**
  * The table's size, in meters, in its own frame: (x, y) on the cloth from its middle, x along the
- * long side (the head end at -x, the foot at +x), y across. Heights are above the cloth.
+ * long side (the head end at -x, the foot at +x), y across. Heights are above the cloth. All of it is
+ * the game's own table (see shared/pool.ts), so the balls drop where the holes are drawn.
  */
 export const TABLE = {
   /** The playing surface, between the cushions' noses: 2.24 × 1.12 m (88 × 44 in) for an 8-ft table. */
   length: L,
   width: W,
   /** A ball: 57.15 mm across. Its centre is this high over the cloth when it's lying on it. */
-  ballR: 0.028575,
+  ballR: BALL_R,
   /** The cushions: `width` from nose to back, their nose `nose` up (63.5 % of a ball), their top `top`. */
-  cushion: { width: CUSHION_W, nose: 0.036, top: 0.04 },
+  cushion: { width: CUSHION_W, nose: SHARED.cushionHeight, top: 0.04 },
   /** The wooden rails outside the cushions: `width` across the top, which is `top` up. */
   rail: { width: (POOL_TABLE.outer.width - W) / 2 - CUSHION_W, top: 0.046 },
   /**
-   * The six pockets: four corners and the two sides, in the order a ball goes round anticlockwise
-   * from the head end's bottom-left. (x, y) is the middle of the hole, `r` its radius; `mouth` is
-   * how wide it is between the cushions' noses.
+   * The six pockets, round the table from the head end's corner at -y (see POCKETS). (x, y) is the
+   * middle of the hole, `r` its radius; `mouth` is how wide it is between the cushions' noses.
    */
-  pockets: [
-    { id: 'bl', x: -(L / 2 + 0.025), y: -(W / 2 + 0.025), r: 0.062, mouth: 0.116 },
-    { id: 'bs', x: 0, y: -(W / 2 + 0.04), r: 0.06, mouth: 0.13 },
-    { id: 'br', x: L / 2 + 0.025, y: -(W / 2 + 0.025), r: 0.062, mouth: 0.116 },
-    { id: 'tr', x: L / 2 + 0.025, y: W / 2 + 0.025, r: 0.062, mouth: 0.116 },
-    { id: 'ts', x: 0, y: W / 2 + 0.04, r: 0.06, mouth: 0.13 },
-    { id: 'tl', x: -(L / 2 + 0.025), y: W / 2 + 0.025, r: 0.062, mouth: 0.116 },
-  ],
+  pockets: POCKETS,
   /** The head string, across the table a quarter of the way in from the head end: break from behind it. */
-  headString: -L / 4,
+  headString: SHARED.headString,
   /** The foot spot, where the apex ball of the rack goes. */
-  footSpot: { x: L / 4, y: 0 },
+  footSpot: SHARED.footSpot,
 } as const;
 
 /** How far the side pockets' jaws are set back at the cushions' backs, and the corner ones on (see cushions()). */

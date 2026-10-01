@@ -26,6 +26,10 @@ import { Golfer } from './golf';
 import { Darter } from './darts';
 import { BoardDarts } from './world/darts';
 import { MAX_PLAYERS, type DartsState } from '../shared/darts';
+import { Cueist } from './pool';
+import { PoolBalls, seatColor } from './world/pool';
+import { sideName } from './ui/pool';
+import { MAX_PLAYERS as POOL_PLAYERS, type PoolState } from '../shared/pool';
 import { Hands } from './world/hands';
 import { Basketball, IN_HANDS } from './world/hoop';
 import { HOOP, SWEET, idealSpeed, lookAtRim, meter, shotSpeed, throwPitch, tossSpeed, underCeiling } from '../shared/hoop';
@@ -501,6 +505,83 @@ function stepUpToDarts() {
   darter.start(store.darts, store.you);
 }
 
+// ---- Pool -------------------------------------------------------------------------------------------
+// The balls on the table, as the office says they rolled, for everyone on the floor.
+const poolBalls = new PoolBalls(office.poolTable);
+scene.add(poolBalls.group);
+const cueist = new Cueist(player, camera, canvas, office.poolTable, poolBalls, () => pointer, () => reduceMotion.matches, {
+  join: () => net.send({ t: 'pool.join' }),
+  leave: () => net.send({ t: 'pool.leave' }),
+  shoot: (s) => net.send({ t: 'pool.shoot', angle: s.angle, power: s.power, top: s.top, side: s.side }),
+  place: (x, y) => net.send({ t: 'pool.place', x, y }),
+  team: (team) => net.send({ t: 'pool.team', team }),
+  start: () => net.send({ t: 'pool.start' }),
+  reset: () => net.send({ t: 'pool.reset' }),
+  full: () => toast(t('notices.poolFull'), 'warn'),
+  done: () => {
+    hintKey = 'stale';
+  },
+});
+/** Whether the table's next news is all new (you just arrived, or came back): nothing to roll out. */
+let poolFresh = true;
+store.on('pool', () => {
+  const shot = store.poolShot;
+  const g = shot && (poolBalls.shown.game ?? store.pool.game);
+  poolBalls.follow(store.pool, shot, poolFresh, g ? seatColor(g.players, shot.player) : undefined);
+  poolFresh = false;
+  cueist.sync(store.pool, shot);
+  cueist.render();
+});
+poolBalls.onStrike = (pb, at) => {
+  sound.pool('cue', at, pb.shot.power);
+  remotes.get(pb.player)?.person.reach();
+};
+poolBalls.onEvent = (e, at) => sound.pool(e.type === 'hit' ? 'click' : e.type, at, e.v);
+// A shot's stopped rolling: now the scoreboard says what it did, and a win is cheered.
+poolBalls.onSettle = () => {
+  cueist.render();
+  poolWon(poolBalls.shown);
+};
+/** The game's just been won: confetti over the table, a fanfare, and a toast for the floor. */
+function poolWon(after: PoolState) {
+  const g = after.game;
+  if (!g || !g.over || g.winner === null) return;
+  const mid = office.poolTable.toWorld(0, 0, 1.2);
+  confetti.burst(mid.x, mid.y, mid.z, 220, 0.9);
+  sound.pool('cheer', mid);
+  const mine = g.players.some((p) => p.id === store.you && p.team === g.winner);
+  toast(mine ? t('notices.poolYouWon') : t('notices.poolWon', { name: sideName(g.players, g.winner) }));
+}
+
+/**
+ * Someone else's shot: the cue in their colour at the cue ball, pointing from where they stand (they
+ * walk round behind it as they aim). Your own is drawn as you aim (see Cueist).
+ */
+function showTheirCue() {
+  if (poolBalls.busy) return;
+  const g = poolBalls.shown.game;
+  const up = g && !g.over ? g.players[g.up] : undefined;
+  if (!g || !up || up.id === store.you) return;
+  const them = remotes.get(up.id)?.person.root.position;
+  const cue = poolBalls.positions.find((b) => b.n === 0);
+  const at = them && office.poolTable.toTable(them);
+  if (!cue || !at || Math.hypot(at.x, at.y) > 2.6) return poolBalls.hideCue();
+  poolBalls.aimCue(cue, Math.atan2(cue.y - at.y, cue.x - at.x), 0.06, seatColor(g.players, up.id));
+}
+
+/** E at the pool table: step up to it, if there's room. */
+function stepUpToPool() {
+  if (cueist.active || darter.active || golf.active || trip || climber.active) return;
+  const d = store.pool;
+  if (d.lobby.length >= POOL_PLAYERS && !d.lobby.some((s) => s.id === store.you)) return toast(t('notices.poolFull'), 'warn');
+  if (carrying) return toast(t('notices.handsFullCard', { issue: carrying.issue }), 'warn');
+  if (player.seat) standUp();
+  if (hanger.active) hanger.cancel();
+  if (walkingTo) stopWalking();
+  if (smokeBreakUntil) setSmoking(false);
+  cueist.start(store.pool, store.you);
+}
+
 sky.onThunder = (delay, loud) => sound.thunder(delay, loud);
 const hanger = new Hanger(net, camera, canvas, player, office, gallery);
 scene.add(hanger.ghost.group);
@@ -668,9 +749,11 @@ net.onMessage((msg) => {
     seatedAlready = true;
     // Whatever's in the dartboard there is just there: nobody threw it as you walked in.
     dartsFresh = true;
+    poolFresh = true;
   }
   // Back after a reconnect, which let go of your place at the dartboard: ask for it again (before the board's news says you're not at it).
   if (msg.t === 'welcome' && darter.active) darter.rejoin(msg.you);
+  if (msg.t === 'welcome' && cueist.active) cueist.rejoin(msg.you);
   if (msg.t === 'worker.remove') sentHome.add(msg.workerId);
   store.apply(msg);
   seatedAlready = false;
@@ -908,6 +991,7 @@ function ride(floorId: string) {
   if (climber.active) climber.abort();
   if (golf.active) golf.stop();
   if (darter.active) darter.stop();
+  if (cueist.active) cueist.stop();
   const inside = inElevator(player.pos.x, player.pos.z);
   trip = { floor: floorId, how: 'elevator', timer: window.setTimeout(tripFailed, 10_000) };
   player.enabled = false;
@@ -945,6 +1029,7 @@ function switchFloor(floorId: string) {
   if (climber.active) climber.abort();
   if (golf.active) golf.stop();
   if (darter.active) darter.stop();
+  if (cueist.active) cueist.stop();
   if (player.seat) standUp();
   // The floor list isn't a window, so nothing else stops a walk over to someone on this floor.
   if (walkingTo) stopWalking();
@@ -1159,6 +1244,7 @@ function walkTo(id: string) {
   if (player.seat) standUp();
   if (golf.active) golf.stop();
   if (darter.active) darter.stop();
+  if (cueist.active) cueist.stop();
   walkingTo = { id, replanAt: 0 };
   if (store.onMyFloor(p)) toast(t('notices.walkTo', { name: p.name }));
   else {
@@ -1561,6 +1647,7 @@ function standAt(desk: DeskDef) {
   if (climber.active) climber.abort();
   if (golf.active) golf.stop();
   if (darter.active) darter.stop();
+  if (cueist.active) cueist.stop();
   if (walkingTo) stopWalking();
   const spot = deskSeat(desk, desk.station ? -1.6 : desk.beanbag ? 1.6 : 2.4);
   player.pos.set(spot.x, 0, spot.z);
@@ -1805,6 +1892,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'golf') teeOff();
   else if (target.kind === 'ball') takeBall();
   else if (target.kind === 'darts') stepUpToDarts();
+  else if (target.kind === 'pool') stepUpToPool();
 }
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
@@ -2507,6 +2595,7 @@ function renderHint() {
   if (climber.active && !modalOpen()) return renderClimbHint(el);
   if (golf.active && !modalOpen()) return renderGolfHint(el);
   if (darter.active && !modalOpen()) return renderDartsHint(el);
+  if (cueist.active && !modalOpen()) return renderPoolHint(el);
   const withBall = holdingBall();
   const emoting = me.emoteLooping ? me.emoteId : null;
   if ((!target && !carrying && !withBall && !emoting) || modalOpen()) {
@@ -2584,6 +2673,13 @@ function hintFor(it: Interactable): Hint {
       const full = d.lobby.length >= MAX_PLAYERS && !d.lobby.some((s) => s.id === store.you);
       const about = g && !g.over ? t('main.dartsPlaying', { names: clip(g.players.map((p) => p.name).join(', '), 40), mode: g.mode }) : d.lobby.length ? t('main.dartsAtBoard', { n: d.lobby.length }) : t('main.dartsAbout');
       return { k: `${about}|${full}`, parts: [title(t('main.dartboard')), aside(about), full ? aside(t('main.dartsFull')) : key('E', t('main.playDarts'))] };
+    }
+    case 'pool': {
+      const d = store.pool;
+      const g = d.game;
+      const full = d.lobby.length >= POOL_PLAYERS && !d.lobby.some((s) => s.id === store.you);
+      const about = g && !g.over ? t('main.poolPlaying', { a: clip(sideName(g.players, 0), 30), b: clip(sideName(g.players, 1), 30) }) : d.lobby.length ? t('main.poolAtTable', { n: d.lobby.length }) : t('main.poolAbout');
+      return { k: `${about}|${full}`, parts: [title(t('main.poolTable')), aside(about), full ? aside(t('main.poolFull')) : key('E', t('main.playPool'))] };
     }
     case 'jukebox': {
       const j = store.jukebox;
@@ -2841,6 +2937,38 @@ function renderDartsHint(el: HTMLElement) {
   el.classList.remove('hidden');
 }
 
+/** At the pool table: how to aim and shoot on your shot, ball in hand, whose shot it is otherwise, and how to step away. */
+function renderPoolHint(el: HTMLElement) {
+  const title = (text: string) => h('span.title', {}, text);
+  const stage = cueist.doing;
+  const up = cueist.shooter;
+  const hand = cueist.ballInHand;
+  const k = `pool|${stage}|${up?.name}|${hand}|${!!store.pool.game}|${store.pool.game?.over}`;
+  if (k === hintKey) return;
+  hintKey = k;
+  const done = key('E', t('main.done'));
+  const round = key('Q', t('main.poolOtherSide'));
+  const parts =
+    stage === 'draw'
+      ? [title(t('main.poolLetGo')), aside(t('main.poolDrawNote')), key(t('main.keyEsc'), t('main.poolCancel'))]
+      : stage === 'place'
+        ? [title(t('main.poolPlacing')), aside(t(hand === 'kitchen' ? 'main.poolKitchen' : 'main.poolAnywhere'))]
+        : stage === 'aim'
+          ? [
+              ...(hand ? [title(t('main.poolBallInHand'))] : []),
+              key(t('main.keyMouse'), t('main.aim')),
+              key(t('main.poolDrag'), t('main.poolShoot')),
+              ...(hand ? [aside(t('main.poolMoveCue'))] : []),
+              round,
+              done,
+            ]
+          : stage === 'watch' || stage === 'shot'
+            ? [title(up ? t('main.poolTheirShot', { name: clip(up.name, 24) }) : t('main.poolRolling')), round, done]
+            : [title(t('main.poolTable')), aside(t(store.pool.game?.over ? 'main.poolGameOver' : 'main.poolPickSides')), round, done];
+  el.replaceChildren(...parts);
+  el.classList.remove('hidden');
+}
+
 function renderHangHint(el: HTMLElement) {
   const spot = hanger.spot;
   const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}`;
@@ -2854,7 +2982,7 @@ function renderHangHint(el: HTMLElement) {
 let crossKey = '';
 const finePointer = window.matchMedia('(pointer: fine)').matches;
 function renderCrosshair() {
-  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active;
+  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active && !cueist.active;
   const free = show && finePointer && player.canLock && !player.locked;
   const k = `${show}|${!!target}|${free}|${relookOnKey}`;
   if (k === crossKey) return;
@@ -2987,6 +3115,11 @@ window.addEventListener('keydown', (e) => {
   // At the dartboard, the same: E steps away (Space throws, see Darter).
   if (darter.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
     if (e.code === 'KeyE' && !e.repeat) darter.stop();
+    return;
+  }
+  // At the pool table, the same: E steps away (the mouse or Space shoots, Q goes round, see Cueist).
+  if (cueist.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'KeyQ' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
+    if (e.code === 'KeyE' && !e.repeat) cueist.stop();
     return;
   }
   // With the ball in your hands, E winds up a shot (let go to shoot) and Q drops it.
@@ -3176,7 +3309,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -3216,7 +3349,7 @@ canvas.addEventListener('pointerleave', () => (pointer = null));
 
 player.onClick = (ndc) => {
   // At the tee, a click is you steadying the mouse to aim: nothing else is in reach. At the dartboard, the mouse aims.
-  if (modalOpen() || golf.active || darter.active) return;
+  if (modalOpen() || golf.active || darter.active || cueist.active) return;
   if (emoteWheel.isOpen) return emoteWheel.click();
   // The ball in your hands: press to wind up, let go (or click again, with no mouse captured) to shoot.
   if (holdingBall()) {
@@ -3512,8 +3645,12 @@ function frame(ts?: number) {
   if (darter.active && (trip || hanger.active || climber.active || player.seat || upTop)) darter.stop();
   darter.update(dt);
   boardDarts.update(dt);
+  if (cueist.active && (trip || hanger.active || climber.active || player.seat || upTop)) cueist.stop();
+  cueist.update(dt);
+  poolBalls.update();
+  showTheirCue();
   // A dance that keeps going doesn't go with a club in your hands or up the ladder: it stops for everyone.
-  if ((golf.active || climber.active || darter.active) && me.emoteLooping) stopEmote();
+  if ((golf.active || climber.active || darter.active || cueist.active) && me.emoteLooping) stopEmote();
   balls.update(dt);
   office.tee.ball.visible = golf.doing !== 'watch' && now > teeEmptyUntil;
   me.root.position.copy(player.pos);
@@ -3532,9 +3669,9 @@ function frame(ts?: number) {
   // A looping one's goes when the emote does: stopped, or run out.
   else if (emojiPop?.classList.contains('loop') && !me.emoteLooping) fadeEmoji();
   // In first person you are the camera; in third, hide yourself when it's zoomed in right behind your head.
-  // At the tee the camera's behind the ball, and you're the one holding the club.
-  me.root.visible = golf.active || (!firstPerson && camera.position.distanceTo(headPos.set(player.pos.x, player.pos.y + 1.3, player.pos.z)) > 1.5);
-  if (firstPerson && !golf.active && !darter.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
+  // At the tee the camera's behind the ball, and you're the one holding the club; at the pool table you're there too, unless you're in the way.
+  me.root.visible = golf.active || (cueist.active && !cueist.inTheWay(me.root.position)) || (!cueist.active && !firstPerson && camera.position.distanceTo(headPos.set(player.pos.x, player.pos.y + 1.3, player.pos.z)) > 1.5);
+  if (firstPerson && !golf.active && !darter.active && !cueist.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
   // Down a pole: the view widens and the edges streak past.
   const rush = reduceMotion.matches ? 0 : climber.rush;
   const fov = 55 + rush * 16;
@@ -3576,6 +3713,8 @@ function frame(ts?: number) {
     let diff = at.rotY - r.person.root.rotation.y;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     r.person.root.rotation.y += diff * Math.min(1, dt * 12);
+    // Up over the pool table, anyone standing between the camera and it is out of the way.
+    r.person.root.visible = !cueist.inTheWay(pos);
     // On their feet if they're standing on something: the floor, a desk, a stair, the loft.
     const ground = groundAt(player.colliders, p.x, p.z, p.y);
     const airborne = !sat && p.y > ground + 0.05;
@@ -3639,7 +3778,7 @@ function frame(ts?: number) {
   }
 
   aimedNote = null;
-  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active) target = null;
+  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active) target = null;
   else if (firstPerson) {
     const aim = aimedAt(CROSSHAIR);
     target = aim?.near ? aim.it : (mySeat() ?? ballAtFeet());
@@ -3678,7 +3817,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active) {
+  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
@@ -3731,7 +3870,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;
