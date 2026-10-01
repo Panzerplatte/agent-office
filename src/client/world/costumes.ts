@@ -3,9 +3,9 @@ import { mesh, toon, toonUnique } from './toon';
 
 /*
  * Holiday costumes (see world/holiday.ts for the decorations): the workers go as zombies for
- * Halloween and elves for Christmas, people wear a warlock's hat or a Santa hat, and the dog gets bat
- * wings and a witch's hat, or antlers and a glowing red nose. Each piece is built here and hung on
- * the model that wears it.
+ * Halloween and elves for Christmas, people wear a warlock's hat or a Santa hat, the dog gets bat
+ * wings and a witch's hat, or antlers and a glowing red nose, and the cat a witch's hat and cape, or
+ * a Santa hat and a bow. Each piece is built here and hung on the model that wears it.
  */
 
 /** What undead skin is mixed toward, for Halloween: a warlock's hands and face. */
@@ -302,6 +302,72 @@ export function dogScarf(): THREE.Group {
   end.add(mesh(new THREE.BoxGeometry(0.055, 0.15, 0.025), red, 0, -0.07, 0));
   for (let i = 0; i < 2; i++) end.add(mesh(new THREE.BoxGeometry(0.057, 0.02, 0.027), toon('#fffaf3'), 0, -0.07 - i * 0.05, 0, false));
   g.add(end);
+  return g;
+}
+
+// ---- The cat ------------------------------------------------------------------------------------
+
+/** A witch's hat, cocked to one side between the cat's ears (head-local). */
+export function catWitchHat(): THREE.Group {
+  const g = new THREE.Group();
+  const felt = toon('#3c1f5c');
+  g.add(mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.009, 24), felt, 0, 0, 0));
+  g.add(mesh(new THREE.CylinderGeometry(0.042, 0.044, 0.02, 16), toon('#ff7b00'), 0, 0.013, 0, false));
+  const tip = new THREE.Group();
+  tip.position.y = 0.02;
+  tip.rotation.set(-0.4, 0, -0.25);
+  tip.add(mesh(new THREE.ConeGeometry(0.042, 0.14, 16), felt, 0, 0.07, 0));
+  g.add(tip);
+  g.position.set(-0.012, 0.098, -0.02);
+  g.rotation.set(-0.15, 0, 0.3);
+  return g;
+}
+
+/** A witch's cape over the cat's back (torso-local), and the pivot at its neck that flutters it. */
+export function catCape(): { group: THREE.Group; cape: THREE.Object3D } {
+  const group = new THREE.Group();
+  const mat = toonUnique('#5a2a82');
+  mat.side = THREE.DoubleSide;
+  // A cone cut open underneath, so it drapes over the body: narrow at the neck, wider behind.
+  const geo = new THREE.CylinderGeometry(0.1, 0.13, 0.27, 18, 1, true, Math.PI - 1.25, 2.5).rotateX(Math.PI / 2);
+  const cape = new THREE.Group();
+  cape.position.set(0, 0.035, 0.29);
+  cape.add(mesh(geo, mat, 0, 0, -0.135));
+  // Its collar, standing up in orange.
+  const collar = mesh(new THREE.TorusGeometry(0.095, 0.012, 6, 18, Math.PI * 0.9), toon('#ff7b00'), 0, 0, 0.005, false);
+  collar.rotation.z = Math.PI * 0.05;
+  cape.add(collar);
+  group.add(cape);
+  return { group, cape };
+}
+
+/** A small floppy Santa hat for the cat (head-local): a person's, cut down to size. */
+export function catSantaHat(): THREE.Group {
+  const hat = santaHat();
+  hat.scale.setScalar(0.25);
+  const g = new THREE.Group();
+  g.add(hat);
+  g.position.set(0, 0.035, -0.012);
+  g.rotation.set(-0.1, 0, 0.12);
+  return g;
+}
+
+/** A red Christmas bow on the cat's collar, above its bell (head-local). */
+export function catBow(): THREE.Group {
+  const g = new THREE.Group();
+  const red = toon('#d62828');
+  for (const sx of [-1, 1]) {
+    const loop = mesh(new THREE.SphereGeometry(0.022, 10, 8), red, sx * 0.024, 0, 0);
+    loop.scale.set(1.3, 0.8, 0.45);
+    loop.rotation.z = sx * 0.35;
+    g.add(loop);
+    const tail = mesh(new THREE.BoxGeometry(0.012, 0.035, 0.006), red, sx * 0.012, -0.022, -0.002);
+    tail.rotation.z = sx * 0.4;
+    g.add(tail);
+  }
+  g.add(mesh(new THREE.SphereGeometry(0.012, 8, 6), detail('#a4161a'), 0, 0, 0.004, false));
+  g.position.set(0, -0.078, 0.045);
+  g.rotation.x = -0.35;
   return g;
 }
 

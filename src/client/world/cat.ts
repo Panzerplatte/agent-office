@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { CAT_COATS, type CatAct, type CatState } from '../../shared/cat';
 import { dogAt, legSeconds } from '../../shared/dog';
+import type { Theme } from '../../shared/protocol';
+import { catBow, catCape, catSantaHat, catWitchHat } from './costumes';
 import type { Interactable } from './office';
 import { disposeSprite, mesh, textSprite, toon, toonUnique } from './toon';
 import { t } from '../i18n';
@@ -84,12 +86,47 @@ export class Cat {
   private phase = 0;
   private t = 0;
   private placed = false;
+  /** Dressed up for a holiday (see setCostume): what it's wearing, and its witch's cape. */
+  private costume: Theme | null = null;
+  private outfit: THREE.Object3D[] = [];
+  private cape: THREE.Object3D | null = null;
 
   constructor(private sounds: CatSounds) {
     this.coatMats = [toonUnique(CAT_COATS[0][0]), toonUnique(CAT_COATS[0][1]), toonUnique(CAT_COATS[0][2])];
     this.build();
     this.root.visible = false;
     this.root.userData.interact = this.interactable;
+  }
+
+  /**
+   * Dresses it up for a holiday: a witch's hat and a cape that flutters behind it for Halloween, a
+   * Santa hat and a red bow on its collar for Christmas. Null takes it all off.
+   */
+  setCostume(theme: Theme | null) {
+    if (theme === this.costume) return;
+    this.costume = theme;
+    for (const o of this.outfit) {
+      o.removeFromParent();
+      o.traverse((m) => (m as THREE.Mesh).geometry?.dispose());
+    }
+    // The cape's material is its own; the rest are shared toon ones.
+    this.cape?.traverse((m) => ((m as THREE.Mesh).material as THREE.Material | undefined)?.dispose());
+    this.outfit = [];
+    this.cape = null;
+    const wear = (parent: THREE.Object3D, o: THREE.Object3D) => {
+      o.traverse((m) => ((m as THREE.Mesh).castShadow = true));
+      parent.add(o);
+      this.outfit.push(o);
+    };
+    if (theme === 'halloween') {
+      wear(this.head, catWitchHat());
+      const c = catCape();
+      wear(this.torso, c.group);
+      this.cape = c.cape;
+    } else if (theme === 'christmas') {
+      wear(this.head, catSantaHat());
+      wear(this.head, catBow());
+    }
   }
 
   /** Nothing to pet in a building without floors. */
@@ -358,6 +395,8 @@ export class Cat {
         seg.rotation.z = p.curl + sway * (0.5 + i * 0.3);
       }
     });
+    // The witch's cape billows out behind it on the move, and settles over it at rest.
+    if (this.cape) this.cape.rotation.x = walking ? 0.12 + Math.min(0.35, speed * 0.12) + Math.sin(this.phase * 2) * 0.06 : Math.sin(t * 1.2) * 0.02;
     // Breathing, and a rumble through its body while it purrs.
     this.torso.scale.setScalar(act === 'nap' ? 1 + Math.sin(t * 2) * 0.025 : act === 'purr' ? 1 + Math.sin(t * 50) * 0.006 : 1);
 

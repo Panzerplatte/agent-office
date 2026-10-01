@@ -1266,13 +1266,14 @@ store.on('workers', renderUsage);
 
 /**
  * Dresses the building up for the holiday it's set to (⚙️ Settings), or takes it all down: the sky and
- * the decorations, the dog, your hands and your character, everyone else, and every worker.
+ * the decorations, the dog and the cat, your hands and your character, everyone else, and every worker.
  */
 function dressUp() {
   const theme = store.theme.active;
   holiday.set(theme);
   sky.setTheme(theme);
   dog.setCostume(theme);
+  cat.setCostume(theme);
   hands.setCostume(theme);
   me.setCostume(theme);
   for (const r of remotes.values()) r.person.setCostume(theme);
