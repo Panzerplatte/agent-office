@@ -23,7 +23,7 @@ import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
-import { Darter } from './darts';
+import { Darter, dartsKey } from './darts';
 import { BoardDarts } from './world/darts';
 import { MAX_PLAYERS, type DartsState } from '../shared/darts';
 import { Cueist } from './pool';
@@ -453,8 +453,10 @@ function theirShot(id: string, shot: Shot) {
 // The darts in the board, as the office says they were thrown, for everyone on the floor.
 const boardDarts = new BoardDarts(office.dartboard);
 const darter = new Darter(player, me, camera, canvas, office.dartboard, boardDarts, () => pointer, () => reduceMotion.matches, {
-  join: () => net.send({ t: 'darts.join' }),
+  join: () => net.send({ t: 'darts.join', key: dartsKey() }),
+  away: () => net.send({ t: 'darts.away' }),
   leave: () => net.send({ t: 'darts.leave' }),
+  skip: () => net.send({ t: 'darts.skip' }),
   throw: (x, y) => net.send({ t: 'darts.throw', x, y }),
   options: (o) => net.send({ t: 'darts.options', ...o }),
   start: () => net.send({ t: 'darts.start' }),
@@ -473,7 +475,7 @@ store.on('darts', () => {
   dartsBefore = store.darts;
   dartsFresh = false;
   // Their arm goes as their dart does.
-  for (const { by } of news.thrown) remotes.get(by.id)?.person.reach();
+  for (const { by } of news.thrown) if (by.peer) remotes.get(by.peer)?.person.reach();
   darter.sync(store.darts);
   office.dartboard.chalk(store.darts, darter.shownTurn());
 });
@@ -489,14 +491,14 @@ boardDarts.onLand = (dart, by, at, end) => {
   const front = office.dartboard.toWorld(0, 0, 0.5);
   confetti.burst(front.x, front.y, front.z, 220, 0.9);
   sound.darts('cheer', at);
-  toast(by.id === store.you ? t('notices.dartsYouWon') : t('notices.dartsWon', { name: by.name }));
+  toast(by.peer === store.you ? t('notices.dartsYouWon') : t('notices.dartsWon', { name: by.name }));
 };
 
-/** E at the oche: step up to the dartboard, if there's room. */
+/** E at the oche: step up to the dartboard, if there's room (or a place kept for you, while you were away). */
 function stepUpToDarts() {
   if (darter.active || golf.active || trip || climber.active) return;
   const d = store.darts;
-  if (d.lobby.length >= MAX_PLAYERS && !d.lobby.some((s) => s.id === store.you)) return toast(t('notices.dartsFull'), 'warn');
+  if (d.lobby.length >= MAX_PLAYERS && d.lobby.every((s) => s.peer && s.peer !== store.you)) return toast(t('notices.dartsFull'), 'warn');
   if (carrying) return toast(t('notices.handsFullCard', { issue: carrying.issue }), 'warn');
   if (player.seat) standUp();
   if (hanger.active) hanger.cancel();
@@ -2670,7 +2672,7 @@ function hintFor(it: Interactable): Hint {
     case 'darts': {
       const d = store.darts;
       const g = d.game;
-      const full = d.lobby.length >= MAX_PLAYERS && !d.lobby.some((s) => s.id === store.you);
+      const full = d.lobby.length >= MAX_PLAYERS && d.lobby.every((s) => s.peer && s.peer !== store.you);
       const about = g && !g.over ? t('main.dartsPlaying', { names: clip(g.players.map((p) => p.name).join(', '), 40), mode: g.mode }) : d.lobby.length ? t('main.dartsAtBoard', { n: d.lobby.length }) : t('main.dartsAbout');
       return { k: `${about}|${full}`, parts: [title(t('main.dartboard')), aside(about), full ? aside(t('main.dartsFull')) : key('E', t('main.playDarts'))] };
     }
@@ -2916,22 +2918,22 @@ function renderGolfHint(el: HTMLElement) {
   el.classList.remove('hidden');
 }
 
-/** At the dartboard: how to aim and throw on your turn, whose turn it is otherwise, and how to step away. */
+/** At the dartboard: how to aim and throw on your turn, whose turn it is otherwise, and how to leave. */
 function renderDartsHint(el: HTMLElement) {
   const title = (text: string) => h('span.title', {}, text);
   const stage = darter.doing;
   const up = darter.thrower;
-  const k = `darts|${stage}|${up?.name}|${darter.pulling}|${!!store.darts.game}`;
+  const k = `darts|${stage}|${up?.name}|${!!up?.peer}|${darter.pulling}|${!!store.darts.game}`;
   if (k === hintKey) return;
   hintKey = k;
-  const done = key('E', t('main.done'));
+  const done = key(t('main.keyEsc'), t('main.dartsLeave'));
   const parts =
     stage === 'charge'
       ? [title(t('main.dartsLetGo')), aside(t('main.dartsMeterNote'))]
       : stage === 'aim'
         ? [key(t('main.keyMouse'), t('main.aim')), key(t('main.keySpace'), t('main.dartsHoldToThrow')), done]
         : stage === 'watch' || stage === 'thrown'
-          ? [title(up ? t('main.dartsTheirTurn', { name: clip(up.name, 24) }) : t('main.dartsYourTurn')), ...(darter.pulling ? [aside(t('main.dartsPulling'))] : []), done]
+          ? [title(up ? t(up.peer ? 'main.dartsTheirTurn' : 'main.dartsAway', { name: clip(up.name, 24) }) : t('main.dartsYourTurn')), ...(darter.pulling ? [aside(t('main.dartsPulling'))] : []), done]
           : [title(t('main.dartboard')), aside(t(store.darts.game?.over ? 'main.dartsGameOver' : 'main.dartsPickGame')), done];
   el.replaceChildren(...parts);
   el.classList.remove('hidden');
@@ -3112,11 +3114,9 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyE') golf.stop();
     return;
   }
-  // At the dartboard, the same: E steps away (Space throws, see Darter).
-  if (darter.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
-    if (e.code === 'KeyE' && !e.repeat) darter.stop();
-    return;
-  }
+  // At the dartboard, nothing else is in reach, and E doesn't take you out of the game: Leave or Esc
+  // does, and walking off steps away (Space throws; see Darter).
+  if (darter.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) return;
   // At the pool table, the same: E steps away (the mouse or Space shoots, Q goes round, see Cueist).
   if (cueist.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'KeyQ' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
     if (e.code === 'KeyE' && !e.repeat) cueist.stop();

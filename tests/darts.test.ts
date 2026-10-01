@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DART_COLORS, RINGS, SECTORS, SECTOR_ANGLE, dartOk, newGame, removePlayer, score, sectorAt, throwDart, type DartsGame } from '../src/shared/darts.js';
+import { DART_COLORS, RINGS, SECTORS, SECTOR_ANGLE, dartOk, newGame, removePlayer, score, sectorAt, skipTurn, throwDart, type DartsGame } from '../src/shared/darts.js';
 import { Darts } from '../src/server/darts.js';
 
 /** A point `r` meters out from the bull, `deg` degrees clockwise from straight up. */
@@ -217,18 +217,44 @@ test('the last player in the order leaving on their turn hands it round to the f
   assert.ok(g.over);
 });
 
+test("skipping the turn of whoever's up: their darts come out, they score nothing, and it's the next player's", () => {
+  const g = newGame({ mode: 301, doubleOut: true }, seats('ann', 'bob'));
+  play(g, '20', '20');
+  assert.ok(skipTurn(g));
+  assert.equal(g.players[g.up].id, 'bob');
+  assert.deepEqual(g.darts, []);
+  assert.equal(g.players[0].score, 301);
+  assert.equal(g.from, 301);
+  assert.ok(skipTurn(g));
+  assert.equal(g.players[g.up].id, 'ann', 'round to the first again');
+  g.over = true;
+  assert.ok(!skipTurn(g), 'not once it is over');
+});
+
 // ---- On a floor -------------------------------------------------------------------------------------
+
+/** `peer` steps up, as the person `key` (by default, someone of their own). */
+const join = (d: Darts, peer: string, key = `key-${peer}`) => d.join(peer, peer, key);
+/** The place `peer` is at, by its id. */
+const seatOf = (d: Darts, peer: string) => d.state().lobby.find((s) => s.peer === peer)?.id;
+/** Who's at each place in the game: their peer, or '-' while they're away. */
+const players = (d: Darts) => d.state().game!.players.map((p) => p.peer ?? '-');
+const up = (d: Darts) => {
+  const g = d.state().game!;
+  return g.players[g.up].peer ?? '-';
+};
 
 test('the board: up to four people, each with the first colour free', () => {
   const d = new Darts();
-  for (const id of ['ann', 'bob', 'cat', 'dan']) assert.ok(d.join(id, id));
-  assert.ok(!d.join('eve', 'eve'), 'full');
-  assert.ok(!d.join('ann', 'ann'), 'already there');
+  for (const id of ['ann', 'bob', 'cat', 'dan']) assert.ok(join(d, id));
+  assert.ok(!join(d, 'eve'), 'full');
+  assert.ok(!join(d, 'ann'), 'already there');
   assert.deepEqual(d.state().lobby.map((p) => p.color), [...DART_COLORS]);
   assert.ok(d.left('bob'));
   assert.ok(!d.left('bob'));
-  assert.ok(d.join('eve', 'eve'));
-  assert.deepEqual(d.state().lobby.map((p) => [p.id, p.color]), [['ann', DART_COLORS[0]], ['cat', DART_COLORS[2]], ['dan', DART_COLORS[3]], ['eve', DART_COLORS[1]]]);
+  assert.ok(join(d, 'eve'));
+  assert.deepEqual(d.state().lobby.map((p) => [p.peer, p.color]), [['ann', DART_COLORS[0]], ['cat', DART_COLORS[2]], ['dan', DART_COLORS[3]], ['eve', DART_COLORS[1]]]);
+  assert.ok(!JSON.stringify(d.state()).includes('key-'), 'nobody sees anyone else’s key');
 });
 
 test('the board: options and starting are for the people at it, and only between games', () => {
@@ -236,23 +262,41 @@ test('the board: options and starting are for the people at it, and only between
   assert.deepEqual(d.state(), { lobby: [], mode: 301, doubleOut: true, game: null });
   assert.ok(!d.setOptions('ann', { mode: 501 }), 'not at the board');
   assert.ok(!d.start('ann'));
-  d.join('ann', 'Ann');
-  d.join('bob', 'Bob');
+  d.join('ann', 'Ann', 'a');
+  d.join('bob', 'Bob', 'b');
   assert.ok(d.setOptions('bob', { mode: 501, doubleOut: false }));
   assert.ok(!d.setOptions('bob', { mode: 999 as 301 }), 'no such game');
   assert.ok(d.start('bob'));
   const g = d.state().game!;
-  assert.deepEqual(g.players.map((p) => [p.id, p.name, p.score]), [['ann', 'Ann', 501], ['bob', 'Bob', 501]]);
+  assert.deepEqual(g.players.map((p) => [p.peer, p.name, p.score]), [['ann', 'Ann', 501], ['bob', 'Bob', 501]]);
   assert.ok(!g.doubleOut);
   assert.ok(!d.start('ann'), 'one is on');
   assert.ok(!d.setOptions('ann', { mode: 301 }), 'not mid-game');
 });
 
+test('the board: one person alone can start a game and play it out', () => {
+  let now = 1_000_000;
+  const d = new Darts(() => now);
+  join(d, 'ann');
+  d.setOptions('ann', { mode: 501 });
+  assert.ok(d.start('ann'), 'practising alone');
+  assert.deepEqual(players(d), ['ann']);
+  for (const l of ['T20', 'T20', 'T20', 'T20', 'T20', 'T20', 'T20', 'T19', 'D12']) {
+    assert.ok(d.throw('ann', aim(l)), l);
+    now += 300;
+  }
+  const g = d.state().game!;
+  assert.ok(g.over);
+  assert.equal(g.winner, seatOf(d, 'ann'));
+  assert.ok(d.reset('ann'));
+  assert.ok(d.start('ann'), 'and again');
+});
+
 test("the board: only whoever's turn it is throws, real numbers only, and no faster than a person could", () => {
   let now = 1_000_000;
   const d = new Darts(() => now);
-  d.join('ann', 'Ann');
-  d.join('bob', 'Bob');
+  join(d, 'ann');
+  join(d, 'bob');
   assert.ok(!d.throw('ann', { x: 0, y: 0 }), 'no game yet');
   d.start('ann');
   assert.ok(!d.throw('bob', aim('T20')), "not Bob's turn");
@@ -274,21 +318,21 @@ test("the board: only whoever's turn it is throws, real numbers only, and no fas
 
 test('the board: joining mid-game waits for the next one; leaving mid-game skips you, and alone it ends', () => {
   const d = new Darts();
-  d.join('ann', 'Ann');
-  d.join('bob', 'Bob');
+  join(d, 'ann');
+  join(d, 'bob');
   d.start('ann');
-  assert.ok(d.join('cat', 'Cat'), 'at the board');
-  assert.deepEqual(d.state().game!.players.map((p) => p.id), ['ann', 'bob'], 'but not in this game');
+  assert.ok(join(d, 'cat'), 'at the board');
+  assert.deepEqual(players(d), ['ann', 'bob'], 'but not in this game');
   assert.ok(!d.throw('cat', aim('20')));
   assert.ok(!d.reset('cat'), "only its players call a game off that's still on");
   assert.ok(d.left('cat'));
   assert.ok(!d.state().game!.over);
-  assert.ok(d.left('ann'), 'Ann walks off on their turn');
+  assert.ok(d.left('ann'), 'Ann leaves on their turn');
   const g = d.state().game!;
   assert.ok(g.over, 'Bob alone: over');
   assert.equal(g.winner, null);
   assert.ok(d.start('bob'), 'a new one, just Bob');
-  assert.deepEqual(d.state().game!.players.map((p) => p.id), ['bob']);
+  assert.deepEqual(players(d), ['bob']);
   assert.ok(d.reset('bob'));
   assert.equal(d.state().game, null);
   assert.ok(!d.reset('bob'), 'nothing to clear');
@@ -297,9 +341,118 @@ test('the board: joining mid-game waits for the next one; leaving mid-game skips
   assert.deepEqual(d.state(), { lobby: [], mode: 301, doubleOut: true, game: null }, 'nobody at the board: the scoreboard is cleared');
 });
 
+test('the board: stepping away mid-game keeps your place, and coming back (a new connection) puts you straight back in it', () => {
+  let now = 1_000_000;
+  const d = new Darts(() => now);
+  join(d, 'ann', 'A');
+  join(d, 'bob', 'B');
+  const bobSeat = seatOf(d, 'bob');
+  d.start('ann');
+  d.throw('ann', aim('T20'));
+  assert.ok(d.away('bob'), 'Bob walks off (or reloads, or drops out)');
+  assert.deepEqual(players(d), ['ann', '-'], 'away, but still in the game');
+  assert.equal(d.state().lobby.length, 2, 'and still at the board');
+  assert.ok(!d.state().game!.over);
+  assert.ok(!d.throw('bob', aim('20')), 'not from the old connection');
+
+  // Bob comes back on a new connection: the same place, colour and score.
+  assert.ok(d.join('bob2', 'Bob', 'B'));
+  assert.equal(seatOf(d, 'bob2'), bobSeat);
+  assert.equal(d.state().lobby.find((s) => s.peer === 'bob2')!.color, DART_COLORS[1]);
+  assert.deepEqual(players(d), ['ann', 'bob2']);
+  now += 300;
+  d.throw('ann', aim('1'));
+  now += 300;
+  d.throw('ann', aim('1'));
+  assert.equal(up(d), 'bob2', "Bob's turn, back as bob2");
+  assert.ok(d.throw('bob2', aim('T19')));
+  assert.equal(d.state().game!.players[1].score, 301 - 57);
+
+  // Somebody new can't take a place kept for someone else, even with the board full.
+  d.away('bob2');
+  join(d, 'cat');
+  join(d, 'dan');
+  assert.ok(!d.join('eve', 'Eve', 'E'), "full: Bob's place is kept");
+  assert.ok(d.join('bob3', 'Bob', 'B'), 'but Bob gets back in');
+});
+
+test("the board: a player who's away on their turn can be skipped by the others", () => {
+  let now = 1_000_000;
+  const d = new Darts(() => now);
+  join(d, 'ann');
+  join(d, 'bob');
+  join(d, 'cat');
+  d.start('ann');
+  assert.ok(!d.skip('bob'), "Ann's here: nothing to skip");
+  d.throw('ann', aim('20'));
+  d.away('ann');
+  assert.ok(!d.skip('eve'), 'not at the board');
+  assert.ok(!d.skip('ann'), 'not from the old connection');
+  assert.ok(d.skip('cat'));
+  const g = d.state().game!;
+  assert.equal(up(d), 'bob');
+  assert.deepEqual(g.darts, [], "Ann's darts are pulled out");
+  assert.equal(g.players[0].score, 301, 'and score nothing');
+  assert.ok(!d.skip('cat'), "Bob's here");
+  assert.ok(!g.over);
+});
+
+test('the board: places are only kept for a running game, and walking off between games just goes', () => {
+  let now = 1_000_000;
+  const d = new Darts(() => now);
+  join(d, 'ann');
+  join(d, 'bob');
+  assert.ok(d.away('bob'), 'no game: Bob just goes');
+  assert.deepEqual(d.state().lobby.map((s) => s.peer), ['ann']);
+  join(d, 'bob');
+  join(d, 'cat');
+  d.setOptions('ann', { mode: 501 });
+  d.start('ann');
+  join(d, 'dan');
+  assert.ok(d.away('dan'), 'not in this game: Dan just goes too');
+  assert.equal(d.state().lobby.length, 3);
+  d.away('bob');
+  d.away('cat');
+  // Ann wins, with Bob and Cat away: their places go with the game.
+  for (const l of ['T20', 'T20', 'T20']) {
+    d.throw('ann', aim(l));
+    now += 300;
+  }
+  d.skip('ann');
+  d.skip('ann');
+  for (const l of ['T20', 'T20', 'T20']) {
+    d.throw('ann', aim(l));
+    now += 300;
+  }
+  d.skip('ann');
+  d.skip('ann');
+  for (const l of ['T20', 'T19', 'D12']) {
+    d.throw('ann', aim(l));
+    now += 300;
+  }
+  assert.equal(d.state().game!.winner, seatOf(d, 'ann'));
+  assert.deepEqual(d.state().lobby.map((s) => s.peer), ['ann'], 'over: whoever was away is gone from the board');
+  assert.deepEqual(players(d), ['ann', '-', '-'], 'but still on the scoreboard');
+});
+
+test('the board: when every player is away, anyone at the board can clear the game', () => {
+  const d = new Darts();
+  join(d, 'ann');
+  d.start('ann');
+  d.away('ann');
+  assert.ok(d.state().game, 'kept for Ann');
+  join(d, 'bob');
+  assert.ok(d.reset('bob'), 'nobody playing it any more');
+  assert.equal(d.state().game, null);
+  assert.deepEqual(d.state().lobby.map((s) => s.peer), ['bob']);
+  join(d, 'ann', 'key-ann');
+  d.left('bob');
+  assert.deepEqual(d.state().lobby.map((s) => s.peer), ['ann'], 'Ann back as someone new');
+});
+
 test("the board's state is a copy: changing it changes nothing", () => {
   const d = new Darts();
-  d.join('ann', 'Ann');
+  join(d, 'ann');
   d.start('ann');
   const st = d.state();
   st.game!.players[0].score = 1;
