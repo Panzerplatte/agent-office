@@ -42,6 +42,7 @@ export const NOTICES = table(
     'workspace.moved': '📁 {who} moved the workspace folder to {dir}',
     'workspace.reset': '📁 {who} put the workspace folder back to {dir}',
     'dog.named': '🐶 {who} named the dog {name}',
+    'cat.named': '🐱 {who} named the cat {name}',
 
     // Workers
     'agent.unknown': 'Unknown agent provider',
@@ -186,6 +187,7 @@ export const NOTICES = table(
     'workspace.moved': '📁 {who} hat den Arbeitsordner nach {dir} verlegt',
     'workspace.reset': '📁 {who} hat den Arbeitsordner auf {dir} zurückgesetzt',
     'dog.named': '🐶 {who} hat den Hund {name} genannt',
+    'cat.named': '🐱 {who} hat die Katze {name} genannt',
 
     'agent.unknown': 'Unbekannter Agent-Anbieter',
     'worker.shell': '{who} hat an einem Schreibtisch eine Shell geöffnet',

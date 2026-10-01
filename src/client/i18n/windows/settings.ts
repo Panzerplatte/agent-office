@@ -111,6 +111,9 @@ export default strings(
     'settings.dogName': 'The dog’s name',
     'settings.rename': 'Rename',
     'settings.dogNote': '{name} lives on this floor. When a worker needs input, {name} runs to its desk and barks. Walk up and press E to pet it. A new name is for everyone on this floor.',
+    'settings.officeCat': 'Office cat',
+    'settings.catName': 'The cat’s name',
+    'settings.catNote': '{name} lives on this floor too: naps, loafs and strolls about. Walk up and press E to pet it, and it purrs. A new name is for everyone on this floor.',
 
     'settings.yourCharacter': 'Your character',
     'settings.changeLook': '🧍 Change your look',
@@ -229,6 +232,9 @@ export default strings(
     'settings.dogName': 'Name des Hundes',
     'settings.rename': 'Umbenennen',
     'settings.dogNote': '{name} wohnt auf dieser Etage. Wenn ein Worker eine Eingabe braucht, rennt {name} zu seinem Schreibtisch und bellt. Geh hin und drück E, um den Hund zu streicheln. Ein neuer Name gilt für alle auf dieser Etage.',
+    'settings.officeCat': 'Bürokatze',
+    'settings.catName': 'Name der Katze',
+    'settings.catNote': '{name} wohnt auch auf dieser Etage: döst, faulenzt und streift umher. Geh hin und drück E, um die Katze zu streicheln, dann schnurrt sie. Ein neuer Name gilt für alle auf dieser Etage.',
 
     'settings.yourCharacter': 'Deine Figur',
     'settings.changeLook': '🧍 Aussehen ändern',

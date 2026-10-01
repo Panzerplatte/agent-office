@@ -2,7 +2,7 @@
  * Office sounds, synthesized with Web Audio so there are no audio files to ship: the room's air and a
  * humming fridge, workers typing while they work, footsteps, the coffee machine, birds outside the
  * windows by day and crickets at night, rain and thunder, the odd rustle or phone, the gong, the dog
- * barking, and the dings when a worker needs you. And the lounge jukebox, whose tunes are in music.ts,
+ * barking, the cat meowing and purring, and the dings when a worker needs you. And the lounge jukebox, whose tunes are in music.ts,
  * and up on the roof, the wind, the city far below and the DJ's drum and bass (dnb.ts).
  *
  * Everything goes through one master gain that Settings turns down or mutes. Voice chat doesn't, and
@@ -754,6 +754,73 @@ export class OfficeSound {
     const out = this.panner({ x, y: 0.5, z }, 1.5, 1);
     out.connect(this.ambience);
     this.woof(out, ctx.currentTime + 0.02, 620, 0.09, 0.3);
+  }
+
+  // ---- The cat ----------------------------------------------------------------------------------
+
+  /** A little "mi-aow": a reedy voice that rises, then falls as the mouth closes. */
+  meow(x: number, z: number) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count('meow');
+    const out = this.panner({ x, y: 0.3, z }, 1.5, 1);
+    out.connect(this.ambience);
+    const t = ctx.currentTime + 0.03;
+    const len = rand(0.45, 0.6);
+    const f = 560 * rand(0.92, 1.1);
+    const voice = ctx.createOscillator();
+    voice.type = 'sawtooth';
+    voice.frequency.setValueAtTime(f * 0.8, t);
+    voice.frequency.exponentialRampToValueAtTime(f * 1.25, t + len * 0.35);
+    voice.frequency.exponentialRampToValueAtTime(f * 0.7, t + len);
+    // "mi" (closed), "a" (open), "ow" (closing).
+    const mouth = biquad(ctx, 'bandpass', 900, 2.2);
+    mouth.frequency.setValueAtTime(800, t);
+    mouth.frequency.linearRampToValueAtTime(1700, t + len * 0.4);
+    mouth.frequency.linearRampToValueAtTime(700, t + len);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.32, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.22, t + len * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    voice.connect(mouth).connect(g).connect(out);
+    voice.start(t);
+    voice.stop(t + len + 0.02);
+  }
+
+  /** A soft purr for `seconds`: low rumbling noise, pulsing with each breath in and out. */
+  purr(x: number, z: number, seconds: number) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count('purr');
+    const out = this.panner({ x, y: 0.3, z }, 1, 1.4);
+    out.connect(this.ambience);
+    const t = ctx.currentTime + 0.02;
+    const rumble = this.noise(this.buf.white, true);
+    const low = biquad(ctx, 'lowpass', 140, 1.5);
+    // The flutter: about 25 beats a second.
+    const flutter = ctx.createGain();
+    flutter.gain.value = 0.5;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 25;
+    const depth = ctx.createGain();
+    depth.gain.value = 0.5;
+    lfo.connect(depth).connect(flutter.gain);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    // Louder breathing out than in.
+    for (let s = 0; s < seconds; s += 1.4) {
+      g.gain.linearRampToValueAtTime(0.9, t + s + 0.15);
+      g.gain.linearRampToValueAtTime(0.5, t + s + 0.75);
+      g.gain.linearRampToValueAtTime(0.7, t + s + 0.85);
+      g.gain.linearRampToValueAtTime(0.35, t + s + 1.35);
+    }
+    g.gain.linearRampToValueAtTime(0.0001, t + seconds + 0.2);
+    rumble.connect(low).connect(flutter).connect(g).connect(out);
+    rumble.start(t, rand(0, 4));
+    rumble.stop(t + seconds + 0.25);
+    lfo.start(t);
+    lfo.stop(t + seconds + 0.25);
   }
 
   /** One bark: a buzzy voice that leaps up in pitch and falls away, shaped into a "wuh", with a breathy rasp. */

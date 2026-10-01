@@ -523,6 +523,7 @@ export async function startServer(cfg: Config) {
     decor: floor?.decor.list() ?? [],
     services: servicesState(floor),
     dog: floor?.dog.view() ?? null,
+    cat: floor?.cat.view() ?? null,
     ball: floor?.court.state() ?? {},
     jukebox: floor?.jukebox.state() ?? { on: false, track: JUKEBOX_TUNES[0].id, startedAt: Date.now(), elapsed: 0 },
     whiteboard: { elements: floor?.whiteboard.scene() ?? [], people: floor ? drawing(floor) : [] },
@@ -1308,6 +1309,16 @@ export async function startServer(cfg: Config) {
         if (!floor) break;
         const name = floor.dog.rename(str(msg.name, 200));
         toastFloor(floor, notice('dog.named', { who, name }));
+        break;
+      }
+      case 'cat.pet':
+        floorOf(c)?.cat.pet(c.peer);
+        break;
+      case 'cat.name': {
+        const floor = here();
+        if (!floor) break;
+        const name = floor.cat.rename(str(msg.name, 200));
+        toastFloor(floor, notice('cat.named', { who, name }));
         break;
       }
       case 'worker.spawn': {
