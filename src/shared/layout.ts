@@ -202,6 +202,26 @@ export const JUKEBOX = { x: FLOOR.maxX - 0.42, y: 0.75, z: 5.4, width: 1.3, dept
 export const CABINET = { x: FLOOR.maxX - 0.42, z: 7.05, width: 0.8, depth: 0.8, height: 1.9 } as const;
 
 /**
+ * The dartboard: on the east wall in the lounge, in the 1.7 m of wall between the Services board and
+ * the TV, facing into the room (rotY -PI/2, so -x; 0 = +z, like BOARDS). (x, y, z) is the middle of
+ * the board's face: the bull, 1.73 m up as the rules have it. It hangs in a wooden cabinet `cabinet`
+ * wide and high, standing `depth` out from the wall, whose two doors stand open flat against the wall
+ * either side, each `door` wide. The throw line (the oche) is a strip on the floor 2.37 m out from the
+ * face, `width` long, centred on the board; the lane between it and the board is open floor, west of
+ * the lounge beanbag and clear of the couch's view of the TV.
+ */
+const DARTBOARD_FACE = FLOOR.maxX - 0.06;
+const DARTBOARD_Z = -4.2;
+export const DARTBOARD = {
+  x: DARTBOARD_FACE,
+  y: 1.73,
+  z: DARTBOARD_Z,
+  rotY: -Math.PI / 2,
+  cabinet: { width: 0.62, height: 0.7, depth: 0.12, door: 0.3 },
+  oche: { x: DARTBOARD_FACE - 2.37, z: DARTBOARD_Z, width: 0.9 },
+} as const;
+
+/**
  * The bookshelf of the project's docs (every Markdown file in it, see shared/docs.ts): against the
  * south wall between the middle window and the balcony doors, facing into the room (-z). `width`
  * runs along the wall.
