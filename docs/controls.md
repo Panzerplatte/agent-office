@@ -6,6 +6,7 @@ Back to the [README](../README.md).
 | --- | --- |
 | W A S D / arrows | Walk (hold Shift to run); on the ladder, W and S climb |
 | Space | Jump (you can land on desks, couches and the cars in the garage) |
+| Mouse / A D / W S / Space / Esc (at the golf tee) | The mouse or A and D aim, W and S set the loft; hold Space and let go to hit. Esc, or Leave on the panel, puts the club back (E doesn't); E at the tee again carries on with your round |
 | Mouse drag / wheel | Orbit / zoom the camera |
 | E | Interact: hire a worker, open its terminal, read a board, take an issue's note off the board, prompt a board agent, call a meeting in the meeting room, draw on the whiteboard, read the docs at the bookshelf, watch the TV, sit down (or get up), ride the elevator, climb the ladder (or get off it), slide down a fire pole, grab a coffee, take a smoke break, tee off at the golf tee, step up to the dartboard at the oche (or back into your place in its game), step up to the pool table (or back into your seat in its game), pet the dog, pick up the basketball (then hold E and let go to shoot), order a drink at the rooftop bar, blow the DJ's air horn |
 | Mouse / Space (at the dartboard) | On your turn, the mouse aims; hold Space and let go when the meter's in the green to throw. Walking off steps away but keeps your place in a running game; Esc or **Leave** on the panel leaves it, and **Skip** passes over someone who's away on their turn |

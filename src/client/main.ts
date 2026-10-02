@@ -21,7 +21,7 @@ import { openBar } from './ui/bar';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
-import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, type Flight, type Hit, type Shot } from './world/golf';
+import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, roundText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
 import { Darter, dartsKey } from './darts';
 import { BoardDarts } from './world/darts';
@@ -406,6 +406,7 @@ balls.onRest = (f: Flight, who: string, mine: boolean) => {
     if (f.holed) toast(t('notices.golfHoleInOneBy', { who }));
     return;
   }
+  golf.landed(f);
   const rec = golfRecord();
   if (f.holed) {
     rec.holes++;
@@ -2667,6 +2668,12 @@ function hintFor(it: Interactable): Hint {
     case 'golf': {
       const other = teeTaken();
       if (other) return { k: `taken|${other}`, parts: [title(t('main.golfTee')), aside(t('main.teeingOff', { name: clip(other, 24) }))] };
+      // A round you stepped away from: back up, and you carry on with it.
+      const round = golf.card;
+      if (round.shots && !round.last?.holed) {
+        const score = roundText(round);
+        return { k: `round|${score}`, parts: [title(t('main.golfTee')), aside(score), key('E', t('main.golfCarryOn'))] };
+      }
       const { best, holes } = golfRecord();
       const about = [holes ? t('main.holesInOne', { n: holes }) : '', best !== null ? t('main.yourBest', { distance: pinText(best) }) : t('main.pinOut', { m: Math.round(PIN_DISTANCE) })].filter(Boolean).join(' · ');
       return { k: about, parts: [title(t('main.golfTee')), aside(about), key('E', t('main.teeOff'))] };
@@ -2919,10 +2926,10 @@ function renderGolfHint(el: HTMLElement) {
   hintKey = k;
   const parts =
     stage === 'watch'
-      ? [title(t('main.fore')), key(t('main.keySpace'), t('main.backToTee')), key('E', t('main.done'))]
+      ? [title(t('main.fore')), key(t('main.keySpace'), t('main.backToTee')), key(t('main.keyEsc'), t('main.golfLeave'))]
       : stage === 'charge' || stage === 'swing'
         ? [title(t('main.letGoToHit')), aside(t('main.meterNote'))]
-        : [key(t('main.keySpace'), t('main.holdToSwing')), key('A D', t('main.aim')), key('W S', t('main.loft')), key('E', t('main.done'))];
+        : [key(t('main.keySpace'), t('main.holdToSwing')), key('A D', t('main.aim')), key('W S', t('main.loft')), key(t('main.keyEsc'), t('main.golfLeave'))];
   el.replaceChildren(...parts);
   el.classList.remove('hidden');
 }
@@ -3118,11 +3125,8 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyE') climber.letGo();
     return;
   }
-  // At the golf tee, E puts the club back (Space swings, see Golfer); nothing else is in reach, and no emotes mid-swing.
-  if (golf.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
-    if (e.code === 'KeyE') golf.stop();
-    return;
-  }
+  // At the golf tee, Space swings and Esc puts the club back (see Golfer); E again doesn't, nothing else is in reach, and no emotes mid-swing.
+  if (golf.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) return;
   // At the dartboard, nothing else is in reach, and E doesn't take you out of the game: Leave or Esc
   // does, and walking off steps away (Space throws; see Darter).
   if (darter.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) return;

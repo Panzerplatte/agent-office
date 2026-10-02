@@ -21,6 +21,8 @@ export interface Shot {
 /** The lofts you can pick, in radians. Much under 30° and the ball won't clear the railing. */
 export const LOFT_MIN = THREE.MathUtils.degToRad(20);
 export const LOFT_MAX = THREE.MathUtils.degToRad(60);
+/** The loft you start with. */
+export const LOFT_START = THREE.MathUtils.degToRad(42);
 /** How far either side of straight out you can aim. */
 export const AIM_MAX = 1.2;
 /** How fast the ball leaves the club at full power, in m/s. */
@@ -484,7 +486,7 @@ export function pinText(m: number): string {
 }
 
 /** Where a ball stopped, in words. */
-export function lieText(f: Flight): string {
+export function lieText(f: Pick<Flight, 'holed' | 'lie' | 'fromPin'>): string {
   if (f.holed) return t('world.lieHoled');
   const pin = pinText(f.fromPin);
   switch (f.lie) {
@@ -503,6 +505,75 @@ export function lieText(f: Flight): string {
     default:
       return t('world.lieFromPin', { pin });
   }
+}
+
+/** Where your last ball stopped, kept with your round (a ball lost or off the balcony has no distance: NaN). */
+export type Landed = Pick<Flight, 'holed' | 'lie' | 'fromPin'>;
+
+/**
+ * Your round at the tee: how many you've hit, your closest to the pin, where the last one stopped,
+ * and the aim and loft you had. It's kept when you step away from the tee (or the camera's off after
+ * the ball), and in this browser across a reload, so stepping back up carries on where you were.
+ * A new one starts with the first shot after holing out, or when you ask for one.
+ */
+export interface GolfRound {
+  shots: number;
+  best: number | null;
+  last: Landed | null;
+  aim: number;
+  loft: number;
+}
+
+export function newRound(aim: number, loft: number): GolfRound {
+  return { shots: 0, best: null, last: null, aim, loft };
+}
+
+/** You hit one: it counts, and after holing out it's the first of a new round. */
+export function roundShot(r: GolfRound): GolfRound {
+  const fresh = r.last?.holed ? newRound(r.aim, r.loft) : r;
+  return { ...fresh, shots: fresh.shots + 1 };
+}
+
+/** Your ball stopped: where, and whether it's your closest yet this round. */
+export function roundLanded(r: GolfRound, f: Landed): GolfRound {
+  const last: Landed = { holed: f.holed, lie: f.lie, fromPin: f.fromPin };
+  const near = Number.isFinite(f.fromPin) && (r.best === null || f.fromPin < r.best);
+  return { ...r, last, best: near ? f.fromPin : r.best };
+}
+
+/** A round as kept in localStorage (JSON has no NaN: a ball with no distance is kept as null). */
+export function roundToJson(r: GolfRound): string {
+  return JSON.stringify({ ...r, last: r.last && { ...r.last, fromPin: Number.isFinite(r.last.fromPin) ? r.last.fromPin : null } });
+}
+
+/** A kept round back, or null if there's none (or it's not one). */
+export function roundFromJson(text: string | null): GolfRound | null {
+  try {
+    const o = JSON.parse(text ?? 'null') as Partial<Record<keyof GolfRound, unknown>> | null;
+    if (!o || typeof o.shots !== 'number' || !Number.isInteger(o.shots) || o.shots < 0) return null;
+    const num = (v: unknown, lo: number, hi: number, or: number) => (typeof v === 'number' && v >= lo && v <= hi ? v : or);
+    const l = o.last as { holed?: unknown; lie?: unknown; fromPin?: unknown } | null | undefined;
+    const last: Landed | null = l && typeof l.lie === 'string' ? { holed: l.holed === true, lie: l.lie as Lie | 'lost', fromPin: typeof l.fromPin === 'number' ? l.fromPin : NaN } : null;
+    return {
+      shots: o.shots,
+      best: typeof o.best === 'number' && o.best >= 0 ? o.best : null,
+      last,
+      aim: num(o.aim, -AIM_MAX, AIM_MAX, PIN_YAW),
+      loft: num(o.loft, LOFT_MIN, LOFT_MAX, LOFT_START),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Your round in a line: how many shots, your closest, and where the last one went. */
+export function roundText(r: GolfRound): string {
+  if (!r.shots) return t('main.golfFirstShot');
+  if (r.last?.holed) return t('main.golfHoledIn', { n: r.shots });
+  const parts = [t('main.golfShots', { n: r.shots })];
+  if (r.best !== null) parts.push(t('main.golfClosest', { distance: pinText(r.best) }));
+  if (r.last) parts.push(t('main.golfLast', { lie: lieText(r.last) }));
+  return parts.join(' · ');
 }
 
 interface Flying {
