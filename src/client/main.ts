@@ -23,6 +23,7 @@ import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { CASINO, casinoSpotOf } from '../shared/casino';
 import { BlackjackPlayer } from './blackjack';
+import { allowed } from '../shared/blackjack';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, roundText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
@@ -3075,21 +3076,30 @@ function renderPoolHint(el: HTMLElement) {
   el.classList.remove('hidden');
 }
 
-/** At the blackjack table: whose turn it is, your keys on yours, and how to get up. */
+/** The keys for your moves at the blackjack table (see BlackjackPanel.key). */
+const BJ_KEYS = [
+  ['hit', '1', 'menus.bjHit'],
+  ['stand', '2', 'menus.bjStand'],
+  ['double', '3', 'menus.bjDouble'],
+  ['split', '4', 'menus.bjSplit'],
+] as const;
+/** At the blackjack table: whose turn it is, your keys on yours (only the moves you have), and how to get up. */
 function renderBlackjackHint(el: HTMLElement) {
   const title = (text: string) => h('span.title', {}, text);
   const d = store.blackjack;
   const turn = d.round?.turn ? d.round.players[d.round.turn.player] : undefined;
   const mine = !!turn && d.seats.some((s) => s.id === turn.id && s.peer === store.you);
   const reserved = blackjack.reserved;
-  const k = `blackjack|${d.stage}|${turn?.name}|${mine}|${reserved}`;
+  const seat = d.seats.find((o) => o.peer === store.you);
+  const can = d.round && seat ? allowed(d.round, seat.id) : [];
+  const k = `blackjack|${d.stage}|${turn?.name}|${mine}|${reserved}|${can}`;
   if (k === hintKey) return;
   hintKey = k;
   const done = key(t('main.keyEsc'), t('main.bjStepAway'));
   const parts = reserved
     ? [title(t('main.bjReserved', { name: clip(reserved, 24) })), done]
     : mine
-      ? [title(t('main.bjYourTurn')), key('1', t('menus.bjHit')), key('2', t('menus.bjStand')), key('3', t('menus.bjDouble')), key('4', t('menus.bjSplit')), done]
+      ? [title(t('main.bjYourTurn')), ...BJ_KEYS.filter(([a]) => can.includes(a)).map(([a, k, label]) => key(k, t(label))), done]
       : [title(t('main.bjTable')), aside(t(turn ? 'main.bjTheirTurn' : 'main.bjAbout', { name: clip(turn?.name ?? '', 24) })), done];
   el.replaceChildren(...parts);
   el.classList.remove('hidden');
@@ -3108,7 +3118,7 @@ function renderHangHint(el: HTMLElement) {
 let crossKey = '';
 const finePointer = window.matchMedia('(pointer: fine)').matches;
 function renderCrosshair() {
-  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active && !cueist.active;
+  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active && !cueist.active && !blackjack.active;
   const free = show && finePointer && player.canLock && !player.locked;
   const k = `${show}|${!!target}|${free}|${relookOnKey}`;
   if (k === crossKey) return;
@@ -3477,7 +3487,7 @@ canvas.addEventListener('pointerleave', () => (pointer = null));
 
 player.onClick = (ndc) => {
   // At the tee, a click is you steadying the mouse to aim: nothing else is in reach. At the dartboard, the mouse aims.
-  if (modalOpen() || golf.active || darter.active || cueist.active) return;
+  if (modalOpen() || golf.active || darter.active || cueist.active || blackjack.active) return;
   if (emoteWheel.isOpen) return emoteWheel.click();
   // The ball in your hands: press to wind up, let go (or click again, with no mouse captured) to shoot.
   if (holdingBall()) {
@@ -3803,7 +3813,7 @@ function frame(ts?: number) {
   // In first person you are the camera; in third, hide yourself when it's zoomed in right behind your head.
   // At the tee the camera's behind the ball, and you're the one holding the club; at the pool table you're there too, unless you're in the way.
   me.root.visible = golf.active || (cueist.active && !cueist.inTheWay(me.root.position)) || (!cueist.active && !firstPerson && camera.position.distanceTo(headPos.set(player.pos.x, player.pos.y + 1.3, player.pos.z)) > 1.5);
-  if (firstPerson && !golf.active && !darter.active && !cueist.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
+  if (firstPerson && !golf.active && !darter.active && !cueist.active && !blackjack.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
   // Down a pole: the view widens and the edges streak past.
   const rush = reduceMotion.matches ? 0 : climber.rush;
   const fov = 55 + rush * 16;
@@ -3914,7 +3924,7 @@ function frame(ts?: number) {
   }
 
   aimedNote = null;
-  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active) target = null;
+  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active || blackjack.active) target = null;
   else if (firstPerson) {
     const aim = aimedAt(CROSSHAIR);
     target = aim?.near ? aim.it : (mySeat() ?? ballAtFeet());
@@ -3953,7 +3963,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active) {
+  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();

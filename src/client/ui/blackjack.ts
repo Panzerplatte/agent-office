@@ -20,12 +20,12 @@ const SUIT = { S: '♠', H: '♥', D: '♦', C: '♣' } as const;
 /** The chips you put a bet together from. */
 export const CHIPS = [5, 25, 100, 500] as const;
 
-/** A hand's total as it's written: "17", "7 / 17" while an ace could still be 1 or 11, "BJ" for a blackjack. */
-export function totalLabel(cards: readonly Card[], split = false): string {
+/** A hand's total as it's written: "17", "7 / 17" while an ace could still be 1 or 11 (not once it's `done`), "BJ" for a blackjack. */
+export function totalLabel(cards: readonly Card[], split = false, done = false): string {
   if (!cards.length) return '';
   if (!split && isBlackjack(cards)) return 'BJ';
   const v = handValue(cards);
-  return v.soft && v.total < 21 ? `${v.total - 10} / ${v.total}` : String(v.total);
+  return v.soft && v.total < 21 && !done ? `${v.total - 10} / ${v.total}` : String(v.total);
 }
 
 const OUTCOME: Record<Outcome, string> = {
@@ -50,7 +50,7 @@ function hand(hd: BjHand, up: boolean): HTMLElement {
     `div.bj-hand${up ? '.up' : ''}`,
     {},
     h('span.bj-cards', {}, ...hd.cards.map(mini)),
-    h('span.bj-total', {}, totalLabel(hd.cards, hd.split)),
+    h('span.bj-total', {}, totalLabel(hd.cards, hd.split, hd.done)),
     h('span.bj-stake', {}, `${hd.bet}${hd.doubled ? ' ×2' : ''}`),
     out,
   );
@@ -194,7 +194,7 @@ export class BlackjackPanel {
     this.dealer.replaceChildren(
       h('span.bj-who', {}, t('menus.bjDealer')),
       h('span.bj-cards', {}, ...dealerCards.map(mini)),
-      h('span.bj-total', {}, known.length === dealerCards.length ? totalLabel(known) : known.length ? `${totalLabel(known)} + ?` : ''),
+      h('span.bj-total', {}, known.length === dealerCards.length ? totalLabel(known, false, d.stage === 'done') : known.length ? `${totalLabel(known)} + ?` : ''),
     );
 
     // The seats.

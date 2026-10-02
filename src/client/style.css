@@ -357,8 +357,9 @@ button { font-family: inherit; }
 .pool-spin { position: relative; width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #e6e0d0 70%); border: 2px solid var(--ink); cursor: pointer; }
 .pool-spin-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #c0262d; pointer-events: none; }
 #hud:has(.pool:not(.hidden)) #toasts { top: auto; bottom: 120px; }
-/* At the blackjack table: the dealer, the seats with their hands, and your bet and moves, at the bottom under the felt. */
-.bj { top: auto; bottom: 14px; width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 120px); overflow-y: auto; }
+/* At the blackjack table: the dealer, the seats with their hands, and your bet and moves, down the right, clear of the felt. */
+.bj { left: auto; right: 14px; top: 70px; transform: none; width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 140px); overflow-y: auto; }
+@media (max-width: 760px) { .bj { left: 50%; right: auto; top: auto; bottom: 14px; transform: translateX(-50%); max-height: 50vh; } }
 .bj-head { display: flex; justify-content: space-between; align-items: center; }
 .bj-balance { font-variant-numeric: tabular-nums; color: var(--muted); }
 .bj-dealer, .bj-seat { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 2px 6px; border-radius: 8px; border: 2px solid transparent; }
@@ -394,7 +395,7 @@ button { font-family: inherit; }
 .bj-amount { min-width: 90px; text-align: center; font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .bj-amount.down { color: var(--ink); }
 .bj-move kbd { font-size: 10px; opacity: .7; }
-#hud:has(.bj:not(.hidden)) #toasts { top: 14px; bottom: auto; }
+#hud:has(.bj:not(.hidden)) #toasts { top: auto; bottom: 120px; }
 .caffeine.jittery .bar span { background: var(--bad); }
 @keyframes jitters { 50% { transform: translate(1px, -1px) rotate(-1.5deg); } }
 @media (prefers-reduced-motion: reduce) { .caffeine.jittery { animation: none; } }

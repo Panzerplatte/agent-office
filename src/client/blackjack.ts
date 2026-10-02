@@ -15,20 +15,20 @@ import { mesh, toon } from './world/toon';
 // onto the felt, one at a time from the shoe, and the stakes in front of each seat.
 
 /**
- * The camera at your seat: this far out behind your cards from the middle of the curve, and this high
- * over the felt, looking at a point this far toward the dealer from there, so it takes in your cards,
- * the dealer's and your neighbours'.
+ * The camera at your seat: out this far from the middle of the curve, on the way from it toward your
+ * stool (turned half way round toward the middle seat, so the end seats don't look into the dealer),
+ * this high over the felt, looking at LOOK_AT, so it takes in your cards, the dealer's and the others'.
  */
-const CAM_BACK = 0.75;
-const CAM_UP = 0.85;
-const LOOK_AT = { x: 0, y: -0.2 };
+const CAM_OUT = 1.25;
+const CAM_UP = 1.05;
+const LOOK_AT = { x: 0, y: -0.1 };
 /** Keys that get you up off the stool. */
 const GET_UP = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
 /** A card's overlap in a hand: each next one this far along and this far in toward the dealer (m). */
 const FAN_ALONG = 0.02;
 const FAN_IN = 0.028;
 /** Two hands after a split: this far apart, either side of the seat's place. */
-const SPLIT_GAP = 0.09;
+const SPLIT_GAP = 0.13;
 
 export interface BlackjackHooks {
   bet(amount: number): void;
@@ -86,7 +86,7 @@ export function cardSpots(d: BlackjackState, view: Pick<BlackjackTableView, 'spo
   const second: CardSpot[] = [];
   const rest: CardSpot[] = [];
   r.dealer.forEach((c, i) => {
-    const s: CardSpot = { key: `d${i}`, card: c, x: view.dealerSpot.x + (i - (n - 1) / 2) * 0.06, z: view.dealerSpot.y, y: 0.0015 + i * 0.0003 };
+    const s: CardSpot = { key: `d${i}`, card: c, x: view.dealerSpot.x + (i - (n - 1) / 2) * 0.085, z: view.dealerSpot.y, y: 0.0015 + i * 0.0003 };
     (i === 0 ? first : i === 1 ? second : rest).push(s);
   });
   const centre = -view.table.size.width / 2;
@@ -304,10 +304,11 @@ export class BlackjackPlayer {
     const place = this.at !== null ? view?.spots[this.at] : undefined;
     if (!view || !place) return;
     const centre = -view.table.size.width / 2;
-    const ux = place.cards.x;
-    const uy = place.cards.y - centre;
-    const len = Math.hypot(ux, uy) || 1;
-    view.toWorld(place.cards.x + (ux / len) * CAM_BACK, place.cards.y + (uy / len) * CAM_BACK, CAM_UP, want);
+    const len = Math.hypot(place.cards.x, place.cards.y - centre) || 1;
+    const ux = place.cards.x / len;
+    const uy = (place.cards.y - centre) / len + 1;
+    const half = Math.hypot(ux, uy) || 1;
+    view.toWorld((ux / half) * CAM_OUT, centre + (uy / half) * CAM_OUT, CAM_UP, want);
     view.toWorld(LOOK_AT.x, LOOK_AT.y, 0, target);
     const k = 1 - Math.exp(-dt * 5);
     this.camPos.lerp(want, k);
