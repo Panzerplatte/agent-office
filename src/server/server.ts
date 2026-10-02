@@ -1007,7 +1007,7 @@ export async function startServer(cfg: Config) {
         f.workers.detachAll(id);
         f.changes.unwatchAll(id);
         if (f.court.left(id)) ballChanged(f);
-        if (f.darts.left(id)) dartsChanged(f);
+        if (f.darts.away(id)) dartsChanged(f);
         if (f.pool.left(id)) poolChanged(f);
       }
       broadcast({ t: 'peer.leave', id });
@@ -1104,8 +1104,8 @@ export async function startServer(cfg: Config) {
     // The ball stays on its floor, back under the hoop. That floor hears so once they're off it (see
     // arrived), or their own page would put it down before it knew they'd gone.
     const ballLeft = !!was?.court.left(c.id);
-    // So does their place at the dartboard, and in its game.
-    const dartsLeft = !!was?.darts.left(c.id);
+    // They step away from the dartboard: a place in a running game is kept for them, away.
+    const dartsLeft = !!was?.darts.away(c.id);
     // And at the pool table.
     const poolLeft = !!was?.pool.left(c.id);
     c.attached.clear();
@@ -1334,7 +1334,9 @@ export async function startServer(cfg: Config) {
         break;
       }
       case 'darts.join':
+      case 'darts.away':
       case 'darts.leave':
+      case 'darts.skip':
       case 'darts.options':
       case 'darts.start':
       case 'darts.throw':
@@ -1343,8 +1345,10 @@ export async function startServer(cfg: Config) {
         if (!floor) break;
         const d = floor.darts;
         const changed =
-          msg.t === 'darts.join' ? d.join(c.id, c.peer.name)
+          msg.t === 'darts.join' ? d.join(c.id, c.peer.name, c.accountId ? `account:${c.accountId}` : `browser:${str(msg.key, 64) || c.id}`)
+          : msg.t === 'darts.away' ? d.away(c.id)
           : msg.t === 'darts.leave' ? d.left(c.id)
+          : msg.t === 'darts.skip' ? d.skip(c.id)
           : msg.t === 'darts.options' ? d.setOptions(c.id, { mode: msg.mode, doubleOut: msg.doubleOut })
           : msg.t === 'darts.start' ? d.start(c.id)
           : msg.t === 'darts.throw' ? d.throw(c.id, { x: msg.x, y: msg.y })

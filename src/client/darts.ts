@@ -12,7 +12,10 @@ import { landing, ocheSpot, sway, type BoardDarts } from './world/darts';
 // lobby (see ui/darts.ts); on your turn the mouse moves the aim over the board, never quite still,
 // and holding Space runs the power meter up and down: let go in its sweet spot and the dart goes
 // where you aimed, too early and it drops, too late and it flies high. The office scores it, and
-// everyone on the floor sees it fly (see world/darts.ts). E, or walking off, steps away again.
+// everyone on the floor sees it fly (see world/darts.ts). Walking off steps away from the board, but
+// a place in a running game is kept (the office keeps it for this browser, or your account): step up
+// again, after a reload too, and you're straight back in it. Only Leave on the panel, or Esc, takes
+// you out of the game.
 
 /** The power meter runs from nothing to full in this long, then back down again. */
 const METER = 1;
@@ -35,16 +38,34 @@ const CAM_UP = -0.08;
 const LOOK_UP = 0.05;
 /** Waiting for the office to say what your dart did: no other before it does, or this long (ms). */
 const ANSWER_WAIT = 1500;
+/** Waiting for the office to give you your place at the board: no answer in this long (ms), and there wasn't one. */
+const JOIN_WAIT = 3000;
+/** Where this browser keeps who it is at the dartboard, so a place kept for it is its own again after a reload. */
+const KEY_KEY = 'agent-office.darts-key';
 /** Keys that walk you off the oche. */
 const WALK = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
 /** What you're doing at the board: waiting for a game, watching someone else throw, aiming, the meter running, or a dart away. */
 export type DartsStage = 'lobby' | 'watch' | 'aim' | 'charge' | 'thrown';
 
+/** Who this browser is at the dartboard: made up the first time, then kept. */
+export function dartsKey(): string {
+  try {
+    let k = localStorage.getItem(KEY_KEY);
+    if (!k) localStorage.setItem(KEY_KEY, (k = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')));
+    return k;
+  } catch {
+    return '';
+  }
+}
+
 export interface DarterHooks {
-  /** Step up to the board, or away from it: the office keeps who's at it. */
+  /** Step up to the board, step away from it (keeping your place in a running game), or leave it and the game: the office keeps who's at it. */
   join(): void;
+  away(): void;
   leave(): void;
+  /** Skip the turn of the player who's up, who's away. */
+  skip(): void;
   /** A dart that lands at board-local (x, y). */
   throw(x: number, y: number): void;
   options(o: Partial<DartsOptions>): void;
@@ -69,6 +90,9 @@ export class Darter {
   private on = false;
   /** Asked the office for a place at the board, and not heard yet whether there was one. */
   private joining = false;
+  private joinAt = 0;
+  /** Your place at the board (its id in the game), once the office has given you one. */
+  private seat = '';
   /** Your colour, once the office has given you one (until then, the one you'd get). */
   private color: string = DART_COLORS[0];
   /** Where you aim on the board, in its own meters, before the sway. */
@@ -102,7 +126,7 @@ export class Darter {
     private readonly still: () => boolean,
     private readonly hooks: DarterHooks,
   ) {
-    this.panel = new DartsPanel({ options: (o) => hooks.options(o), start: () => hooks.start(), reset: () => hooks.reset() });
+    this.panel = new DartsPanel({ options: (o) => hooks.options(o), start: () => hooks.start(), reset: () => hooks.reset(), skip: () => hooks.skip(), leave: () => this.stop('leave') });
     this.marker = new THREE.Group();
     // A white ring with your colour inside it, and a dot in the middle: it shows on any part of the board.
     const ring = (r0: number, r1: number, z: number) => {
@@ -146,9 +170,11 @@ export class Darter {
     if (this.on) return;
     this.on = true;
     this.joining = true;
+    this.joinAt = performance.now();
+    this.seat = '';
     this.you = you;
     this.state = state;
-    this.color = state.lobby.find((s) => s.id === you)?.color ?? DART_COLORS.find((c) => !state.lobby.some((s) => s.color === c)) ?? DART_COLORS[0];
+    this.color = state.lobby.find((s) => s.peer === you)?.color ?? DART_COLORS.find((c) => !state.lobby.some((s) => s.color === c)) ?? DART_COLORS[0];
     this.aim = { ...AIM_START };
     this.charging = false;
     this.thrownAt = 0;
@@ -168,11 +194,15 @@ export class Darter {
     this.sync(state);
   }
 
-  /** Away from the board, back on your feet behind the oche. `tell`: let the office know (not when it's the one who let you go). */
-  stop(tell = true) {
+  /**
+   * Away from the board, back on your feet behind the oche. `how` you let the office know: 'away'
+   * keeps your place in a running game, 'leave' gives it up; null when it's the office that let you go.
+   */
+  stop(how: 'away' | 'leave' | null = 'away') {
     if (!this.on) return;
     this.on = false;
     this.joining = false;
+    this.seat = '';
     this.charging = false;
     this.thrownAt = 0;
     const p = this.player;
@@ -181,11 +211,12 @@ export class Darter {
     p.lookPitch = -0.08;
     p.camYaw = p.facing - Math.PI;
     this.canvas.classList.remove('aiming');
-    // Back to looking around with it (E, or walking off, is the key press the browser wants for that).
+    // Back to looking around with it (walking off, or Esc, is the key press the browser wants for that).
     if (p.canLock && p.enabled) p.lock();
     this.marker.visible = false;
     this.panel.show(false);
-    if (tell) this.hooks.leave();
+    if (how === 'leave') this.hooks.leave();
+    else if (how === 'away') this.hooks.away();
     this.hooks.done();
   }
 
@@ -195,27 +226,30 @@ export class Darter {
     if (!this.on) return;
     // The office has said what your dart did (or something else happened, and it'll take no other before its turn).
     this.thrownAt = 0;
-    const seat = state.lobby.find((s) => s.id === this.you);
+    const seat = state.lobby.find((s) => s.peer === this.you);
     if (seat) {
       this.joining = false;
+      this.seat = seat.id;
       this.color = seat.color;
       ((this.marker.children[1] as THREE.Mesh).material as THREE.MeshBasicMaterial).color.set(seat.color);
     } else if (this.joining) {
-      // Somebody else's news can come before the office has had your ask: only a full board is a no.
-      if (state.lobby.length >= MAX_PLAYERS) {
-        this.stop(false);
+      // Somebody else's news can come before the office has had your ask: only a full board is a no
+      // (with somebody away, one of those places might be yours: see update).
+      if (state.lobby.length >= MAX_PLAYERS && state.lobby.every((s) => s.peer)) {
+        this.stop(null);
         this.hooks.full();
         return;
       }
-    } else return this.stop(false);
+    } else return this.stop(null);
     this.panel.render(state, this.you, this.shownTurn());
   }
 
-  /** Asks the office again for your place (after a reconnect, which lets go of it, and comes back as `you`). */
+  /** Asks the office again for your place (after a reconnect, which left it away, and comes back as `you`). */
   rejoin(you: string) {
     if (!this.on) return;
     this.you = you;
     this.joining = true;
+    this.joinAt = performance.now();
     this.hooks.join();
   }
 
@@ -231,7 +265,7 @@ export class Darter {
   get thrower(): DartsSeat | null {
     const g = this.state?.game;
     const up = g && !g.over ? g.players[g.up] : undefined;
-    return up && up.id !== this.you ? up : null;
+    return up && up.id !== this.seat ? up : null;
   }
 
   /** Whether the last turn's darts are still in the board, about to be pulled out. */
@@ -242,6 +276,12 @@ export class Darter {
   /** Every frame, once the player has moved: aiming, the meter, and the camera. */
   update(dt: number) {
     if (!this.on) return;
+    if (this.joining && performance.now() - this.joinAt > JOIN_WAIT) {
+      // The office never gave you a place: the board's full.
+      this.stop(null);
+      this.hooks.full();
+      return;
+    }
     if (this.thrownAt && performance.now() - this.thrownAt > ANSWER_WAIT) this.thrownAt = 0;
     const mine = this.myTurn();
     if (!mine) this.charging = false;
@@ -256,7 +296,7 @@ export class Darter {
   /** Your turn, with the board clear and nothing of yours still in the air. */
   private myTurn(): boolean {
     const g = this.state?.game;
-    return !!g && !g.over && g.players[g.up]?.id === this.you && !this.darts.busy && !this.thrownAt;
+    return !!g && !g.over && !!this.seat && g.players[g.up]?.id === this.seat && !this.darts.busy && !this.thrownAt;
   }
 
   /** You, at your spot on the oche, facing the board. */
@@ -293,8 +333,9 @@ export class Darter {
   private key(e: KeyboardEvent, down: boolean) {
     if (!this.on) return;
     const mine = !isTyping(e) && !modalOpen() && !e.metaKey && !e.ctrlKey && !e.altKey;
-    // Walking off steps you away from the board.
-    if (down && mine && WALK.includes(e.code)) return this.stop();
+    // Walking off steps you away from the board (your place in a running game is kept); Esc leaves it.
+    if (down && mine && WALK.includes(e.code)) return this.stop('away');
+    if (down && mine && e.code === 'Escape' && !e.repeat) return this.stop('leave');
     if (e.code !== 'Space') return;
     e.preventDefault();
     if (down && (e.repeat || !mine)) return;

@@ -283,6 +283,7 @@ button { font-family: inherit; }
 .darts-players { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .darts-players li { display: flex; align-items: center; gap: 8px; padding: 2px 6px; border-radius: 8px; border: 2px solid transparent; }
 .darts-players li.up { border-color: var(--ink); background: var(--paper-2); }
+.darts-players li.away { opacity: .45; }
 .darts-swatch { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); }
 /* Names in the players' own colours, which are bright: an ink edge keeps them readable on paper. */
 .darts-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 900; text-shadow: -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink), 1px 1px 0 var(--ink); }
@@ -295,7 +296,8 @@ button { font-family: inherit; }
 .darts-lobby { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .darts-modes { display: flex; gap: 4px; }
 .darts .btn { padding: 4px 10px; font-size: 13px; }
-.darts > .btn.primary { justify-self: center; }
+.darts > .btn { justify-self: center; }
+.darts > .darts-leave { justify-self: end; font-size: 12px; padding: 2px 8px; }
 .darts-meter { margin-top: 2px; }
 /* The meter's sweet spot: let go in it and the dart goes where you aimed. */
 .darts-sweet { position: absolute; top: 0; bottom: 0; background: rgba(6, 214, 160, .55); border-left: 2px solid var(--ink); border-right: 2px solid var(--ink); }

@@ -189,6 +189,12 @@ export default strings(
     dartsOver: 'Game over',
     dartsLobby: (v) => `${v.n} players: you throw in this order`,
     dartsSolo: 'Just you so far: play on your own, or wait for someone',
+    dartsAway: '(away)',
+    dartsUpAway: (v) => `${v.name} is away: wait, or skip their turn`,
+    dartsAllAway: 'Everyone in this game is away: wait, or start a new one',
+    dartsSkip: 'Skip',
+    dartsLeave: 'Leave',
+    dartsLeaveNote: 'Leave the game (walking off keeps your place)',
 
     // The panel at the pool table: the lobby, then the scoreboard
     poolTitle: '🎱 8-Ball',
@@ -241,7 +247,7 @@ export default strings(
     helpGong: 'Whenever a pull request merges, the gong next to the PR board rings, confetti rains down all over the floor and every worker gets up on its desk for a quick dance. Walk up to the gong and press E to bang it yourself',
     helpNext: "Next worker that needs you: go to whoever has waited longest (needs input, or done and nobody's looked), and again for the next one. Arrows at the edge of the screen point to the ones out of sight",
     helpHoop: 'The hoop on the west wall, by the exit door: E at the ball picks it up. Hold E (or the mouse, in first person) and let go when the meter is in the green to sink it. In first person it goes where you look. Q drops it. Everyone on your floor sees your shot',
-    helpDarts: 'The dartboard on the lounge\'s east wall: E at the oche steps up (up to 4 players, each in their own colour). Pick 301 or 501 and Double out, then Start. On your turn the mouse aims; hold Space and let go when the meter is in the green. E, or walking off, steps away. Everyone on your floor sees the darts and the scores on the chalkboards',
+    helpDarts: 'The dartboard on the lounge\'s east wall: E at the oche steps up (on your own, or up to 4 players, each in their own colour). Pick 301 or 501 and Double out, then Start. On your turn the mouse aims; hold Space and let go when the meter is in the green. Walking off steps away but keeps your place in a running game (after a reload too): step up again to be back in it. Leave on the panel, or Esc, leaves the game; while someone is away the others can skip their turn. Everyone on your floor sees the darts and the scores on the chalkboards',
     helpPool: 'The pool table in front of the balcony doors: E steps up (up to 4: 1 v 1 or 2 v 2), Switch sides, then Start. On your shot move the mouse round the cue ball to aim, press on the table and drag back (or hold Space) and let go to shoot. The dot on the cue ball in the panel puts spin on it. With ball in hand, drag the cue ball first. Q goes round to the other side; E, Esc or walking off steps away',
     helpRoof: 'The elevator goes up to the rooftop bar: a DJ playing drum and bass under the lights, and the city all around. Press E at the bar for a drink (it goes to your head for a bit) and at the DJ booth for the air horn',
     helpOrbit: 'Orbit and zoom the camera in third person',
@@ -450,6 +456,12 @@ export default strings(
     dartsOver: 'Spiel vorbei',
     dartsLobby: (v) => `${v.n} Spieler: ihr werft in dieser Reihenfolge`,
     dartsSolo: 'Bisher nur du: spiel allein oder warte auf jemanden',
+    dartsAway: '(weg)',
+    dartsUpAway: (v) => `${v.name} ist weg: warte oder überspring den Zug`,
+    dartsAllAway: 'Alle in diesem Spiel sind weg: warte oder fang ein neues an',
+    dartsSkip: 'Überspringen',
+    dartsLeave: 'Verlassen',
+    dartsLeaveNote: 'Das Spiel verlassen (Weggehen behält deinen Platz)',
 
     // Das Panel am Billardtisch: erst die Lobby, dann die Anzeigetafel
     poolTitle: '🎱 8-Ball',
@@ -502,7 +514,7 @@ export default strings(
     helpGong: 'Immer wenn ein Pull Request gemergt wird, ertönt der Gong neben dem PR-Board, Konfetti regnet über die ganze Etage und jeder Worker steigt auf seinen Schreibtisch für ein kurzes Tänzchen. Geh zum Gong und drück E, um ihn selbst zu schlagen',
     helpNext: 'Nächster Worker, der dich braucht: zu dem, der am längsten wartet (braucht eine Eingabe, oder ist fertig und keiner hat nachgesehen), und noch mal für den nächsten. Pfeile am Bildschirmrand zeigen auf die, die du nicht siehst',
     helpHoop: 'Der Basketballkorb an der Westwand, bei der Ausgangstür: E am Ball hebt ihn auf. Halte E (oder die Maus, in der Ich-Perspektive) und lass los, wenn die Anzeige im Grünen ist, um zu treffen. In der Ich-Perspektive fliegt er dahin, wo du hinsiehst. Q lässt ihn fallen. Alle auf deiner Etage sehen deinen Wurf',
-    helpDarts: 'Die Dartscheibe an der Ostwand der Lounge: E am Oche tritt an (bis zu 4 Spieler, jeder in seiner Farbe). Wähl 301 oder 501 und Double Out, dann Start. Wenn du dran bist, zielt die Maus; halte die Leertaste und lass los, wenn die Anzeige im Grünen ist. E oder Weggehen tritt wieder ab. Alle auf deiner Etage sehen die Darts und den Spielstand auf den Kreidetafeln',
+    helpDarts: 'Die Dartscheibe an der Ostwand der Lounge: E am Oche tritt an (allein oder bis zu 4 Spieler, jeder in seiner Farbe). Wähl 301 oder 501 und Double Out, dann Start. Wenn du dran bist, zielt die Maus; halte die Leertaste und lass los, wenn die Anzeige im Grünen ist. Weggehen tritt ab, behält aber deinen Platz in einem laufenden Spiel (auch nach einem Neuladen): tritt wieder an, und du bist zurück. Verlassen im Panel oder Esc verlässt das Spiel; solange jemand weg ist, können die anderen seinen Zug überspringen. Alle auf deiner Etage sehen die Darts und den Spielstand auf den Kreidetafeln',
     helpPool: 'Der Billardtisch vor den Balkontüren: E tritt an (bis zu 4: 1 gegen 1 oder 2 gegen 2), Team wechseln, dann Start. Wenn du am Stoß bist, zielst du, indem du die Maus um die weiße Kugel bewegst; drück auf den Tisch, zieh zurück (oder halte die Leertaste) und lass los zum Stoßen. Der Punkt auf der weißen Kugel im Panel gibt Effet. Mit Ball in der Hand zieh zuerst die weiße Kugel hin. Q geht auf die andere Seite; E, Esc oder Weggehen tritt ab',
     helpRoof: 'Der Aufzug fährt hoch zur Dachbar: ein DJ legt Drum & Bass unter den Lichtern auf, und rundherum die Stadt. Drück E an der Bar für einen Drink (er steigt dir kurz zu Kopf) und am DJ-Pult für das Signalhorn',
     helpOrbit: 'In der Verfolgerperspektive die Kamera drehen und zoomen',
