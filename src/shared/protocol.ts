@@ -1135,9 +1135,17 @@ export type ClientMsg =
   | { t: 'ball.take' }
   /** Throw the basketball in your hands from (x, y, z) at (vx, vy, vz) m/s, or drop it; everyone on the floor sees it fly. */
   | { t: 'ball.throw'; x: number; y: number; z: number; vx: number; vy: number; vz: number }
-  /** Step up to your floor's dartboard (up to four people, each with their own colour), or away from it. */
-  | { t: 'darts.join' }
+  /**
+   * Step up to your floor's dartboard (up to four people, each with their own colour): `key` is this
+   * browser's own (see client/darts.ts), so a place kept for you in a running game is yours again
+   * (signed in, it's your account's). Step away from it (keeping your place in a running game), or
+   * leave it, and the game with it.
+   */
+  | { t: 'darts.join'; key?: string }
+  | { t: 'darts.away' }
   | { t: 'darts.leave' }
+  /** At the dartboard, skip the turn of the player who's up while they're away. */
+  | { t: 'darts.skip' }
   /** At the dartboard, pick 301 or 501 and double-out or not, for the next game. */
   | { t: 'darts.options'; mode?: DartsMode; doubleOut?: boolean }
   /** At the dartboard, start a game for everyone at it, in the order they stepped up. */
