@@ -378,6 +378,8 @@ export class Sky {
   private roof = false;
   /** Where the street is from up there (the roof is at 0), for the haze. */
   private roofStreet = 0;
+  /** Down in the casino: under the building, where no daylight, lamplight or weather reaches (see setUnderground). */
+  private under = false;
 
   private state: SkyState;
   private heard = false;
@@ -558,6 +560,15 @@ export class Sky {
     uniforms.skyInside.value = on ? 0 : 1;
   }
 
+  /**
+   * Down in the casino in the basement (or back up): none of the sky's light, wet or snow on things
+   * down there, and no halos round the office's bulbs. The casino lights itself.
+   */
+  setUnderground(on: boolean) {
+    this.under = on;
+    uniforms.skyOn.value = on ? 0 : 1;
+  }
+
   /** Under a roof, out of the rain: the building, unless you're up on top of it. */
   private sheltered(x: number, z: number): boolean {
     return !this.roof && sheltered(x, z);
@@ -565,7 +576,7 @@ export class Sky {
 
   /** Whether the lamps' light (and wet and snow) apply: off while your hands are drawn. */
   shading(on: boolean) {
-    uniforms.skyOn.value = on ? 1 : 0;
+    uniforms.skyOn.value = on && !this.under ? 1 : 0;
   }
 
   /** How lit it is at `p`, 0–1 (1 is a clear day, or a room with its lights on), for your hands. */
@@ -682,7 +693,7 @@ export class Sky {
     for (const m of this.night.windows) m.emissiveIntensity = this.lampsOn * 1.1;
     for (const h of this.halos) {
       h.material.opacity = this.lampsOn * 0.85;
-      h.visible = this.lampsOn > 0.01 && !this.roof;
+      h.visible = this.lampsOn > 0.01 && !this.roof && !this.under;
     }
 
     // The sky's color, and the fog, which fades far things into it. Halloween's is its own.

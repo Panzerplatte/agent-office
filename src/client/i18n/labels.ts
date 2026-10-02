@@ -69,6 +69,7 @@ export const frameName = (f: { name: string }) => say(`frame.${f.name.toLowerCas
 export const imageUrlIssueText = (issue: ImageUrlIssue) => say(`imageUrl.${issue}`);
 
 export const roofName = () => say('roof.name');
+export const casinoName = () => say('casino.name');
 export const drinkName = (d: { id: DrinkId }) => say(`drink.${d.id}`);
 export const drinkBlurb = (d: { id: DrinkId }) => say(`drink.${d.id}.blurb`);
 

@@ -1,8 +1,9 @@
 import type { FloorInfo, RepoChoice, ServerMsg } from '../../shared/protocol';
 import { floorPalette, normalizeRepo, sameRepo } from '../../shared/floors';
 import { ROOF } from '../../shared/rooftop';
+import { CASINO } from '../../shared/casino';
 import { t } from '../i18n';
-import { roofName } from '../i18n/labels';
+import { casinoName, roofName } from '../i18n/labels';
 import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, timeAgo, type Modal } from './dom';
@@ -154,12 +155,33 @@ export function openElevator(opts: ElevatorOptions): void {
     return btn;
   };
 
+  /** The basement, under every floor: the casino. */
+  const casinoButton = () => {
+    const here = store.floor === CASINO;
+    const people = [...store.peers.values()].filter((p) => p.floor === CASINO).length;
+    const btn = h(
+      'button.floor-btn',
+      { type: 'button', class: here ? 'here' : '', disabled: here, title: here ? t('windows.elevator.casinoHere') : t('windows.elevator.casinoRide') },
+      h('span.floor-no', { style: 'background:#5b1530' }, '🎰'),
+      h('span.floor-text', {}, h('span.floor-name', {}, casinoName(), here ? h('span.here-tag', {}, t('windows.elevator.youAreHere')) : null), h('span.floor-sub', {}, t('windows.elevator.casinoSub'))),
+      h('span.floor-stats', {}, people ? h('span', { title: t('windows.elevator.casinoPeople') }, `🧑 ${people}`) : ''),
+    );
+    btn.addEventListener('click', () => {
+      if (here) return;
+      modal.close();
+      opts.ride(CASINO);
+    });
+    return btn;
+  };
+
   const renderFloors = () => {
     const floors = store.floors;
-    // Top floor first, the way an elevator's buttons stack, with the roof over them and floor 1 at the bottom.
+    const built = floors.some((f) => !f.cloning);
+    // Top floor first, the way an elevator's buttons stack, with the roof over them, floor 1 at the bottom and the casino under it.
     floorsEl.replaceChildren(
-      ...(floors.some((f) => !f.cloning) ? [roofButton()] : []),
+      ...(built ? [roofButton()] : []),
       ...(floors.length ? floors.map(floorRow).reverse() : [h('p.empty', {}, t('windows.elevator.noFloors'))]),
+      ...(built ? [casinoButton()] : []),
     );
   };
 
