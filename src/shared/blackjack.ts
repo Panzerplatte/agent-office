@@ -168,6 +168,18 @@ export interface BjRoundView extends Omit<BjRound, 'dealer'> {
 
 export type BjAction = 'hit' | 'stand' | 'double' | 'split';
 
+/** What `id` may do in round `r` now: only on their turn, and only what the hand allows (double on two cards, split two of the same value, once). */
+export function allowed(r: BjRound | BjRoundView, id: string): BjAction[] {
+  if (r.phase !== 'playing' || !r.turn) return [];
+  const p = r.players[r.turn.player];
+  if (p?.id !== id) return [];
+  const c = p.hands[r.turn.hand].cards;
+  const out: BjAction[] = ['hit', 'stand'];
+  if (c.length === 2) out.push('double');
+  if (c.length === 2 && p.hands.length === 1 && cardValue(c[0]) === cardValue(c[1])) out.push('split');
+  return out;
+}
+
 /** A player's stake for the round they're dealt into. */
 export interface BjEntry {
   seat: number;
@@ -260,15 +272,9 @@ export class BlackjackGame {
     return { player, hand: player.hands[r.turn.hand] };
   }
 
-  /** What `id` may do now: only on their turn, and only what the hand allows (double on two cards, split two of the same value once). */
+  /** What `id` may do now (see allowed). */
   actions(id: string): BjAction[] {
-    const up = this.up();
-    if (!up || up.player.id !== id) return [];
-    const out: BjAction[] = ['hit', 'stand'];
-    const c = up.hand.cards;
-    if (c.length === 2) out.push('double');
-    if (c.length === 2 && up.player.hands.length === 1 && cardValue(c[0]) === cardValue(c[1])) out.push('split');
-    return out;
+    return this.round ? allowed(this.round, id) : [];
   }
 
   /** What more `action` (or insurance) would cost `id` now, in chips: a double or split another stake, insurance half one. 0 if it's free (or not allowed). */
