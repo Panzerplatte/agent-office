@@ -91,11 +91,16 @@ export const DART_COLORS = [
 
 export const MAX_PLAYERS = DART_COLORS.length;
 
-/** Someone at the board: a PeerInfo id, their name and their colour (one of DART_COLORS). */
+/**
+ * Someone's place at the board: its own id (which stays the same while they come and go), their name
+ * and their colour (one of DART_COLORS). `peer` is the PeerInfo id of whoever's at it now; none while
+ * they're away (walked off, reloading, or disconnected), keeping their place in a running game.
+ */
 export interface DartsSeat {
   id: string;
   name: string;
   color: string;
+  peer?: string;
 }
 
 // ---- The game ---------------------------------------------------------------------------------------
@@ -210,6 +215,20 @@ function endTurn(g: DartsGame, bust: boolean) {
 }
 
 /**
+ * The player who's up is away: their turn's skipped, so the game doesn't wait on them. Any darts of
+ * theirs in the board are pulled out, their score goes back to what it was at the start of the turn,
+ * and it's the next player's. Says whether it was skipped (not once the game's over).
+ */
+export function skipTurn(g: DartsGame): boolean {
+  if (g.over || g.players.length === 0) return false;
+  g.players[g.up].score = g.from;
+  g.darts = [];
+  g.up = (g.up + 1) % g.players.length;
+  g.from = g.players[g.up].score;
+  return true;
+}
+
+/**
  * `id` leaves the game: if it was their turn, the darts so far are pulled out and it's the next
  * player's. With one player left of several (or none of one), the game's over, with no winner.
  * Says whether they were playing.
@@ -240,7 +259,9 @@ export function removePlayer(g: DartsGame, id: string): boolean {
 /**
  * The darts on a floor: who's at the board (`lobby`, up to MAX_PLAYERS, each with their colour), the
  * options the next game starts with, and the game, if there is one (running, or over and still on
- * the scoreboard). Someone who joins while a game runs plays in the next one.
+ * the scoreboard). Someone who joins while a game runs plays in the next one. A player of the running
+ * game who steps away keeps their place in it, away (no `peer`), until they're back or leave; the
+ * game's players carry the same `peer` as their place in the lobby.
  */
 export interface DartsState extends DartsOptions {
   lobby: DartsSeat[];
