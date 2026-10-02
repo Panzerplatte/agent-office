@@ -1154,12 +1154,21 @@ export type ClientMsg =
   | { t: 'darts.throw'; x: number; y: number }
   /** Clear the game off the scoreboard, for a new one (a game that's still on, only its players can). */
   | { t: 'darts.reset' }
-  /** Step up to your floor's pool table (up to four people, on the side with fewer), or away from it. */
-  | { t: 'pool.join' }
+  /**
+   * Step up to your floor's pool table (up to four people, on the side with fewer), or back into your
+   * seat in the game there: `key` is your browser's own (see client/pool.ts), which keeps your seat
+   * across reloads when you're not signed in with an account.
+   */
+  | { t: 'pool.join'; key?: string }
+  /** Leave the pool table, and the game on it, for good. */
   | { t: 'pool.leave' }
+  /** Step away from the pool table: in a game that's running your seat waits for you, shown as away. */
+  | { t: 'pool.away' }
+  /** At the pool table, skip the shot of whoever's up while they're away. */
+  | { t: 'pool.skip' }
   /** At the pool table, move to side 0 or 1 for the next game (two a side at most). */
   | { t: 'pool.team'; team: PoolTeam }
-  /** At the pool table, start a game of 8-ball for everyone at it: one a side, or two a side. */
+  /** At the pool table, start a game of 8-ball for everyone at it: one a side, two a side, or on your own. */
   | { t: 'pool.start' }
   /**
    * On your shot, strike the cue ball (see Shot in shared/pool.ts): `angle` radians from the table's +x,

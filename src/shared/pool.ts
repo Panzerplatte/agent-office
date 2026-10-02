@@ -1,4 +1,5 @@
-// The pool table on every floor, and the game of 8-ball two (1 v 1) or four (2 v 2) people play on it.
+// The pool table on every floor, and the game of 8-ball one (solo practice), two (1 v 1) or four (2 v 2)
+// people play on it.
 // The office keeps the game (see server/pool.ts): a page says which way and how hard the cue ball is
 // struck, and the office rolls every ball here, to rest, and scores the shot, so everyone on the floor
 // sees the same balls go the same way. The simulation is plain arithmetic on a fixed timestep (no
@@ -468,22 +469,32 @@ function clamp(v: number): number {
 // ---- The players ------------------------------------------------------------------------------------
 
 export type PoolTeam = 0 | 1;
-/** Seats at the table: 2 (1 v 1) or 4 (2 v 2), two to a team. */
+/** Seats at the table: 1 (solo), 2 (1 v 1) or 4 (2 v 2), two to a team. */
 export const MAX_PLAYERS = 4;
 export const TEAM_SIZE = 2;
 
-/** Someone at the table: a PeerInfo id, their name and their team. */
+/**
+ * Someone at the table: a PeerInfo id (their connection's, as of when they last stepped up), their
+ * name and their team. `away`: they've stepped away from a game that's running (walked off, reloaded,
+ * lost their connection), and keep their place in it until they step up again; see server/pool.ts.
+ */
 export interface PoolSeat {
   id: string;
   name: string;
   team: PoolTeam;
+  away?: boolean;
 }
 
-/** Whether `seats` can start a game: one a side, or two a side. */
+/** Whether `seats` can start a game: one a side, two a side, or one on their own (solo practice). */
 export function teamsOk(seats: readonly PoolSeat[]): boolean {
   const a = seats.filter((s) => s.team === 0).length;
   const b = seats.length - a;
-  return a === b && (a === 1 || a === 2);
+  return seats.length === 1 || (a === b && (a === 1 || a === 2));
+}
+
+/** Whether a game is someone playing on their own: everyone in it on one side. */
+export function isSolo(g: { players: readonly PoolSeat[] }): boolean {
+  return g.players.length > 0 && g.players.every((p) => p.team === g.players[0].team);
 }
 
 // ---- The game ---------------------------------------------------------------------------------------
@@ -567,7 +578,7 @@ export interface PoolGame {
   /** Shots played so far. */
   shots: number;
   last: PoolShot | null;
-  /** Over: a side won (`winner`), or one side left. Nobody shoots any more. */
+  /** Over: a side won (`winner`), or one side left, or on your own the rack ended (no winner). Nobody shoots any more. */
   over: boolean;
   winner: PoolTeam | null;
 }
@@ -584,11 +595,13 @@ export function groupFor(g: PoolGame, t: PoolTeam): PoolGroup | null {
 }
 
 /**
- * A new game for `seats` (one or two a side, see teamsOk), with side `breaker` to break: the balls
- * racked, the cue ball in the kitchen in the breaker's hand. Players shoot alternating sides, each side
- * taking its turns in the order its players sat down.
+ * A new game for `seats` (one or two a side, or one alone: see teamsOk), with side `breaker` to break
+ * (on your own you always break yourself): the balls racked, the cue ball in the kitchen in the
+ * breaker's hand. Players shoot alternating sides, each side taking its turns in the order its players
+ * sat down.
  */
 export function newGame(seats: readonly PoolSeat[], breaker: PoolTeam = 0): PoolGame {
+  if (seats.length === 1) breaker = seats[0].team;
   const first = seats.filter((s) => s.team === breaker);
   const second = seats.filter((s) => s.team !== breaker);
   const players: PoolSeat[] = [];
@@ -647,6 +660,11 @@ export function placeCue(g: PoolGame, x: number, y: number): boolean {
  * - The 8 going in after the break: a win if the side's group was all gone before the shot and it was
  *   no foul; otherwise (too early, or with a foul, a scratch included) a loss.
  *
+ * On your own (solo practice, see isSolo) it's the same, with no groups: every ball but the 8 is
+ * yours. Hit any of them first (the 8 only once they're all gone); a foul gives you ball in hand, and
+ * you shoot again whatever happens. Pot the 8 last, without a foul, to win the rack (`winner` your
+ * side); pot it early, or with a foul, and the rack's over with no winner.
+ *
  * Returns the shot and its trajectory (without `at`), or null if the game's over.
  */
 export function takeShot(g: PoolGame, shot: Shot): Omit<PoolPlayback, 'at'> | null {
@@ -654,8 +672,9 @@ export function takeShot(g: PoolGame, shot: Shot): Omit<PoolPlayback, 'at'> | nu
   const player = g.players[g.up];
   const side = player.team;
   const isBreak = !g.broken;
+  const solo = isSolo(g);
   const mine = groupFor(g, side);
-  const onEight = !!mine && !g.balls.some((b) => groupOf(b.n) === mine);
+  const onEight = solo ? !g.balls.some((b) => groupOf(b.n)) : !!mine && !g.balls.some((b) => groupOf(b.n) === mine);
   const from = g.balls.map((b) => ({ ...b }));
 
   const res = simulate(g.balls, shot);
@@ -669,7 +688,7 @@ export function takeShot(g: PoolGame, shot: Shot): Omit<PoolPlayback, 'at'> | nu
   let foul: PoolFoul | null = null;
   if (hit === null) foul = 'noHit';
   else if (scratch) foul = 'scratch';
-  else if (!isBreak && (onEight ? hit !== 8 : mine ? groupOf(hit) !== mine : hit === 8)) foul = 'wrongBall';
+  else if (!isBreak && (onEight ? hit !== 8 : mine && !solo ? groupOf(hit) !== mine : hit === 8)) foul = 'wrongBall';
   else if (!isBreak && objects.length === 0 && !rail) foul = 'noRail';
 
   g.balls = res.balls;
@@ -691,7 +710,8 @@ export function takeShot(g: PoolGame, shot: Shot): Omit<PoolPlayback, 'at'> | nu
     outcome = !foul && onEight ? 'won' : 'lost';
   } else {
     let group = mine;
-    if (!foul && !group) {
+    if (solo) group = null;
+    else if (!foul && !group) {
       const first = objects.map(groupOf).find((x) => x);
       if (first) {
         g.solids = first === 'solids' ? side : ((1 - side) as PoolTeam);
@@ -699,13 +719,14 @@ export function takeShot(g: PoolGame, shot: Shot): Omit<PoolPlayback, 'at'> | nu
         assigned = true;
       }
     }
-    outcome = foul ? 'foul' : group && objects.some((n) => groupOf(n) === group) ? 'again' : 'turn';
+    const scored = solo ? objects.length > 0 : !!group && objects.some((n) => groupOf(n) === group);
+    outcome = foul ? 'foul' : scored ? 'again' : 'turn';
   }
   g.pocketed.push(...objects);
 
   if (outcome === 'won' || outcome === 'lost') {
     g.over = true;
-    g.winner = outcome === 'won' ? side : ((1 - side) as PoolTeam);
+    g.winner = outcome === 'won' ? side : solo ? null : ((1 - side) as PoolTeam);
     g.ballInHand = null;
   } else {
     if (scratch) g.balls.unshift({ n: 0, ...spot(g.balls, 0, TABLE.headSpot, -1) });
@@ -732,7 +753,7 @@ export function takeShot(g: PoolGame, shot: Shot): Omit<PoolPlayback, 'at'> | nu
   return { ...last, from, path: res.path, events: res.events };
 }
 
-/** The other side's turn: its next player in its own order. */
+/** The other side's turn: its next player in its own order (on your own, yours again). */
 function passTurn(g: PoolGame) {
   const was = g.players[g.up].team;
   g.rota[was]++;
@@ -743,9 +764,30 @@ function passTurn(g: PoolGame) {
 }
 
 /**
+ * Skips the shot of the player who's up (they're away): to their partner, if they have one who's at the
+ * table, with whatever ball in hand there was; otherwise to the other side, as if they'd missed (ball
+ * in hand stays only for the break, which still has to be from the kitchen). Not on your own: there's
+ * nobody to skip to. Says whether it did.
+ */
+export function skipTurn(g: PoolGame): boolean {
+  if (g.over || isSolo(g) || !g.players[g.up]) return false;
+  const was = g.players[g.up];
+  const mates = team(g, was.team);
+  const partner = mates.find((p) => p !== was && !p.away);
+  if (partner) {
+    g.rota[was.team]++;
+    g.up = g.players.indexOf(partner);
+    return true;
+  }
+  passTurn(g);
+  if (g.ballInHand === 'table') g.ballInHand = null;
+  return true;
+}
+
+/**
  * `id` leaves the game. If it was their shot, it's their partner's (if they have one), with whatever
- * ball in hand they had. With nobody left on one side, the game's over, with no winner. Says whether
- * they were playing.
+ * ball in hand they had. With nobody left on one side, the game's over, with no winner (on your own:
+ * with nobody left). Says whether they were playing.
  */
 export function removePlayer(g: PoolGame, id: string): boolean {
   const i = g.players.findIndex((p) => p.id === id);

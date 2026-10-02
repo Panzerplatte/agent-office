@@ -314,6 +314,9 @@ button { font-family: inherit; }
 .pool-status .up { color: var(--ink); font-weight: 900; }
 .pool-status .foul { color: var(--bad); font-weight: 900; }
 .pool-status .won { color: var(--ink); font-size: 18px; font-weight: 900; }
+/* Someone who's stepped away from the game: greyed out until they're back. */
+.pool .darts-players li.away { opacity: 0.45; }
+.pool .darts-players li.away .darts-swatch { filter: grayscale(1); }
 .pool-shooting { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; }
 .pool-label { font-size: 12px; color: var(--muted); }
 .pool-meter { margin: 0; }

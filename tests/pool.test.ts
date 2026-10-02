@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BALL_D, BALL_R, CUSHIONS, POCKETS, TABLE, canPlace, groupOf, newGame, placeCue, rack, removePlayer, shotOk, simulate, takeShot, teamsOk, type BallPos, type PoolGame, type PoolSeat } from '../src/shared/pool.js';
+import { BALL_D, BALL_R, CUSHIONS, POCKETS, TABLE, canPlace, groupOf, isSolo, newGame, placeCue, rack, removePlayer, shotOk, simulate, skipTurn, takeShot, teamsOk, type BallPos, type PoolGame, type PoolSeat } from '../src/shared/pool.js';
 import { Pool } from '../src/server/pool.js';
 
 const seats = (...ids: string[]): PoolSeat[] => ids.map((id, i) => ({ id, name: id, team: (i % 2) as 0 | 1 }));
@@ -251,6 +251,61 @@ test('the 8 on the break is spotted, not a loss', () => {
   assert.equal(r.outcome, 'turn', 'the 8 doesn\'t count as a ball potted');
 });
 
+// ---- On your own -------------------------------------------------------------------------------------
+
+test('on your own: anyone can start, there are no groups, and you shoot again whatever happens', () => {
+  assert.ok(teamsOk(seats('a')));
+  assert.ok(teamsOk([{ id: 'a', name: 'a', team: 1 }]), 'on either side');
+  assert.ok(!teamsOk([]));
+  assert.ok(!teamsOk([{ id: 'a', name: 'a', team: 0 }, { id: 'b', name: 'b', team: 0 }]), 'two on one side is no game');
+  const g = newGame([{ id: 'a', name: 'a', team: 1 }], 0);
+  assert.ok(isSolo(g) && !g.over);
+  assert.equal(g.breaker, 1, 'you break yourself');
+  assert.equal(g.ballInHand, 'kitchen');
+
+  // A stripe, then a solid: both count, and nobody gets a group.
+  let { balls, shot } = potSetup(11, 0, 0.3, 4);
+  const h = midGame([...balls, ...parked(2, 8)], null, ['a']);
+  let r = takeShot(h, shot)!;
+  assert.equal(r.outcome, 'again');
+  assert.ok(!r.assigned);
+  assert.equal(h.solids, null);
+  ({ balls, shot } = potSetup(2, 0, 0.3, 4));
+  h.balls = [...balls, ...parked(8)];
+  assert.equal(takeShot(h, shot)!.outcome, 'again');
+
+  // A miss is a foul: ball in hand, and still your shot.
+  h.balls = [{ n: 0, x: -0.3, y: 0.3 }, ...parked(3, 8)];
+  r = takeShot(h, { angle: Math.PI, power: 0.02 })!;
+  assert.equal(r.outcome, 'foul');
+  assert.equal(h.ballInHand, 'table');
+  assert.equal(h.players[h.up].id, 'a');
+  // A legal shot that pots nothing: still your shot.
+  h.balls = [{ n: 0, x: -0.2, y: 0 }, { n: 3, x: 0, y: 0 }, ...parked(8)];
+  r = takeShot(h, { angle: 0, power: 0.3 })!;
+  assert.equal(r.outcome, 'turn');
+  assert.equal(h.players[h.up].id, 'a');
+  assert.ok(!h.over);
+  // The 8 first while there are others is a foul.
+  ({ balls, shot } = potSetup(8, 0, 0.3, 4));
+  h.balls = [{ n: 0, x: -0.2, y: 0 }, { n: 8, x: 0, y: 0 }, ...parked(3)];
+  assert.equal(takeShot(h, { angle: 0, power: 0.3 })!.foul, 'wrongBall');
+});
+
+test('on your own: the 8 last wins the rack, the 8 early ends it with no winner', () => {
+  const { balls, shot } = potSetup(8, 0, 0.3, 4);
+  const won = midGame([...balls], null, ['a']);
+  assert.equal(takeShot(won, shot)!.outcome, 'won');
+  assert.ok(won.over);
+  assert.equal(won.winner, 0);
+
+  const early = midGame([...balls.map((b) => ({ ...b })), ...parked(12)], null, ['a']);
+  assert.equal(takeShot(early, shot)!.outcome, 'lost');
+  assert.ok(early.over);
+  assert.equal(early.winner, null);
+  assert.ok(!skipTurn(midGame([], null, ['a'])), 'nobody to skip to');
+});
+
 // ---- Turns and sides --------------------------------------------------------------------------------
 
 /** Plays a shot that touches nothing (a foul), so the turn passes; puts the cue ball back where it was. */
@@ -304,6 +359,22 @@ test('2 v 2: a partner leaving leaves their side to the other; a whole side leav
   assert.ok(!removePlayer(g, 'nobody'));
 });
 
+test('skipping someone who\'s away: to their partner if they have one there, else to the other side', () => {
+  const g = newGame(seats('a1', 'b1', 'a2', 'b2'));
+  assert.equal(g.players[g.up].id, 'a1');
+  g.players[0].away = true;
+  assert.ok(skipTurn(g));
+  assert.equal(g.players[g.up].id, 'a2', 'their partner, with the break still to play');
+  assert.equal(g.ballInHand, 'kitchen');
+  // Both of a side away: the other side's turn, without ball in hand from a foul.
+  const h = midGame([], 0, ['a', 'b']);
+  h.ballInHand = 'table';
+  h.players[0].away = true;
+  assert.ok(skipTurn(h));
+  assert.equal(h.players[h.up].id, 'b');
+  assert.equal(h.ballInHand, null);
+});
+
 // ---- The table on a floor ---------------------------------------------------------------------------
 
 test('the office\'s table: sides, starting, shooting only on your turn, and once the balls have stopped', () => {
@@ -334,7 +405,14 @@ test('the office\'s table: sides, starting, shooting only on your turn, and once
   now += shot.duration + 1000;
   assert.ok(t.shoot(up, { angle: 0, power: 0.5 }));
 
-  // Leaving the floor takes them out of the game.
+  // Stepping away (walking off, leaving the floor, a dropped connection) keeps their seat, as away.
+  assert.ok(t.away('a'));
+  assert.ok(!t.away('a'));
+  assert.ok(t.state().game!.players.find((p) => p.id === 'a')!.away);
+  assert.ok(t.state().lobby.find((s) => s.id === 'a')!.away);
+  assert.ok(t.join('a', 'Ada'), 'back');
+  assert.ok(!t.state().game!.players.find((p) => p.id === 'a')!.away);
+  // Only Leave takes them out of the game.
   assert.ok(t.left('a'));
   assert.ok(!t.left('a'));
   assert.ok(!t.state().game!.players.some((p) => p.id === 'a'));
@@ -342,6 +420,68 @@ test('the office\'s table: sides, starting, shooting only on your turn, and once
   assert.equal(t.state().game, null);
   for (const id of ['b', 'c', 'd']) t.left(id);
   assert.deepEqual(t.state(), { lobby: [], game: null });
+});
+
+test('your seat is yours, not your connection\'s: back in it after a reload, with your side and your turn', () => {
+  let now = 0;
+  const t = new Pool(() => now);
+  t.join('c1', 'Ada', 'key-ada');
+  t.join('d1', 'Bob', 'key-bob');
+  assert.ok(t.start('c1'));
+  // Ada reloads: her old connection drops, the new one steps up with the same key.
+  assert.ok(t.away('c1'));
+  assert.ok(t.join('c2', 'Ada', 'key-ada'));
+  const g = t.state().game!;
+  assert.deepEqual(g.players.map((p) => [p.id, p.team, !!p.away]), [['c2', 0, false], ['d1', 1, false]]);
+  assert.deepEqual(t.state().lobby.map((s) => s.id), ['c2', 'd1']);
+  assert.ok(t.place('c2', { x: -0.7, y: 0 }), 'still her break');
+  assert.ok(!t.join('c2', 'Ada', 'key-ada'), 'already there');
+  // Someone else can't take a seat that's away, even with the table full.
+  assert.ok(t.away('c2'));
+  t.join('e', 'Cy', 'key-cy');
+  t.join('f', 'Di', 'key-di');
+  assert.ok(!t.join('g', 'Ed', 'key-ed'), 'full');
+  assert.ok(t.join('c3', 'Ada', 'key-ada'), 'but Ada gets hers back');
+});
+
+test('while whoever\'s up is away the others can skip them; nobody can skip someone who\'s there', () => {
+  let now = 0;
+  const t = new Pool(() => now);
+  t.join('a', 'A');
+  t.join('b', 'B');
+  t.start('a');
+  assert.ok(!t.skip('b'), 'a is right there');
+  t.away('a');
+  assert.ok(!t.skip('a'), 'not by someone away');
+  assert.ok(!t.skip('x'), 'not by someone not at the table');
+  assert.ok(t.skip('b'));
+  assert.equal(t.state().game!.players[t.state().game!.up].id, 'b');
+  // A game that's all away can be cleared by whoever's at the table; then the seats that were away go.
+  t.away('b');
+  t.join('c', 'C');
+  assert.ok(t.reset('c'));
+  assert.deepEqual(t.state().lobby.map((s) => s.id), ['c']);
+});
+
+test('on your own: one at the table can start, and stepping away keeps the game for them', () => {
+  const t = new Pool(() => 0);
+  t.join('a', 'A');
+  assert.ok(t.start('a'));
+  assert.ok(isSolo(t.state().game!));
+  assert.ok(t.away('a'));
+  assert.ok(t.state().game, 'still there');
+  assert.ok(t.join('a2', 'A', 'a'));
+  assert.equal(t.state().game!.players[0].id, 'a2');
+  assert.ok(t.left('a2'));
+  assert.deepEqual(t.state(), { lobby: [], game: null });
+});
+
+test('away from the lobby (no game running) is off the table: there\'s no seat to keep', () => {
+  const t = new Pool(() => 0);
+  t.join('a', 'A');
+  t.join('b', 'B');
+  assert.ok(t.away('a'));
+  assert.deepEqual(t.state().lobby.map((s) => s.id), ['b']);
 });
 
 test('the next game is broken by the other side', () => {

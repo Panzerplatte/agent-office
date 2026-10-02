@@ -14,7 +14,9 @@ import { aimLine, seatColor, standSpot, type PoolBalls } from './world/pool';
 // and the way that ball would go. Press on the cloth and drag back to draw the cue (or hold Space),
 // and let go to strike: the further back, the harder. A dot on the cue ball in the panel puts spin on
 // it. With ball in hand, drag the cue ball where you want it first. The office rolls every shot, and
-// everyone on the floor sees it roll (see world/pool.ts). E, Esc, or walking off steps away again.
+// everyone on the floor sees it roll (see world/pool.ts). Esc or walking off steps away again, but
+// your seat in a game that's running waits for you (shown as away): step up again with E, even after
+// a reload, and you're back in it. Only Leave in the panel gives it up. E at the table does nothing.
 
 /** Drag back this far (m, on the table) for the hardest shot. */
 const FULL_DRAW = 0.45;
@@ -38,8 +40,14 @@ const WALK = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft
 export type PoolStage = 'lobby' | 'watch' | 'aim' | 'draw' | 'place' | 'shot';
 
 export interface CueistHooks {
-  join(): void;
+  /** Up to the table, or back into your seat: `key` is this browser's (see browserKey). */
+  join(key: string): void;
+  /** Off the table, and out of its game, for good. */
   leave(): void;
+  /** Away from the table, keeping your seat in a game that's running. */
+  away(): void;
+  /** Skip the shot of whoever's up while they're away. */
+  skip(): void;
   shoot(shot: Shot): void;
   place(x: number, y: number): void;
   team(team: PoolTeam): void;
@@ -49,6 +57,28 @@ export interface CueistHooks {
   full(): void;
   /** You're back on your feet away from the table. */
   done(): void;
+}
+
+const KEY = 'agent-office.pool-key';
+let memoryKey = '';
+/**
+ * This browser's own key at the pool table, kept across reloads, so the office knows it's you coming
+ * back to your seat (when you're signed in with an account, it goes by that instead).
+ */
+export function browserKey(): string {
+  try {
+    const k = localStorage.getItem(KEY);
+    if (k) return k;
+  } catch {
+    // No storage: this page's own key, then.
+  }
+  memoryKey ||= Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+  try {
+    localStorage.setItem(KEY, memoryKey);
+  } catch {
+    // As above.
+  }
+  return memoryKey;
 }
 
 const lookAt = new THREE.Matrix4();
@@ -97,7 +127,14 @@ export class Cueist {
     private readonly still: () => boolean,
     private readonly hooks: CueistHooks,
   ) {
-    this.panel = new PoolPanel({ team: (s) => hooks.team(s), start: () => hooks.start(), reset: () => hooks.reset(), spin: (side, top) => (this.spin = { side, top }) });
+    this.panel = new PoolPanel({
+      team: (s) => hooks.team(s),
+      start: () => hooks.start(),
+      reset: () => hooks.reset(),
+      leave: () => this.leave(),
+      skip: () => hooks.skip(),
+      spin: (side, top) => (this.spin = { side, top }),
+    });
     window.addEventListener('keydown', (e) => this.key(e, true));
     window.addEventListener('keyup', (e) => this.key(e, false));
     canvas.addEventListener('pointerdown', (e) => this.press(e));
@@ -163,12 +200,23 @@ export class Cueist {
     this.canvas.classList.add('aiming');
     this.camPos.copy(this.camera.position);
     this.camQuat.copy(this.camera.quaternion);
-    this.hooks.join();
+    this.hooks.join(browserKey());
     this.panel.show(true);
-    this.sync(state);
+    // Not sync: whether there's room (or a seat that's yours, under the id you had before a reload) is the office's to say.
+    this.render();
   }
 
-  /** Away from the table. `tell`: let the office know (not when it's the one who let you go). */
+  /** Leave the table and its game for good (Leave in the panel). */
+  leave() {
+    if (!this.on) return;
+    this.hooks.leave();
+    this.stop(false);
+  }
+
+  /**
+   * Away from the table. `tell`: let the office know you've stepped away (not when it's the one who let
+   * you go); a seat of yours in a game that's running waits for you.
+   */
   stop(tell = true) {
     if (!this.on) return;
     this.on = false;
@@ -186,7 +234,7 @@ export class Cueist {
     this.balls.hand(null);
     this.balls.hideCue();
     this.panel.show(false);
-    if (tell) this.hooks.leave();
+    if (tell) this.hooks.away();
     this.hooks.done();
   }
 
@@ -208,8 +256,14 @@ export class Cueist {
     if (!this.on) return;
     if (shot || !state.game || state.game.over) this.shotAt = 0;
     const seat = state.lobby.find((s) => s.id === this.you);
-    if (seat) this.joining = false;
-    else if (this.joining) {
+    if (seat?.away && !this.joining) {
+      // The office thinks you're gone (your connection dropped and came back): you're right here.
+      this.joining = true;
+      this.hooks.join(browserKey());
+    } else if (seat && !seat.away) this.joining = false;
+    else if (seat) {
+      // Still waiting to be back.
+    } else if (this.joining) {
       if (state.lobby.length >= MAX_PLAYERS) {
         this.stop(false);
         this.hooks.full();
@@ -229,7 +283,7 @@ export class Cueist {
     if (!this.on) return;
     this.you = you;
     this.joining = true;
-    this.hooks.join();
+    this.hooks.join(browserKey());
   }
 
   /** Every frame: aiming, the cue, the ball in your hand, where you stand, and the camera. */
@@ -371,7 +425,7 @@ export class Cueist {
     const mine = !isTyping(e) && !modalOpen() && !e.metaKey && !e.ctrlKey && !e.altKey;
     if (down && mine && WALK.includes(e.code)) return this.stop();
     if (down && mine && e.code === 'KeyQ' && !e.repeat) return this.flip();
-    // Esc lets go of a cue that's drawn back (or the cue ball in your hand), and otherwise steps away.
+    // Esc lets go of a cue that's drawn back (or the cue ball in your hand), and otherwise steps away (your seat waits).
     if (down && mine && e.code === 'Escape') {
       e.preventDefault();
       if (this.drawing || this.placing) return this.cancel();
