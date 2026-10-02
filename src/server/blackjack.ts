@@ -14,8 +14,9 @@ export const DEALER_STEP = 800;
 export const RESULTS_TIME = 6_000;
 
 /**
- * Where the chips come from and go to: the chips API (see server/chips.ts), by the key a seat was
- * taken with. `take` takes a stake (false if they haven't got it: nothing's taken), `give` pays out.
+ * Where the chips come from and go to: the chips bank (see server/chips.ts), by the chips id a seat
+ * was taken with. `take` takes a stake (false if they haven't got it: nothing's taken), `give` pays
+ * out, stake included.
  */
 export interface BlackjackBank {
   balance(key: string): number;
@@ -24,7 +25,7 @@ export interface BlackjackBank {
 }
 
 export interface BlackjackOptions {
-  /** What the bank's bookings say they were for: "blackjack", or the table's own name. */
+  /** What the bank's bookings say they were for: `<label>.bet`, `.double`, `.split`, `.insurance`, `.win` (the label "blackjack" by default). */
   label?: string;
   now?: () => number;
   rand?: Rand;
@@ -179,7 +180,7 @@ export class BlackjackTable {
     const a = action as BjAction;
     if (!this.game.actions(s.id).includes(a)) return false;
     const cost = this.game.cost(s.id, a);
-    if (cost && !this.bank.take(s.key, cost, `${this.label}: ${a}`)) return false;
+    if (cost && !this.bank.take(s.key, cost, `${this.label}.${a}`)) return false;
     this.game.act(s.id, a);
     this.afterMove();
     return true;
@@ -192,7 +193,7 @@ export class BlackjackTable {
     const cost = this.game.cost(s.id, 'insurance');
     const p = this.game.player(s.id);
     if (!p || p.insurance !== null) return false;
-    const yes = take && cost > 0 && this.bank.take(s.key, cost, `${this.label}: insurance`);
+    const yes = take && cost > 0 && this.bank.take(s.key, cost, `${this.label}.insurance`);
     this.game.insure(s.id, yes);
     this.afterMove();
     return true;
@@ -262,7 +263,7 @@ export class BlackjackTable {
   private startRound(): boolean {
     const entries = [];
     for (const s of this.seats) {
-      if (s.peer && s.bet && this.bank.take(s.key, s.bet, this.label)) {
+      if (s.peer && s.bet && this.bank.take(s.key, s.bet, `${this.label}.bet`)) {
         entries.push({ seat: s.seat, id: s.id, name: s.name, bet: s.bet });
         this.roundKeys.set(s.id, s.key);
       }
@@ -287,7 +288,7 @@ export class BlackjackTable {
     else if (this.stage !== 'done') {
       for (const p of r.players) {
         const key = this.roundKeys.get(p.id);
-        if (key && p.paid) this.bank.give(key, p.paid, this.label);
+        if (key && p.paid) this.bank.give(key, p.paid, `${this.label}.win`);
       }
       this.setStage('done', RESULTS_TIME);
     }
