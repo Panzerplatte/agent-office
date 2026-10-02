@@ -48,7 +48,8 @@ import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, isDrink } from '../shared/rooftop.js';
-import { CASINO } from '../shared/casino.js';
+import { CASINO, casinoSpotOf } from '../shared/casino.js';
+import { BlackjackTable } from './blackjack.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -211,6 +212,30 @@ export async function startServer(cfg: Config) {
       for (const c of clients.values()) if (c.chips === who) sendTo(c, { t: 'chips', chips: state, change, ...(quiet ? { quiet } : {}) });
     },
   });
+  // Blackjack: the casino's table, one for the whole building. Every stake and payout goes through the
+  // chips bank (quietly: the table's panel shows them), by the chips id they sat down with.
+  const blackjack = new BlackjackTable(
+    {
+      balance: (who) => chips.balance(who),
+      take: (who, amount, why) => chips.bet(who, amount, why, { quiet: true }),
+      give: (who, amount, why) => void chips.award(who, amount, why, { quiet: true }),
+    },
+    { changed: () => blackjackChanged() },
+  );
+  /** Everyone in the casino hears how the blackjack table is now. */
+  const blackjackChanged = () => {
+    const json = JSON.stringify({ t: 'blackjack', blackjack: blackjack.state() } satisfies ServerMsg);
+    for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+  };
+  /**
+   * Whoever sits on one of the blackjack table's stools sits at the table, at that place (or back in
+   * their own, kept while they were away); getting up, going upstairs or dropping out leaves them away.
+   */
+  const blackjackSeat = (c: Client) => {
+    const at = c.peer.floor === CASINO ? casinoSpotOf(c.peer.seat) : undefined;
+    const changed = at?.game === 'blackjack' ? blackjack.join(c.id, c.peer.name, c.chips, at.spot) : blackjack.away(c.id);
+    if (changed) blackjackChanged();
+  };
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -557,7 +582,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO });
+  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
   };
@@ -1028,6 +1053,8 @@ export async function startServer(cfg: Config) {
       clients.delete(id);
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
+      // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
+      if (blackjack.away(id)) blackjackChanged();
       for (const f of floors.values()) {
         f.workers.detachAll(id);
         f.changes.unwatchAll(id);
@@ -1179,6 +1206,8 @@ export async function startServer(cfg: Config) {
     const dartsLeft = !!was?.darts.away(c.id);
     // At the pool table, they're away: their seat in a game that's running waits for them.
     const poolLeft = !!was?.pool.away(c.id);
+    // Up from the casino: away from the blackjack table, their seat kept.
+    const blackjackLeft = blackjack.away(c.id);
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1193,7 +1222,7 @@ export async function startServer(cfg: Config) {
     // An issue card belongs to the board it came off, which is on the floor they left; a drink stays at the bar.
     delete c.peer.carrying;
     delete c.peer.drink;
-    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft };
+    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft, blackjackLeft };
   };
 
   const arrived = (c: Client, left: ReturnType<typeof leave>) => {
@@ -1202,6 +1231,7 @@ export async function startServer(cfg: Config) {
     if (left.ballLeft && left.was) ballChanged(left.was);
     if (left.dartsLeft && left.was) dartsChanged(left.was);
     if (left.poolLeft && left.was) poolChanged(left.was);
+    if (left.blackjackLeft) blackjackChanged();
   };
 
   /**
@@ -1310,6 +1340,7 @@ export async function startServer(cfg: Config) {
         if (seat) c.peer.seat = seat;
         else delete c.peer.seat;
         broadcast({ t: 'peer.update', peer: c.peer }, c.id);
+        blackjackSeat(c);
         break;
       }
       case 'carry': {
@@ -1479,6 +1510,26 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (not their shot, the table was full) is told how it really is.
         if (changed) poolChanged(floor);
         else sendTo(c, { t: 'pool', pool: p.state() });
+        break;
+      }
+      case 'blackjack.bet':
+      case 'blackjack.deal':
+      case 'blackjack.act':
+      case 'blackjack.insure':
+      case 'blackjack.skip':
+      case 'blackjack.leave': {
+        if (c.peer.floor !== CASINO) break;
+        const b = blackjack;
+        const changed =
+          msg.t === 'blackjack.bet' ? b.bet(c.id, msg.amount)
+          : msg.t === 'blackjack.deal' ? b.deal(c.id)
+          : msg.t === 'blackjack.act' ? b.act(c.id, msg.action)
+          : msg.t === 'blackjack.insure' ? b.insure(c.id, msg.take)
+          : msg.t === 'blackjack.skip' ? b.skip(c.id)
+          : b.left(c.id);
+        // Whoever it didn't work for (not their turn, not the chips for it) is told how it really is.
+        if (changed) blackjackChanged();
+        else sendTo(c, { t: 'blackjack', blackjack: b.state() });
         break;
       }
       case 'dog.pet':

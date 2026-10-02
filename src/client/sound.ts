@@ -555,6 +555,37 @@ export class OfficeSound {
     }
   }
 
+  // ---- Blackjack ----------------------------------------------------------------------------------
+
+  /**
+   * The blackjack table: a card sliding out of the shoe onto the felt (`card`), one turned over
+   * (`flip`), and a little run up for a round you won (`win`). `at` is where.
+   */
+  blackjack(kind: 'card' | 'flip' | 'win', at?: Pos) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`blackjack-${kind}`);
+    const out = at ? this.panner(at, 2, 1) : ctx.createGain();
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    if (kind === 'win') {
+      [659, 784, 1047].forEach((f, i) => this.blip(out, t0 + i * 0.09, f, 1, i === 2 ? 0.4 : 0.12, 0.07, 'triangle'));
+      return;
+    }
+    // A short brush of paper on cloth: a burst of noise through a band, softer for a flip.
+    const n = this.noise(this.buf.white);
+    const band = biquad(ctx, 'bandpass', kind === 'card' ? rand(2600, 3200) : rand(1800, 2200), 1.2);
+    const g = ctx.createGain();
+    const len = kind === 'card' ? 0.09 : 0.06;
+    envelope(g.gain, t0, [
+      [0.008, kind === 'card' ? 0.35 : 0.22],
+      [len, 0],
+    ]);
+    n.connect(band).connect(g).connect(out);
+    n.start(t0);
+    n.stop(t0 + len + 0.02);
+  }
+
   // ---- Pool ---------------------------------------------------------------------------------------
 
   /** When the last pool click went (ctx time): a break's dozens of them in a moment are thinned out. */

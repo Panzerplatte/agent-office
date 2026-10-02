@@ -4,6 +4,7 @@ import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
+import type { BjAction, BlackjackState } from './blackjack.js';
 import type { ChipsEntry, ChipsState } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -711,6 +712,8 @@ export interface FloorView {
   darts: DartsState;
   /** The pool table: who's at it on which side, and the game of 8-ball with every ball where it came to rest. */
   pool: PoolState;
+  /** The blackjack table in the casino (only down there): the seats, the round with the hole card hidden, and the clock. */
+  blackjack?: BlackjackState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1182,6 +1185,19 @@ export type ClientMsg =
   | { t: 'pool.place'; x: number; y: number }
   /** Clear the game off the table, for a new one (a game that's still on, only its players can). */
   | { t: 'pool.reset' }
+  // Blackjack at the casino's table: you sit at it by sitting on one of its stools (see server.ts), and get up with Leave.
+  /** At the blackjack table, put `amount` chips down for the next round (0 takes your bet back). */
+  | { t: 'blackjack.bet'; amount: number }
+  /** At the blackjack table, deal now, with your bet down, without waiting for the others'. */
+  | { t: 'blackjack.deal' }
+  /** At the blackjack table, on your turn: hit, stand, double or split. */
+  | { t: 'blackjack.act'; action: BjAction }
+  /** At the blackjack table, under the dealer's ace: take insurance (half your stake), or not. */
+  | { t: 'blackjack.insure'; take: boolean }
+  /** At the blackjack table, stand the hand of whoever's up while they're away. */
+  | { t: 'blackjack.skip' }
+  /** Give up your seat at the blackjack table for good (your hands in a round stand, and are still paid). */
+  | { t: 'blackjack.leave' }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1295,6 +1311,8 @@ export type ServerMsg =
    * `pool` already as it is once the balls have stopped.
    */
   | { t: 'pool'; pool: PoolState; shot?: PoolPlayback }
+  /** The blackjack table in the casino changed (a seat, a bet, a card, the clock's stage): to everyone down there. */
+  | { t: 'blackjack'; blackjack: BlackjackState }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

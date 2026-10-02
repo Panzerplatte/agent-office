@@ -420,11 +420,27 @@ test('table: insurance takes half the stake through the bank', () => {
   assert.equal(tb.state().stage, 'idle');
 });
 
-test('table: five seats at most, a chosen seat if free', () => {
+test('table: five seats at most, at the seat you sit down on; an away player\'s seat is kept for them', () => {
   const { tb } = table([], { a: 1 });
   assert.ok(tb.join('p0', 'A', 'k0', 3));
-  for (let i = 1; i < 5; i++) assert.ok(tb.join(`p${i}`, `N${i}`, `k${i}`, 3));
+  assert.equal(tb.join('p1', 'B', 'k1', 3), false, 'taken');
+  assert.equal(tb.join('p1', 'B', 'k1', 9), false);
+  for (let i = 1; i < 5; i++) assert.ok(tb.join(`p${i}`, `N${i}`, `k${i}`));
   assert.equal(tb.join('p5', 'F', 'k5'), false);
   assert.deepEqual(tb.state().seats.map((s) => s.seat), [0, 1, 2, 3, 4]);
   assert.equal(tb.state().seats.find((s) => s.seat === 3)!.name, 'A');
+  const t2 = table(order([['TS', '5H']], ['TC', '8D']));
+  t2.tb.join('p1', 'Ada', 'ka', 0);
+  t2.tb.bet('p1', 10);
+  t2.tb.away('p1');
+  assert.equal(t2.tb.join('p2', 'Bo', 'kb', 0), false, 'kept for Ada');
+  assert.ok(t2.tb.join('p1b', 'Ada', 'ka', 2), 'back in her own seat, from another stool');
+  assert.equal(t2.tb.state().seats[0].seat, 0, 'not moved mid-round');
+  t2.tb.act('p1b', 'stand');
+  t2.later(DEALER_STEP);
+  t2.later(DEALER_STEP);
+  t2.later(RESULTS_TIME);
+  t2.tb.away('p1b');
+  assert.ok(t2.tb.join('p1c', 'Ada', 'ka', 2));
+  assert.equal(t2.tb.state().seats[0].seat, 2, 'between rounds she moves with her stool');
 });

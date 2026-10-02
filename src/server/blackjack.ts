@@ -100,22 +100,31 @@ export class BlackjackTable {
   }
 
   /**
-   * `peer` sits down (`key`: who they are): back in their seat if they have one, under `peer` now;
-   * otherwise at `at` if that's free (or the first free seat). Not if the table's full, or they're
-   * sitting already. Says whether anything changed.
+   * `peer` sits down (`key`: who they are) at seat `at` (0 … MAX_SEATS-1; the first free one without):
+   * back in their own seat if they have one, under `peer` now (moved to `at` if that's free and
+   * they're in no round), otherwise at `at` if nobody has it (an away player's seat is kept for them).
+   * Not if the table's full, or they're sitting already. Says whether anything changed.
    */
   join(peer: string, name: string, key: string, at?: unknown): boolean {
+    const spot = typeof at === 'number' && Number.isInteger(at) && at >= 0 && at < MAX_SEATS ? at : undefined;
+    if (at !== undefined && spot === undefined) return false;
+    const holder = spot === undefined ? undefined : this.seats.find((s) => s.seat === spot);
     const mine = this.seats.find((s) => s.key === key);
     if (mine) {
-      if (mine.peer === peer) return false;
+      const moved = spot !== undefined && !holder && !this.inRound(mine.id);
+      if (mine.peer === peer && !moved) return false;
+      // Theirs from another page (the same account): this one has it now.
       mine.peer = peer;
       mine.name = name.slice(0, 24);
+      if (moved) {
+        mine.seat = spot;
+        this.seats.sort((a, b) => a.seat - b.seat);
+      }
       return true;
     }
-    if (this.at(peer) || this.seats.length >= MAX_SEATS) return false;
+    if (this.at(peer) || this.seats.length >= MAX_SEATS || holder) return false;
     const taken = new Set(this.seats.map((s) => s.seat));
-    const wanted = typeof at === 'number' && Number.isInteger(at) && at >= 0 && at < MAX_SEATS && !taken.has(at) ? at : undefined;
-    const seat = wanted ?? [...Array(MAX_SEATS).keys()].find((i) => !taken.has(i))!;
+    const seat = spot ?? [...Array(MAX_SEATS).keys()].find((i) => !taken.has(i))!;
     this.seats.push({ seat, id: `b${++this.ids}`, name: name.slice(0, 24), peer, key, bet: 0 });
     this.seats.sort((a, b) => a.seat - b.seat);
     return true;
@@ -242,6 +251,11 @@ export class BlackjackTable {
         this.deadline = null;
         return false;
     }
+  }
+
+  /** Whether seat `id` is playing in the round on the table (or its results). */
+  private inRound(id: string): boolean {
+    return !!this.game.round?.players.some((p) => p.id === id);
   }
 
   /** The seat `peer` sits in. */
