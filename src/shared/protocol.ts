@@ -4,6 +4,7 @@ import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
+import type { ActionKind, PokerState } from './poker.js';
 import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
@@ -1190,6 +1191,20 @@ export type ClientMsg =
   | { t: 'pool.place'; x: number; y: number }
   /** Clear the game off the table, for a new one (a game that's still on, only its players can). */
   | { t: 'pool.reset' }
+  /**
+   * Poker, in the casino (see shared/poker.ts): sit down at seat `seat` (0–5) with `buyIn` chips off
+   * your balance, or back in the seat that's kept for you (you, by your chips: account or browser).
+   * Step away (your seat's kept; you sit out), or leave the table with what's in front of you.
+   */
+  | { t: 'poker.sit'; seat?: number; buyIn?: number }
+  | { t: 'poker.away' }
+  | { t: 'poker.leave' }
+  /** On your turn at the poker table: fold, check, call, bet or raise to `to` (all in this round), or all-in. */
+  | { t: 'poker.act'; kind: ActionKind; to?: number }
+  /** Between hands, more chips in front of you (MAX_BUY_IN in all). */
+  | { t: 'poker.topup'; amount: number }
+  /** Sit a Dealer-Bot down at the poker table, or send one away (the one at `seat`, or the last). */
+  | { t: 'poker.bot'; add: boolean; seat?: number }
   // Blackjack at the casino's table: you sit at it by sitting on one of its stools (see server.ts), and get up with Leave.
   /** At the blackjack table, put `amount` chips down for the next round (0 takes your bet back). */
   | { t: 'blackjack.bet'; amount: number }
@@ -1356,6 +1371,8 @@ export type ServerMsg =
    * `pool` already as it is once the balls have stopped.
    */
   | { t: 'pool'; pool: PoolState; shot?: PoolPlayback }
+  /** The casino's poker table changed, as you see it: your own cards, and anyone's that were shown. */
+  | { t: 'poker'; poker: PokerState }
   /** The blackjack table in the casino changed (a seat, a bet, a card, the clock's stage): to everyone down there. */
   | { t: 'blackjack'; blackjack: BlackjackState }
   /** The casino's slot machines: who's at which, each one's last spin (a new one sets its reels going), and the jackpot. */
