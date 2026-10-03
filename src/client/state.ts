@@ -9,11 +9,12 @@ import { JUKEBOX_TUNES, type JukeboxState } from '../shared/jukebox';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
+import { emptyPoker, type PokerState } from '../shared/poker';
 import { emptyBlackjack, type BlackjackState } from '../shared/blackjack';
 import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } from '../shared/onlineblackjack';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -186,6 +187,8 @@ class Store {
   ball: BallState = {};
   /** The dartboard on this floor: who's at it, the options for the next game, and the game (see shared/darts.ts). */
   darts: DartsState = emptyDarts();
+  /** The casino's poker table, as you see it (your own cards only): sent while you're down in the casino (see shared/poker.ts). */
+  poker: PokerState = emptyPoker();
   /** The pool table on this floor: who's at it on which side, and the game (see shared/pool.ts). */
   pool: PoolState = emptyPool();
   /** The blackjack table in the casino (only while you're down there): the seats, the round and the clock (see shared/blackjack.ts). */
@@ -420,6 +423,10 @@ class Store {
       case 'darts':
         this.darts = msg.darts;
         this.emit('darts');
+        break;
+      case 'poker':
+        this.poker = msg.poker;
+        this.emit('poker');
         break;
       case 'pool':
         this.pool = msg.pool;
