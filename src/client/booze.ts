@@ -58,7 +58,7 @@ export class Booze {
     return this.glass;
   }
 
-  /** Puts the glass down (leaving the roof: drinks stay at the bar). */
+  /** Puts the glass down (leaving the roof or the casino: drinks stay at the bar). */
   putDown() {
     this.glass = null;
   }

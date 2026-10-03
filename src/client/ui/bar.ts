@@ -6,6 +6,8 @@ import { drinkBlurb, drinkName } from '../i18n/labels';
 export interface BarOptions {
   /** Had enough: nothing stronger than water or a mocktail. */
   cutOff: boolean;
+  /** At the casino's bar, which pours its own few as well (the roof's pours only the usual). */
+  casino?: boolean;
   order(d: Drink): void;
 }
 
@@ -16,13 +18,13 @@ function kick(d: Drink): string {
   return t(d.strength >= 0.55 ? 'menus.barStrong' : d.strength >= 0.4 ? 'menus.barMedium' : 'menus.barLight');
 }
 
-/** The rooftop bar's menu: pick a drink and the bartender pours it. */
+/** The rooftop bar's menu (or the casino's): pick a drink and the bartender pours it. */
 export function openBar(opts: BarOptions) {
   const close = h('button.btn.close', { 'aria-label': t('menus.close') }, '✕');
   const list = h(
     'ul.svc-list',
     {},
-    ...DRINKS.map((d) => {
+    ...DRINKS.filter((d) => opts.casino || !d.casino).map((d) => {
       const refused = opts.cutOff && d.strength > 0;
       const li = h(
         'li',
@@ -54,7 +56,7 @@ export function openBar(opts: BarOptions) {
   const el = h(
     'div.modal.jukebox',
     { role: 'dialog', 'aria-label': t('menus.bar') },
-    h('header', {}, h('h2', {}, t('menus.barTitle')), close),
+    h('header', {}, h('h2', {}, t(opts.casino ? 'menus.casinoBarTitle' : 'menus.barTitle')), close),
     h(
       'div.body',
       {},
