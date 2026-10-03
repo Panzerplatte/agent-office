@@ -681,6 +681,53 @@ export class OfficeSound {
     }
   }
 
+  // ---- Roulette -----------------------------------------------------------------------------------
+
+  /**
+   * The roulette table: chips put down on the layout (`chip`), the ball launched round the wheel
+   * (`spin`, a rolling rumble for `seconds`), the ball clattering over the frets and dropping into its
+   * pocket (`drop`), and a little fanfare for your win (`win`). `at` is where.
+   */
+  roulette(kind: 'chip' | 'spin' | 'drop' | 'win', at?: Pos, seconds = 5) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`roulette-${kind}`);
+    const out = at ? this.panner(at, 2.5, 1) : ctx.createGain();
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    switch (kind) {
+      case 'chip':
+        // Clay chips clicking onto a stack.
+        this.clink(out, t0, rand(2300, 2700), 0.05);
+        this.clink(out, t0 + 0.035, rand(2000, 2400), 0.03);
+        break;
+      case 'spin': {
+        // The ball running round the track, a quick tick-tick-tick that slows down.
+        let when = t0;
+        let gap = 0.05;
+        while (when < t0 + seconds) {
+          this.blip(out, when, rand(1500, 1800), 0.9, 0.015, 0.012, 'triangle');
+          when += gap;
+          gap *= 1.035;
+        }
+        break;
+      }
+      case 'drop':
+        // Clattering over the frets, then into the pocket.
+        for (let i = 0; i < 6; i++) this.clink(out, t0 + i * (0.07 + i * 0.03), rand(2600, 3200), 0.05 / (1 + i * 0.4));
+        this.blip(out, t0 + 0.75, rand(700, 780), 0.6, 0.08, 0.08, 'triangle');
+        break;
+      case 'win':
+        [659, 784, 988, 1319].forEach((f, i) => {
+          const when = t0 + 0.1 + i * 0.11;
+          const len = i === 3 ? 0.7 : 0.16;
+          this.blip(out, when, f, 1, len, 0.08, 'triangle');
+          this.blip(out, when, f * 2, 1, len * 0.7, 0.025);
+        });
+        break;
+    }
+  }
+
   /** Whoosh: the rush of air and the squeal of hands on brass, all the way down a fire pole. */
   slide(seconds = 1.6) {
     const ctx = this.ctx;

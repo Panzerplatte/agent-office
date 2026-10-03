@@ -31,6 +31,8 @@ import { Darter, dartsKey } from './darts';
 import { BoardDarts } from './world/darts';
 import { MAX_PLAYERS, type DartsState } from '../shared/darts';
 import { Cueist } from './pool';
+import { RoulettePlayer } from './roulette';
+import { RouletteWheelView } from './world/roulette';
 import { PoolBalls, seatColor } from './world/pool';
 import { sideName } from './ui/pool';
 import { MAX_PLAYERS as POOL_PLAYERS, isSolo, type PoolState } from '../shared/pool';
@@ -668,6 +670,65 @@ function blackjackSeat() {
   if (at?.game === 'blackjack') blackjack.sit(at.spot);
   else if (blackjack.active) blackjack.stop();
 }
+// ---- Roulette ---------------------------------------------------------------------------------------
+// The casino's roulette table, for everyone down there: the wheel, the ball the office sends round it,
+// everyone's chips on the felt. Sitting on one of its stools puts you at the table (see roulette.ts).
+let rouletteWheel: RouletteWheelView | null = null;
+/** The table brought to life, once the casino's been built. */
+function theRouletteWheel(): RouletteWheelView | null {
+  if (!casino) return null;
+  if (!rouletteWheel) {
+    const w = (rouletteWheel = new RouletteWheelView(casino.roulette));
+    w.onSpin = (seconds) => sound.roulette('spin', w.where, seconds);
+    w.onDrop = () => {
+      sound.roulette('drop', w.where);
+      // Your win, as the ball drops: a fanfare and a little confetti over the table.
+      const me = store.roulette.seats.find((x) => x.peer === store.you);
+      if (me && store.roulette.wins.some((x) => x.seat === me.id && x.paid > 0)) {
+        sound.roulette('win', w.where);
+        confetti.burst(w.where.x + 1, w.where.y + 0.8, w.where.z, 90, 0.6);
+      }
+      roulettePlayer.sync(store.roulette, store.rouletteAt);
+    };
+    w.follow(store.roulette, store.rouletteAt);
+  }
+  return rouletteWheel;
+}
+const roulettePlayer = new RoulettePlayer(player, camera, () => casino?.roulette ?? null, theRouletteWheel, () => reduceMotion.matches, {
+  join: () => net.send({ t: 'roulette.join' }),
+  away: () => net.send({ t: 'roulette.away' }),
+  leave: () => net.send({ t: 'roulette.leave' }),
+  bet: (spot, amount) => net.send({ t: 'roulette.bet', spot, amount }),
+  unbet: (spot) => net.send({ t: 'roulette.unbet', ...(spot ? { spot } : {}) }),
+  full: () => toast(t('notices.rouletteFull'), 'warn'),
+  balance: () => chips.balance,
+  done: () => {
+    // Leave (or no room at the table) gets you up off the stool too.
+    if (atRoulette() !== null) standUp();
+    hintKey = 'stale';
+  },
+});
+/** Which of the roulette table's stools you're sitting on (0-based), or null. */
+function atRoulette(): number | null {
+  const seat = player.seat && SEATING_BY_ID.get(player.seat.seatId);
+  return downstairs && seat?.play === 'roulette' ? (seat.spot ?? 0) : null;
+}
+/** Sitting at the roulette table (or E while you are): your place at it. E again does nothing more. */
+function playRoulette() {
+  const stool = atRoulette();
+  if (stool === null || roulettePlayer.active) return;
+  roulettePlayer.start(store.roulette, store.rouletteAt, store.you, stool);
+}
+/** How many chips were on the layout, to hear them go down. */
+let rouletteBets = 0;
+store.on('roulette', () => {
+  const r = store.roulette;
+  theRouletteWheel()?.follow(r, store.rouletteAt);
+  roulettePlayer.sync(r, store.rouletteAt);
+  const down = r.bets.reduce((n, b) => n + b.amount, 0);
+  if (down > rouletteBets && rouletteWheel && downstairs) sound.roulette('chip', rouletteWheel.where);
+  rouletteBets = down;
+});
 
 // ---- Slot machines ----------------------------------------------------------------------------------
 // The casino's slot machines: the reels on every machine's screen, for everyone down there, and you at
@@ -908,6 +969,8 @@ net.onMessage((msg) => {
   // Back after a reconnect, which let go of your place at the dartboard: ask for it again (before the board's news says you're not at it).
   if (msg.t === 'welcome' && darter.active) darter.rejoin(msg.you);
   if (msg.t === 'welcome' && cueist.active) cueist.rejoin(msg.you);
+  // At the roulette table: once your stool's yours again (the welcome sends it), ask for your place back.
+  if (msg.t === 'welcome' && roulettePlayer.active) queueMicrotask(() => roulettePlayer.rejoin(msg.you));
   if (msg.t === 'worker.remove') sentHome.add(msg.workerId);
   store.apply(msg);
   seatedAlready = false;
@@ -2610,6 +2673,7 @@ function useSeat(seatId: string) {
     if (seat.play === 'slots' && seat.spot !== undefined) playSlots(seat.spot);
     else if (seat.tv && tvShowing()) watchShare();
     else if (seat.game) arcade.play();
+    else if (seat.play === 'roulette') playRoulette();
     else if (seat.bar) showBar();
     else standUp();
     return;
@@ -2622,6 +2686,7 @@ function useSeat(seatId: string) {
   player.sit(place);
   me.sit(place.hips);
   net.send({ t: 'sit', seat: place.key });
+  if (seat.play === 'roulette') playRoulette();
   // The couch in front of the TV is where you watch whoever's sharing.
   if (seat.tv && tvShowing()) watchShare();
   // Sitting down at a slot machine is to play it.
@@ -2775,6 +2840,7 @@ function renderHint() {
   if (cueist.active && !modalOpen()) return renderPoolHint(el);
   if (blackjack.active && !modalOpen()) return renderBlackjackHint(el);
   if (slotter.active && !modalOpen()) return renderSlotsHint(el);
+  if (roulettePlayer.active && !modalOpen()) return renderRouletteHint(el);
   const withBall = holdingBall();
   const emoting = me.emoteLooping ? me.emoteId : null;
   if ((!target && !carrying && !withBall && !emoting) || modalOpen()) {
@@ -3144,6 +3210,15 @@ function renderSlotsHint(el: HTMLElement) {
   el.classList.remove('hidden');
 }
 
+/** At the roulette table: how to bet, and how to get up or leave. */
+function renderRouletteHint(el: HTMLElement) {
+  const k = 'roulette';
+  if (k === hintKey) return;
+  hintKey = k;
+  el.replaceChildren(h('span.title', {}, t('main.roulette')), key(t('main.keyMouse'), t('main.rouletteBet')), aside(t('main.rouletteUnbet')), key('WASD', t('main.rouletteStepAway')), key(t('main.keyEsc'), t('main.rouletteLeave')));
+  el.classList.remove('hidden');
+}
+
 /** At the pool table: how to aim and shoot on your shot, ball in hand, whose shot it is otherwise, and how to step away. */
 function renderPoolHint(el: HTMLElement) {
   const title = (text: string) => h('span.title', {}, text);
@@ -3218,7 +3293,7 @@ function renderHangHint(el: HTMLElement) {
 let crossKey = '';
 const finePointer = window.matchMedia('(pointer: fine)').matches;
 function renderCrosshair() {
-  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active && !cueist.active && !blackjack.active;
+  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active && !cueist.active && !blackjack.active && !roulettePlayer.active;
   const free = show && finePointer && player.canLock && !player.locked;
   const k = `${show}|${!!target}|${free}|${relookOnKey}`;
   if (k === crossKey) return;
@@ -3362,6 +3437,8 @@ window.addEventListener('keydown', (e) => {
   }
   // At a slot machine, the same: Space spins, − and + change the bet, Esc leaves it and walking off steps away (see Slotter).
   if (slotter.active && (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'KeyQ' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) return;
+  // At the roulette table, the same: E keeps you at it, Esc or Leave in the panel leaves, getting up steps away (see RoulettePlayer).
+  if (roulettePlayer.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) return;
   // With the ball in your hands, E winds up a shot (let go to shoot) and Q drops it.
   if (holdingBall() && (e.code === 'KeyE' || e.code === 'KeyQ')) {
     if (e.repeat) return;
@@ -3589,7 +3666,7 @@ canvas.addEventListener('pointerleave', () => (pointer = null));
 
 player.onClick = (ndc) => {
   // At the tee, a click is you steadying the mouse to aim: nothing else is in reach. At the dartboard, the mouse aims.
-  if (modalOpen() || golf.active || darter.active || cueist.active || blackjack.active) return;
+  if (modalOpen() || golf.active || darter.active || cueist.active || blackjack.active || roulettePlayer.active) return;
   if (emoteWheel.isOpen) return emoteWheel.click();
   // The ball in your hands: press to wind up, let go (or click again, with no mouse captured) to shoot.
   if (holdingBall()) {
@@ -3896,6 +3973,10 @@ function frame(ts?: number) {
   if (slotter.active && (trip || hanger.active || climber.active || !player.seat || !downstairs)) slotter.stop('away');
   slotter.update(dt);
   if (downstairs) theSlots()?.screens.update();
+  // Up off the roulette stool (or out of the casino): your place at the table waits for you.
+  if (roulettePlayer.active && atRoulette() === null) roulettePlayer.stop();
+  roulettePlayer.update(dt);
+  if (downstairs) theRouletteWheel()?.update(dt);
   showTheirCue();
   // A dance that keeps going doesn't go with a club in your hands or up the ladder: it stops for everyone.
   if ((golf.active || climber.active || darter.active || cueist.active) && me.emoteLooping) stopEmote();
@@ -3919,7 +4000,7 @@ function frame(ts?: number) {
   // In first person you are the camera; in third, hide yourself when it's zoomed in right behind your head.
   // At the tee the camera's behind the ball, and you're the one holding the club; at the pool table you're there too, unless you're in the way.
   me.root.visible = golf.active || (cueist.active && !cueist.inTheWay(me.root.position)) || (!cueist.active && !firstPerson && camera.position.distanceTo(headPos.set(player.pos.x, player.pos.y + 1.3, player.pos.z)) > 1.5);
-  if (firstPerson && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
+  if (firstPerson && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
   // Down a pole: the view widens and the edges streak past.
   const rush = reduceMotion.matches ? 0 : climber.rush;
   const fov = 55 + rush * 16;
@@ -3962,7 +4043,7 @@ function frame(ts?: number) {
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     r.person.root.rotation.y += diff * Math.min(1, dt * 12);
     // Up over the pool table, anyone standing between the camera and it is out of the way.
-    r.person.root.visible = !cueist.inTheWay(pos);
+    r.person.root.visible = !cueist.inTheWay(pos) && !roulettePlayer.inTheWay(pos);
     // On their feet if they're standing on something: the floor, a desk, a stair, the loft.
     const ground = groundAt(player.colliders, p.x, p.z, p.y);
     const airborne = !sat && p.y > ground + 0.05;
@@ -4030,7 +4111,7 @@ function frame(ts?: number) {
   }
 
   aimedNote = null;
-  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active || blackjack.active) target = null;
+  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active || blackjack.active || roulettePlayer.active) target = null;
   else if (firstPerson) {
     const aim = aimedAt(CROSSHAIR);
     target = aim?.near ? aim.it : (mySeat() ?? ballAtFeet());
@@ -4069,7 +4150,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active) {
+  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
