@@ -50,6 +50,7 @@ import { locale as slotsLocale } from './i18n';
 import { Hands } from './world/hands';
 import { Basketball, IN_HANDS } from './world/hoop';
 import { HOOP, SWEET, idealSpeed, lookAtRim, meter, shotSpeed, throwPitch, tossSpeed, underCeiling } from '../shared/hoop';
+import { STREAK_PAUSE } from '../shared/chips';
 import { Smoke } from './world/smoke';
 import { HAZE_MAX, Sky, describeSky } from './world/sky';
 import { Laptop } from './world/laptop';
@@ -1095,6 +1096,9 @@ net.onMessage((msg) => {
       break;
     case 'ball':
       ballNews(true);
+      break;
+    case 'ball.streak':
+      streakNews(msg.n);
       break;
     case 'floors':
       noticeWaiting();
@@ -2431,9 +2435,9 @@ function ballNews(answer: boolean) {
   hintKey = '';
 }
 const holdingBall = () => ball.holder === store.you;
-/** Baskets of yours in a row, and whether your last throw was a shot at the hoop (a miss of a pass or a drop doesn't count). */
+/** Baskets of yours in a row, as the office counts them (see 'ball.streak'), and when it last said (performance.now()). */
 let streak = 0;
-let shooting = false;
+let streakAt = 0;
 /** When you started winding up a shot (performance.now()), or 0. */
 let windFrom = 0;
 
@@ -2486,7 +2490,7 @@ function letFly() {
   windFrom = 0;
   if (!holdingBall()) return;
   const a = shotAim();
-  shooting = a.ideal !== null;
+  const shooting = a.ideal !== null;
   release(a.from, a.heading, a.pitch, shooting ? shotSpeed(a.ideal!, power) : tossSpeed(power));
   if (player.view === 'first') hands.shoot();
   else me.shoot();
@@ -2498,7 +2502,6 @@ function dropBall() {
   windFrom = 0;
   const f = player.view === 'first' ? player.camYaw + Math.PI : player.facing;
   const from = handsOf(store.you, new THREE.Vector3()) ?? camera.localToWorld(new THREE.Vector3(0, -0.25, -0.45));
-  shooting = false;
   release(from, f, 0, 0.25);
 }
 
@@ -2526,9 +2529,6 @@ ball.onHit = (hit, at) => {
   } else if (hit.speed > 0.6) sound.ball(hit.kind, at, hit.speed);
 };
 ball.onThrow = (by) => remotes.get(by)?.person.shoot();
-ball.onMiss = (by) => {
-  if (by === store.you && shooting) streak = 0;
-};
 ball.onBasket = (b) => {
   const mine = b.by === store.you;
   const points = b.three ? 3 : 2;
@@ -2536,12 +2536,18 @@ ball.onBasket = (b) => {
   const how = b.swish ? 'SWISH! ' : b.bank ? 'BANK! ' : '';
   popScore(mine ? `${how}+${points}` : `${clip(peer?.name ?? t('main.someone'), 16)} ${how}+${points}`, mine ? store.profile.color : (peer?.color ?? '#ff6b1a'));
   if (mine) {
-    streak++;
     const said = t(b.swish ? 'notices.ballSwish' : b.bank ? 'notices.ballBank' : 'notices.ballRim');
-    toast(t('notices.ballScored', { said, points, distance: b.distance.toFixed(1) }) + (streak > 1 ? t('notices.ballStreak', { n: streak }) : ''));
+    toast(t('notices.ballScored', { said, points, distance: b.distance.toFixed(1) }));
   }
-  if (b.three || (mine && streak >= 3)) confetti.burst(HOOP.rim.x + 0.3, HOOP.rim.y, HOOP.rim.z, 140, 0.7);
+  if (b.three) confetti.burst(HOOP.rim.x + 0.3, HOOP.rim.y, HOOP.rim.z, 140, 0.7);
 };
+/** The office counted your streak of baskets (its chips toast says it): 3 in a row and up, confetti. */
+function streakNews(n: number) {
+  if (n >= 3 && n > streak) confetti.burst(HOOP.rim.x + 0.3, HOOP.rim.y, HOOP.rim.z, 140, 0.7);
+  streak = n;
+  streakAt = performance.now();
+  hintKey = '';
+}
 
 /** Points floating up off the hoop, and fading. */
 const scorePops: { sprite: THREE.Sprite; t: number }[] = [];
@@ -2597,11 +2603,12 @@ function renderShotMeter(now: number) {
 /** With the ball in your hands: how to shoot, and how to put it down. */
 function ballHint(): Hint {
   const first = player.view === 'first';
+  const n = performance.now() - streakAt < STREAK_PAUSE ? streak : 0;
   return {
-    k: `${streak}|${first}|${!!windFrom}`,
+    k: `${n}|${first}|${!!windFrom}`,
     parts: [
       h('span.title', {}, t('main.ballInHand')),
-      streak > 1 ? aside(t('main.inARow', { n: streak })) : '',
+      n > 1 ? aside(t('main.inARow', { n })) : '',
       windFrom ? aside(t('main.letGoGreen')) : key(first ? t('main.keyEClick') : 'E', t('main.holdToShoot')),
       key('Q', t('main.dropIt')),
     ],

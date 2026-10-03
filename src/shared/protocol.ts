@@ -1365,6 +1365,8 @@ export type ServerMsg =
   | { t: 'cat'; cat: CatState }
   /** The basketball on your floor was picked up, thrown, or put back under the hoop. */
   | { t: 'ball'; ball: BallState }
+  /** Your streak of baskets in a row, as the office counts it: one more when a shot of yours goes in, 0 when it's over. */
+  | { t: 'ball.streak'; n: number }
   /** Someone on your floor stepped up to the dartboard or away, changed the options, started, threw or cleared a game. */
   | { t: 'darts'; darts: DartsState }
   /**
