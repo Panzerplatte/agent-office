@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HOOP, THREE_POINT, backboard, launch, simulate } from '../shared/hoop.js';
-import { CHIPS_TOP, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type ChipsTopRow, type EarnKind } from '../shared/chips.js';
+import { CHIPS_TOP, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, STREAK_PAUSE, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type ChipsTopRow, type EarnKind, type Earning } from '../shared/chips.js';
 
 /** How long after a change the file is written, gathering a burst of changes into one write (ms). */
 const SAVE_AFTER = 1000;
@@ -71,7 +71,8 @@ export interface ChangeOptions {
  *
  * Every change to a balance goes through here. `bet` and `award` are what the casino's games use:
  * whole, positive amounts only, and a bet that's more than the balance changes nothing. `earn` pays
- * for things done round the office, from the EARN table, with its cooldowns and daily caps.
+ * for things done round the office, from the EARN table, with its cooldowns and daily caps; `basket`
+ * pays for baskets, counting each person's streak of them in a row.
  */
 export class Chips {
   private data: Saved = { wallets: {}, once: [] };
@@ -89,6 +90,8 @@ export class Chips {
   private lastTop = '';
   /** The file is there but couldn't be read: never write over it, or everyone's chips are gone. */
   private unreadable = false;
+  /** Each person's streak of baskets in a row, and when the last one went in: kept while the office runs. */
+  private streaks = new Map<string, { n: number; at: number }>();
 
   constructor(dataDir: string, opts: ChipsOptions = {}) {
     this.file = path.join(dataDir, 'chips.json');
@@ -140,21 +143,43 @@ export class Chips {
   /**
    * `id` did something that pays (see EARN): its chips, unless it paid too recently (its cooldown) or
    * they've had its daily cap already today; up to what's left under the cap. Says how many it paid.
+   * One of a `streak` (2 and up) pays its chips × the streak, up to its streakMax.
    */
-  earn(id: string, kind: EarnKind): number {
-    const e: { chips: number; cooldown?: number; perDay?: number } = EARN[kind];
+  earn(id: string, kind: EarnKind, streak = 1): number {
+    const e: Earning = EARN[kind];
     if (!idOk(id) || !e) return 0;
     const w = this.wallet(id);
     const now = this.now();
     this.newDay(w, now);
     const last = w.last[kind];
     if (e.cooldown && last !== undefined && now - last < e.cooldown) return 0;
-    const pay = Math.min(e.chips, (e.perDay ?? Infinity) - (w.earned[kind] ?? 0));
+    const times = Math.max(1, Math.min(Math.floor(streak), e.streakMax ?? 1));
+    const pay = Math.min(e.chips * times, (e.perDay ?? Infinity) - (w.earned[kind] ?? 0));
     if (pay <= 0) return 0;
     w.earned[kind] = (w.earned[kind] ?? 0) + pay;
     w.last[kind] = now;
-    this.change(id, w, pay, kind, false);
+    this.change(id, w, pay, kind, false, streak > 1 ? streak : undefined);
     return pay;
+  }
+
+  /**
+   * A shot of `id`'s went in (a `basket`, or a `three`): one more in their streak (a new one after
+   * STREAK_PAUSE without a basket), paying its chips × the streak (see EARN). Too soon after their
+   * last one (its cooldown) it counts for nothing and says null; else their streak and what it paid.
+   */
+  basket(id: string, kind: 'basket' | 'three'): { streak: number; chips: number } | null {
+    if (!idOk(id)) return null;
+    const now = this.now();
+    const s = this.streaks.get(id);
+    if (s && now - s.at < (EARN[kind].cooldown ?? 0)) return null;
+    const n = s && now - s.at <= STREAK_PAUSE ? s.n + 1 : 1;
+    this.streaks.set(id, { n, at: now });
+    return { streak: n, chips: this.earn(id, kind, n) };
+  }
+
+  /** `id`'s streak of baskets is over (a shot of theirs missed, or they left the floor). Says whether they had one. */
+  streakOver(id: string): boolean {
+    return this.streaks.delete(id);
   }
 
   /**
@@ -248,9 +273,9 @@ export class Chips {
     w.earned = {};
   }
 
-  private change(id: string, w: Wallet, amount: number, reason: ChipsReason, quiet: boolean) {
+  private change(id: string, w: Wallet, amount: number, reason: ChipsReason, quiet: boolean, streak?: number) {
     w.balance += amount;
-    const entry: ChipsEntry = { at: this.now(), amount, reason: String(reason).slice(0, 40), balance: w.balance };
+    const entry: ChipsEntry = { at: this.now(), amount, reason: String(reason).slice(0, 40), balance: w.balance, ...(streak && { streak }) };
     w.ledger.unshift(entry);
     if (w.ledger.length > LEDGER_SIZE) w.ledger.length = LEDGER_SIZE;
     this.dirty();
@@ -327,6 +352,17 @@ export function basketOf(s: { x: number; y: number; z: number; vx: number; vy: n
   if (!sim.scored) return null;
   const far = Math.hypot(s.x - HOOP.rim.x, s.z - HOOP.rim.z) >= THREE_POINT;
   return { kind: far ? 'three' : 'basket', after: Math.round(sim.t * 1000) };
+}
+
+/**
+ * Whether a throw is a shot at the hoop (one that misses ends a streak), not a pass or a drop: up and
+ * out towards the rim, from no further off than you can shoot from (as the pages aim, main.ts's shotAim).
+ */
+export function shotAtHoop(s: { x: number; y: number; z: number; vx: number; vy: number; vz: number }): boolean {
+  const toRim = Math.atan2(HOOP.rim.x - s.x, HOOP.rim.z - s.z);
+  const heading = Math.atan2(s.vx, s.vz);
+  const off = Math.abs(Math.atan2(Math.sin(toRim - heading), Math.cos(toRim - heading)));
+  return s.vy > 0.5 && Math.hypot(s.vx, s.vz) > 0.5 && off < 0.6 && Math.hypot(HOOP.rim.x - s.x, HOOP.rim.z - s.z) < 16;
 }
 
 /** Messages that mean someone's really there (walking, playing, typing, talking), for `online`: not what a page sends by itself. */

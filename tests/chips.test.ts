@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Chips, activeMsg, basketOf, chipsId } from '../src/server/chips.js';
-import { CHIPS_TOP, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry } from '../src/shared/chips.js';
+import { Chips, activeMsg, basketOf, chipsId, shotAtHoop } from '../src/server/chips.js';
+import { CHIPS_TOP, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, STREAK_PAUSE, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry } from '../src/shared/chips.js';
 import { HOOP, THREE_POINT, idealSpeed } from '../src/shared/hoop.js';
 
 const MIN = 60_000;
@@ -160,7 +160,7 @@ test("earning stops at the day's cap (paying what's left under it) and starts ag
   // A cap that isn't a multiple: the last one pays the rest.
   const { chips: three, perDay: threeCap } = EARN.three;
   let t3 = 0;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     t3 += chips.earn(B, 'three');
     clock.now += EARN.three.cooldown;
   }
@@ -169,6 +169,85 @@ test("earning stops at the day's cap (paying what's left under it) and starts ag
   // Tomorrow.
   clock.now = new Date(2026, 9, 3, 9, 0).getTime();
   assert.equal(chips.earn(A, 'golfClose'), each);
+  rmSync(dir, { recursive: true });
+});
+
+test('baskets in a row pay more and more: 5, 10, 15 …, each with the streak on it', () => {
+  const { chips, clock, changes, dir } = bank();
+  const paid: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const r = chips.basket(A, 'basket');
+    assert.equal(r?.streak, i + 1);
+    paid.push(r!.chips);
+    clock.now += 3000;
+  }
+  assert.deepEqual(paid, [5, 10, 15, 20]);
+  assert.deepEqual(
+    changes.map((c) => [c.entry.amount, c.entry.reason, c.entry.streak]),
+    [
+      [5, 'basket', undefined],
+      [10, 'basket', 2],
+      [15, 'basket', 3],
+      [20, 'basket', 4],
+    ],
+  );
+  // Too soon after the last one (a second ball can't have flown yet): nothing, and the streak stays.
+  clock.now -= 2000;
+  assert.equal(chips.basket(A, 'basket'), null);
+  clock.now += 2000;
+  assert.equal(chips.basket(A, 'basket')?.chips, 25);
+  // Each person has their own streak.
+  assert.deepEqual(chips.basket(B, 'basket'), { streak: 1, chips: 5 });
+  rmSync(dir, { recursive: true });
+});
+
+test('a miss, leaving or a long pause ends the streak', () => {
+  const { chips, clock, dir } = bank();
+  chips.basket(A, 'basket');
+  clock.now += 3000;
+  assert.equal(chips.basket(A, 'basket')?.chips, 10);
+  assert.equal(chips.streakOver(A), true);
+  assert.equal(chips.streakOver(A), false);
+  clock.now += 3000;
+  assert.deepEqual(chips.basket(A, 'basket'), { streak: 1, chips: 5 });
+  clock.now += STREAK_PAUSE;
+  assert.equal(chips.basket(A, 'basket')?.chips, 10);
+  clock.now += STREAK_PAUSE + 1;
+  assert.deepEqual(chips.basket(A, 'basket'), { streak: 1, chips: 5 });
+  rmSync(dir, { recursive: true });
+});
+
+test('the streak pays up to streakMax times a basket, and three-pointers count their own base in the same streak', () => {
+  const { chips, clock, dir } = bank();
+  const max = EARN.basket.streakMax;
+  const paid: number[] = [];
+  for (let i = 0; i < max + 3; i++) {
+    paid.push(chips.basket(A, 'basket')!.chips);
+    clock.now += 3000;
+  }
+  assert.deepEqual(paid.slice(max - 1), [max * 5, max * 5, max * 5, max * 5]);
+  assert.equal(chips.basket(A, 'three')?.streak, max + 4);
+  clock.now += 3000;
+  assert.equal(chips.streakOver(A), true);
+  // A three on its own pays its own base, and a basket after it is the 2nd in a row.
+  assert.deepEqual(chips.basket(B, 'three'), { streak: 1, chips: EARN.three.chips });
+  clock.now += 3000;
+  assert.deepEqual(chips.basket(B, 'basket'), { streak: 2, chips: 2 * EARN.basket.chips });
+  clock.now += 3000;
+  assert.deepEqual(chips.basket(B, 'three'), { streak: 3, chips: 3 * EARN.three.chips });
+  rmSync(dir, { recursive: true });
+});
+
+test("a good streak isn't cut off early, but baskets still stop at the day's cap", () => {
+  const { chips, clock, dir } = bank();
+  let total = 0;
+  for (let i = 0; i < 30; i++) {
+    total += chips.basket(A, 'basket')!.chips;
+    clock.now += 3000;
+  }
+  // 5 + 10 + … + 50, then 50 a time: over the cap, which pays what's left and then nothing.
+  assert.equal(total, EARN.basket.perDay);
+  assert.ok(EARN.basket.perDay >= 5 * (1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10));
   rmSync(dir, { recursive: true });
 });
 
@@ -298,6 +377,10 @@ test('a throw at the rim goes in, and counts three from behind the line; a wild 
   assert.equal(shoot(THREE_POINT + 0.5)?.kind, 'three');
   assert.ok(shoot(3)!.after > 0);
   assert.equal(basketOf({ x: HOOP.rim.x + 3, y: 1.9, z: HOOP.rim.z, vx: 0, vy: 5, vz: 3 }), null);
+  // That's not a shot at the hoop (a miss of it keeps a streak going), nor is a drop; one at the rim is.
+  assert.equal(shotAtHoop({ x: HOOP.rim.x + 3, y: 1.9, z: HOOP.rim.z, vx: 0, vy: 5, vz: 3 }), false);
+  assert.equal(shotAtHoop({ x: HOOP.rim.x + 3, y: 1.9, z: HOOP.rim.z, vx: -0.25, vy: 0, vz: 0 }), false);
+  assert.equal(shotAtHoop({ x: HOOP.rim.x + 3, y: 1.9, z: HOOP.rim.z, vx: -4, vy: 6, vz: 0.3 }), true);
 });
 
 test('only what a person does counts as being active, not what a page sends by itself', () => {

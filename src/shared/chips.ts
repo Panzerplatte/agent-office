@@ -13,12 +13,14 @@ const MIN = 60_000;
 /**
  * One way to earn chips: `chips` each time, at most every `cooldown` ms, and at most `perDay` chips
  * from it in a day (the office's day, from midnight on its clock). A time that would go over the cap
- * pays what's left under it.
+ * pays what's left under it. With `streakMax`, a streak of them in a row pays `chips` × the streak
+ * (1st, 2nd, 3rd … in a row), the streak counting up to `streakMax` at most.
  */
 export interface Earning {
   chips: number;
   cooldown?: number;
   perDay?: number;
+  streakMax?: number;
 }
 
 /**
@@ -30,9 +32,12 @@ export const EARN = {
   daily: { chips: 100, perDay: 100 },
   /** Being about: every ONLINE_EVERY minutes you're active (moving, using things, typing). */
   online: { chips: 5, perDay: 100 },
-  /** A basket at the hoop on your floor, and one from behind the three-point line. */
-  basket: { chips: 5, cooldown: 20_000, perDay: 75 },
-  three: { chips: 15, cooldown: 20_000, perDay: 120 },
+  /**
+   * A basket at the hoop on your floor, and one from behind the three-point line: each one pays its
+   * chips × your streak of baskets in a row (see STREAK_PAUSE), so the 3rd basket in a row pays 15.
+   */
+  basket: { chips: 5, cooldown: 1500, perDay: 500, streakMax: 10 },
+  three: { chips: 15, cooldown: 1500, perDay: 500, streakMax: 10 },
   /** Darts: winning a game against others, and finishing one on your own. */
   dartsWin: { chips: 60, cooldown: 2 * MIN, perDay: 360 },
   dartsSolo: { chips: 10, cooldown: 5 * MIN, perDay: 30 },
@@ -52,6 +57,9 @@ export type EarnKind = keyof typeof EARN;
 export const ONLINE_EVERY = 10;
 export const ACTIVE_FOR = 5 * MIN;
 
+/** A streak of baskets ends with a shot of yours that misses, leaving the floor, or this long (ms) without a basket. */
+export const STREAK_PAUSE = 2 * MIN;
+
 /** How near the pin (m) a golf ball has to stop to pay `golfClose`. */
 export const GOLF_CLOSE = 3;
 
@@ -68,6 +76,8 @@ export interface ChipsEntry {
   amount: number;
   reason: ChipsReason;
   balance: number;
+  /** For a basket that's one of a streak: how many in a row it makes (2 and up). */
+  streak?: number;
 }
 
 /** Your chips as the page sees them: the balance and your latest changes, newest first. */

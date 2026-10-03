@@ -24,6 +24,13 @@ export function chipsWhy(reason: ChipsReason): string {
   return text === key ? reason : text;
 }
 
+/** Why a change came, with a basket's streak: "3er-Streak 🔥" (a three-pointer says so first). */
+function entryWhy(e: ChipsEntry): string {
+  if (!e.streak || e.streak < 2) return chipsWhy(e.reason);
+  const streak = t('main.chipsStreak', { n: e.streak });
+  return e.reason === 'three' ? `${chipsWhy(e.reason)}, ${streak}` : streak;
+}
+
 /** An amount with its sign, in your language's digits: "+50", "−200". */
 export function signedChips(n: number): string {
   return `${n > 0 ? '+' : '−'}${Math.abs(n).toLocaleString(locale())}`;
@@ -79,9 +86,9 @@ export function mountChips() {
   chips.onTop(() => topList?.replaceChildren(...topRows()));
 }
 
-/** Called with each change, when it isn't quiet: "+50 Chips: Won at darts". */
+/** Called with each change, when it isn't quiet: "+50 Chips: Won at darts", "+15 Chips: 3er-Streak 🔥". */
 export function chipsToast(change: ChipsEntry) {
-  toast(t('main.chipsToast', { amount: signedChips(change.amount), why: chipsWhy(change.reason) }));
+  toast(t('main.chipsToast', { amount: signedChips(change.amount), why: entryWhy(change) }));
 }
 
 /** The ledger window's list, while it's open. */
@@ -111,7 +118,7 @@ function ledgerRows(): HTMLElement[] {
     h(
       'li',
       { title: new Date(e.at).toLocaleString(locale()) },
-      h('span.why', {}, chipsWhy(e.reason), h('span.when', {}, timeAgo(e.at))),
+      h('span.why', {}, entryWhy(e), h('span.when', {}, timeAgo(e.at))),
       h('b.amount', { class: e.amount > 0 ? 'up' : 'down' }, signedChips(e.amount)),
       h('span.after', {}, e.balance.toLocaleString(locale())),
     ),

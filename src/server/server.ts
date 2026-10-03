@@ -37,7 +37,7 @@ import { Jukebox } from './jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
-import { Chips, activeMsg, basketOf, chipsId, type ChipsTopEntry } from './chips.js';
+import { Chips, activeMsg, basketOf, chipsId, shotAtHoop, type ChipsTopEntry } from './chips.js';
 import { Poker } from './poker.js';
 import { ACTIVE_FOR, GOLF_CLOSE, type ChipsTopRow } from '../shared/chips.js';
 import { SEARCH_MAX, SEARCH_MIN, searchKey } from '../shared/search.js';
@@ -1107,6 +1107,8 @@ export async function startServer(cfg: Config) {
       if (blackjack.away(id)) blackjackChanged();
       // At an online table, likewise: their seat waits for them a while.
       if (onlinebj.away(id)) onlinebjChanged();
+      // Gone from the office, their streak of baskets is over (unless a page of theirs is still about).
+      if (![...clients.values()].some((o) => o.chips === client.chips)) chips.streakOver(client.chips);
       for (const f of floors.values()) {
         f.workers.detachAll(id);
         f.changes.unwatchAll(id);
@@ -1147,14 +1149,31 @@ export async function startServer(cfg: Config) {
   /** Who's at the pool table, whatever their connection: their account, or their browser's own key (or, without one, just this connection). */
   const poolKey = (c: Client, key: unknown) => (c.accountId ? `account:${c.accountId}` : typeof key === 'string' && key ? `browser:${key.slice(0, 64)}` : `conn:${c.id}`);
   // --- Chips for games round the office (amounts, cooldowns and caps: EARN in shared/chips.ts) ---
-  /** A throw of `c`'s that goes in pays once it does, as long as nobody caught it on the way. */
+  /** `who`'s pages hear their streak of baskets in a row (0: it's over). */
+  const streakTo = (who: string, n: number) => {
+    for (const o of clients.values()) if (o.chips === who) sendTo(o, { t: 'ball.streak', n });
+  };
+  /** `c`'s streak of baskets is over (they left the floor). */
+  const streakOver = (c: Client) => {
+    if (chips.streakOver(c.chips)) streakTo(c.chips, 0);
+  };
+  /**
+   * A throw of `c`'s that goes in pays once it does, as long as nobody caught it on the way: its chips
+   * × their streak of baskets in a row. A shot at the hoop that misses ends the streak.
+   */
   const basketChips = (c: Client, floor: Floor) => {
     const shot = floor.court.state().shot;
     const made = shot && basketOf(shot);
-    if (!made) return;
+    if (!made) {
+      if (shot && shotAtHoop(shot)) streakOver(c);
+      return;
+    }
+    const who = c.chips;
     setTimeout(() => {
       const now = floor.court.state().shot;
-      if (now && now.by === shot.by && now.x === shot.x && now.vx === shot.vx && now.vz === shot.vz) chips.earn(c.chips, made.kind);
+      if (!now || now.by !== shot.by || now.x !== shot.x || now.vx !== shot.vx || now.vz !== shot.vz) return;
+      const paid = chips.basket(who, made.kind);
+      if (paid) streakTo(who, paid.streak);
     }, made.after).unref();
   };
   /** `c`'s dart just won the game: more for beating others than for finishing on your own. */
@@ -1285,6 +1304,8 @@ export async function startServer(cfg: Config) {
     // The ball stays on its floor, back under the hoop. That floor hears so once they're off it (see
     // arrived), or their own page would put it down before it knew they'd gone.
     const ballLeft = !!was?.court.left(c.id);
+    // Off the floor, their streak of baskets is over.
+    if (was) streakOver(c);
     // They step away from the dartboard: a place in a running game is kept for them, away.
     const dartsLeft = !!was?.darts.away(c.id);
     // At the pool table, they're away: their seat in a game that's running waits for them.
