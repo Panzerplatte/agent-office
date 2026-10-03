@@ -91,6 +91,7 @@ import { mountHud } from './ui/menu';
 import { openJukebox } from './ui/jukebox';
 import { openBookshelf } from './ui/bookshelf';
 import { Arcade } from './ui/arcade';
+import { OnlineBlackjack } from './ui/onlineblackjack';
 import { Cabinet } from './ui/cabinet';
 import { trackTitle } from '../shared/jukebox';
 import { GAME, scoreText } from '../shared/cabinet';
@@ -276,7 +277,12 @@ tvMat.color.set('#ffffff');
 tvMat.map = tvIdle;
 tvMat.toneMapped = false;
 // The boss's monitor upstairs: Minesweeper, from the boss's chair.
-const arcade = new Arcade(office.bossScreen);
+// Online blackjack on it too, at a table with everyone else at a PC on any floor (net and sound come up below).
+const onlineBlackjack = new OnlineBlackjack(
+  (msg) => net.send(msg),
+  (kind) => sound.blackjack(kind),
+);
+const arcade = new Arcade(office.bossScreen, onlineBlackjack);
 
 // ---- The rooftop bar ------------------------------------------------------------------------------
 /** Up on the roof: built the first time anyone goes up there. */

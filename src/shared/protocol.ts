@@ -6,6 +6,7 @@ import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
 import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
+import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { ChipsEntry, ChipsState } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -1210,6 +1211,21 @@ export type ClientMsg =
   | { t: 'slots.leave' }
   /** At your machine, pull the lever for `bet` chips (one of BETS in shared/slots.ts); the office spins. */
   | { t: 'slots.spin'; bet: number }
+  // Online blackjack at the office PCs (see server/onlineblackjack.ts): sitting at your floor's PC, you join a table with everyone else at one.
+  /** At your floor's PC (the boss's chair), sit down at an online table: back in your own seat if one's kept for you. */
+  | { t: 'onlinebj.join' }
+  /** Away from the online table (you stopped playing at the PC): your seat waits for you a while. */
+  | { t: 'onlinebj.away' }
+  /** Give up your seat at the online table for good (your hands in a round stand, and are still paid). */
+  | { t: 'onlinebj.leave' }
+  /** At your online table: the same as the casino's blackjack.bet / deal / act / insure / skip. */
+  | { t: 'onlinebj.bet'; amount: number }
+  | { t: 'onlinebj.deal' }
+  | { t: 'onlinebj.act'; action: BjAction }
+  | { t: 'onlinebj.insure'; take: boolean }
+  | { t: 'onlinebj.skip' }
+  /** Pull a face at your online table, for everyone there (and on the monitors showing it). */
+  | { t: 'onlinebj.emote'; emote: OnlineEmote }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1241,6 +1257,8 @@ export type ServerMsg =
       me: Me;
       /** Chips: your balance and latest changes (see shared/chips.ts). */
       chips: ChipsState;
+      /** Online blackjack at the PCs: every table, for the PC monitors and for playing. */
+      onlinebj: OnlineBlackjackState;
       notify: NotifyState;
       machine: MachineState;
       /** Outside the windows: the same on every floor. */
@@ -1327,6 +1345,10 @@ export type ServerMsg =
   | { t: 'blackjack'; blackjack: BlackjackState }
   /** The casino's slot machines: who's at which, each one's last spin (a new one sets its reels going), and the jackpot. */
   | { t: 'slots'; slots: SlotsState }
+  /** The online blackjack tables at the PCs changed: to everyone, on every floor (each floor's PC monitor shows its player's table). */
+  | { t: 'onlinebj'; onlinebj: OnlineBlackjackState }
+  /** Someone at online table `table`, in seat `seat`, pulled a face. */
+  | { t: 'onlinebj.emote'; table: number; seat: number; emote: OnlineEmote }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

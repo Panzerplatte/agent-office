@@ -52,6 +52,7 @@ import { CASINO, casinoSpotOf } from '../shared/casino.js';
 import { BlackjackTable } from './blackjack.js';
 import { SLOT_MACHINES } from '../shared/casino.js';
 import { Slots } from './slots.js';
+import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -244,6 +245,21 @@ export async function startServer(cfg: Config) {
   const slotsChanged = () => {
     const json = JSON.stringify({ t: 'slots', slots: slots.state() } satisfies ServerMsg);
     for (const c of clients.values()) if (c.peer.floor === CASINO && c.ws.readyState === WebSocket.OPEN) c.ws.send(json);
+  };
+  // Online blackjack at the office PCs: tables for everyone sitting at a PC, on any floor, betting
+  // through the same chips bank (quietly: the screen shows it). Every page hears it, for the monitors.
+  const onlinebj = new OnlineBlackjack(
+    {
+      balance: (who) => chips.balance(who),
+      take: (who, amount, why) => chips.bet(who, amount, why, { quiet: true }),
+      give: (who, amount, why) => void chips.award(who, amount, why, { quiet: true }),
+    },
+    { changed: () => onlinebjChanged() },
+  );
+  const onlinebjChanged = () => broadcast({ t: 'onlinebj', onlinebj: onlinebj.state() });
+  /** Getting up from the PC (or leaving the floor) leaves the online table: away, the seat kept for a while. */
+  const onlinebjSeat = (c: Client) => {
+    if (!atPc(c.peer.seat) && onlinebj.away(c.id)) onlinebjChanged();
   };
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
@@ -1027,6 +1043,7 @@ export async function startServer(cfg: Config) {
       limits: limits.state,
       me,
       chips: chips.state(client.chips),
+      onlinebj: onlinebj.state(),
       notify: webhook.state(),
       machine: machine.state(),
       sky: sky.state,
@@ -1064,6 +1081,8 @@ export async function startServer(cfg: Config) {
       stopPlaying(client);
       // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
       if (blackjack.away(id)) blackjackChanged();
+      // At an online table, likewise: their seat waits for them a while.
+      if (onlinebj.away(id)) onlinebjChanged();
       for (const f of floors.values()) {
         f.workers.detachAll(id);
         f.changes.unwatchAll(id);
@@ -1221,6 +1240,8 @@ export async function startServer(cfg: Config) {
     const blackjackLeft = blackjack.away(c.id);
     // Out of the casino, their slot machine is kept for them a while.
     if (slots.away(c.id)) slotsChanged();
+    // Off the floor their PC is on: away from the online table, the seat kept for a while.
+    const onlinebjLeft = onlinebj.away(c.id);
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1235,7 +1256,7 @@ export async function startServer(cfg: Config) {
     // An issue card belongs to the board it came off, which is on the floor they left; a drink stays at the bar.
     delete c.peer.carrying;
     delete c.peer.drink;
-    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft, blackjackLeft };
+    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft, blackjackLeft, onlinebjLeft };
   };
 
   const arrived = (c: Client, left: ReturnType<typeof leave>) => {
@@ -1245,6 +1266,7 @@ export async function startServer(cfg: Config) {
     if (left.dartsLeft && left.was) dartsChanged(left.was);
     if (left.poolLeft && left.was) poolChanged(left.was);
     if (left.blackjackLeft) blackjackChanged();
+    if (left.onlinebjLeft) onlinebjChanged();
   };
 
   /**
@@ -1354,6 +1376,7 @@ export async function startServer(cfg: Config) {
         else delete c.peer.seat;
         broadcast({ t: 'peer.update', peer: c.peer }, c.id);
         blackjackSeat(c);
+        onlinebjSeat(c);
         break;
       }
       case 'carry': {
@@ -1563,6 +1586,36 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (someone else's machine, a bet they haven't got) is told how it really is.
         if (changed) slotsChanged();
         else sendTo(c, { t: 'slots', slots: slots.state() });
+        break;
+      }
+      case 'onlinebj.join':
+      case 'onlinebj.away':
+      case 'onlinebj.leave':
+      case 'onlinebj.bet':
+      case 'onlinebj.deal':
+      case 'onlinebj.act':
+      case 'onlinebj.insure':
+      case 'onlinebj.skip': {
+        // Only sitting at a PC (the boss's chair on their floor) to sit down at a table; anything else at the table they're at.
+        if (msg.t === 'onlinebj.join' && (!atPc(c.peer.seat) || !c.peer.floor)) break;
+        const o = onlinebj;
+        const changed =
+          msg.t === 'onlinebj.join' ? o.join(c.id, c.peer.name, c.chips, c.peer.floor!)
+          : msg.t === 'onlinebj.away' ? o.away(c.id)
+          : msg.t === 'onlinebj.leave' ? o.left(c.id)
+          : msg.t === 'onlinebj.bet' ? o.bet(c.id, msg.amount)
+          : msg.t === 'onlinebj.deal' ? o.deal(c.id)
+          : msg.t === 'onlinebj.act' ? o.act(c.id, msg.action)
+          : msg.t === 'onlinebj.insure' ? o.insure(c.id, msg.take)
+          : o.skip(c.id);
+        // Whoever it didn't work for (not their turn, not the chips for it) is told how it really is.
+        if (changed) onlinebjChanged();
+        else sendTo(c, { t: 'onlinebj', onlinebj: o.state() });
+        break;
+      }
+      case 'onlinebj.emote': {
+        const e = onlinebj.emote(c.id, msg.emote);
+        if (e) broadcast({ t: 'onlinebj.emote', ...e });
         break;
       }
       case 'dog.pet':
