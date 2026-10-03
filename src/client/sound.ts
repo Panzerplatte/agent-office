@@ -118,6 +118,8 @@ export class OfficeSound {
   private musicVolume = 0.5;
   private musicMuted = false;
   private jukebox: JukeboxPlay | null = null;
+  /** Where that jukebox stands: your floor's lounge, or the casino's (see setJukeboxAt). */
+  private jukeboxAt: Pos = JUKEBOX;
   private tune: TunePlayer | null = null;
   private stream: HTMLAudioElement | null = null;
   private musicTimer = 0;
@@ -205,7 +207,7 @@ export class OfficeSound {
     this.outside.gain.value = 0;
     this.outside.connect(this.ambience);
     // The jukebox skips the master (it has its own volume) and keeps playing while the tab is hidden.
-    this.musicIn = this.panner(JUKEBOX, MUSIC_REF, MUSIC_ROLLOFF);
+    this.musicIn = this.panner(this.jukeboxAt, MUSIC_REF, MUSIC_ROLLOFF);
     this.musicTone = biquad(ctx, 'lowpass', 16000, 0.5);
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = 0;
@@ -1677,6 +1679,12 @@ export class OfficeSound {
     this.applyJukebox(true);
   }
 
+  /** Where the jukebox you hear stands: your floor's (JUKEBOX), or down in the casino its own (CASINO_JUKEBOX). */
+  setJukeboxAt(at: Pos) {
+    this.jukeboxAt = at;
+    if (this.musicIn) place(this.musicIn, at.x, at.y, at.z);
+  }
+
   /** Your own jukebox volume, 0–1, apart from the office sounds'. */
   setMusicVolume(volume: number, muted: boolean) {
     this.musicVolume = Math.max(0, Math.min(1, volume));
@@ -1770,7 +1778,7 @@ export class OfficeSound {
 
   private jukeboxDistance(): number {
     const l = this.listener;
-    return Math.hypot(l.x - JUKEBOX.x, l.y - JUKEBOX.y, l.z - JUKEBOX.z);
+    return Math.hypot(l.x - this.jukeboxAt.x, l.y - this.jukeboxAt.y, l.z - this.jukeboxAt.z);
   }
 
   // ---- Plumbing --------------------------------------------------------------------------------
