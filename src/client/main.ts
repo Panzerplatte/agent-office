@@ -329,6 +329,10 @@ let casino: Casino | null = null;
 function theCasino(): Casino {
   if (!casino) {
     casino = buildCasino();
+    // The board over the cashier's cage: the building's biggest balances, kept up to date.
+    const board = casino.chipBoard;
+    board.setRows(chips.top);
+    chips.onTop((top) => board.setRows(top));
     casino.group.visible = false;
     scene.add(casino.group);
     casinoJukebox = addCasinoJukebox(casino);
@@ -1034,6 +1038,7 @@ net.onMessage((msg) => {
   switch (msg.t) {
     case 'welcome': {
       chips.set(msg.chips);
+      chips.setTop(msg.chipsTop ?? []);
       // A few pings, to line this page's clock up with the office's for the jukebox.
       for (let i = 0; i < 5; i++) setTimeout(() => net.send({ t: 'ping', at: performance.now() }), 200 + i * 500);
       const mine = store.peers.get(store.you);
@@ -1155,6 +1160,9 @@ net.onMessage((msg) => {
     case 'chips':
       chips.set(msg.chips, msg.change);
       if (!msg.quiet) chipsToast(msg.change);
+      break;
+    case 'chips.top':
+      chips.setTop(msg.top);
       break;
     case 'gong':
       gongRang(msg.why, msg.pr);

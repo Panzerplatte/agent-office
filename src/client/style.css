@@ -291,6 +291,11 @@ button { font-family: inherit; }
 .chips-ledger .why { flex: 1; min-width: 0; }
 .chips-ledger .when { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
 .chips-ledger .amount { font-variant-numeric: tabular-nums; }
+.chips-window h3 { margin: 14px 0 6px; font-size: 15px; }
+.chips-top li { align-items: center; }
+.chips-top li.you { outline: 2px solid var(--accent); }
+.chips-top .rank { width: 1.6em; text-align: center; color: var(--muted); }
+.chips-top .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 .chips-ledger .amount.up { color: #07875f; }
 .chips-ledger .amount.down { color: #c9184a; }
 .chips-ledger .after { min-width: 56px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }

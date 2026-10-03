@@ -147,12 +147,14 @@ export interface ChipBoardRow {
   color?: string;
   /** Online in the office right now. */
   online?: boolean;
+  /** It's whoever's looking: their row is lit up. */
+  you?: boolean;
 }
 
 /** The board over the cashier's cage: everyone's chips, most first. */
 export interface ChipBoard {
   mesh: THREE.Mesh;
-  /** Draws the board: the title, then a row for each (the first 10 fit). With none, it says there's nothing yet. */
+  /** Draws the board: the title, then a row for each (the first 10 fit), medals for the first three. With none, it says there's nothing yet. */
   setRows(rows: readonly ChipBoardRow[]): void;
 }
 
@@ -185,6 +187,9 @@ function canvasTexture(w: number, h: number, draw?: (g: CanvasRenderingContext2D
 }
 
 /** Sets `g`'s font to `px` pixels (`weight`), or smaller so `text` fits in `width`. */
+/** The chips board's first three places. */
+const MEDALS = ['🥇', '🥈', '🥉'];
+
 function fitFont(g: CanvasRenderingContext2D, text: string, px: number, width: number, weight = 900) {
   const font = (n: number) => `${weight} ${n}px Nunito, ui-rounded, system-ui, sans-serif`;
   g.font = font(px);
@@ -1304,10 +1309,19 @@ export function buildCasino(): Casino {
         const row = i % 5;
         const x = 40 + col * (W / 2);
         const y = 116 + row * 54;
+        if (r.you) {
+          g.fillStyle = 'rgba(255, 209, 102, 0.22)';
+          g.strokeStyle = '#ffd166';
+          g.lineWidth = 3;
+          g.beginPath();
+          g.roundRect(x - 16, y - 25, W / 2 - 48, 50, 12);
+          g.fill();
+          g.stroke();
+        }
         g.textAlign = 'left';
         g.fillStyle = i === 0 ? '#ffd166' : '#8d86a0';
-        g.font = '900 34px Nunito, ui-rounded, system-ui, sans-serif';
-        g.fillText(`${i + 1}`, x, y);
+        fitFont(g, MEDALS[i] ?? `${i + 1}`, 34, 40);
+        g.fillText(MEDALS[i] ?? `${i + 1}`, x - (MEDALS[i] ? 6 : 0), y);
         g.fillStyle = r.color ?? '#adb5bd';
         g.beginPath();
         g.arc(x + 58, y, 12, 0, Math.PI * 2);

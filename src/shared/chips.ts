@@ -76,6 +76,20 @@ export interface ChipsState {
   ledger: ChipsEntry[];
 }
 
+/** How many people the casino's chips board (and the HUD's chips window) ranks. */
+export const CHIPS_TOP = 10;
+
+/** One place on the chips leaderboard: who (their name and colour, never their id), and what they have. */
+export interface ChipsTopRow {
+  name: string;
+  chips: number;
+  color?: string;
+  /** In the office right now (on any floor). */
+  online?: boolean;
+  /** It's you (only on your own page's copy). */
+  you?: boolean;
+}
+
 /** A positive whole number of chips, small enough to add up exactly: the only kind of amount a bet or payout takes. */
 export function chipsAmountOk(n: unknown): n is number {
   return typeof n === 'number' && Number.isSafeInteger(n) && n > 0;

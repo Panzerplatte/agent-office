@@ -37,9 +37,9 @@ import { Jukebox } from './jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
-import { Chips, activeMsg, basketOf, chipsId } from './chips.js';
+import { Chips, activeMsg, basketOf, chipsId, type ChipsTopEntry } from './chips.js';
 import { Poker } from './poker.js';
-import { ACTIVE_FOR, GOLF_CLOSE } from '../shared/chips.js';
+import { ACTIVE_FOR, GOLF_CLOSE, type ChipsTopRow } from '../shared/chips.js';
 import { SEARCH_MAX, SEARCH_MIN, searchKey } from '../shared/search.js';
 import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
@@ -217,7 +217,15 @@ export async function startServer(cfg: Config) {
     onChange: (who, state, change, quiet) => {
       for (const c of clients.values()) if (c.chips === who) sendTo(c, { t: 'chips', chips: state, change, ...(quiet ? { quiet } : {}) });
     },
+    // The leaderboard, for the casino's board: to everyone, each with their own row marked.
+    onTop: (top) => {
+      for (const c of clients.values()) sendTo(c, { t: 'chips.top', top: chipsTopFor(c, top) });
+    },
+    nameOf: (who) => (who.startsWith('account:') ? accounts.get(who.slice('account:'.length))?.name : undefined),
+    online: (who) => [...clients.values()].some((c) => c.chips === who),
   });
+  /** The leaderboard as `c` sees it: names and balances, their own row marked, nobody's id. */
+  const chipsTopFor = (c: Client, top: ChipsTopEntry[]): ChipsTopRow[] => top.map(({ id, ...row }) => (id === c.chips ? { ...row, you: true } : row));
   // Blackjack: the casino's table, one for the whole building. Every stake and payout goes through the
   // chips bank (quietly: the table's panel shows them), by the chips id they sat down with.
   const blackjack = new BlackjackTable(
@@ -1037,7 +1045,7 @@ export async function startServer(cfg: Config) {
     };
     clients.set(id, client);
     if (account) accounts.seen(account.id);
-    chips.seen(client.chips);
+    chips.seen(client.chips, { name, color: client.peer.color });
     ws.on('pong', () => (client.isAlive = true));
 
     sendTo(client, {
@@ -1055,6 +1063,7 @@ export async function startServer(cfg: Config) {
       limits: limits.state,
       me,
       chips: chips.state(client.chips),
+      chipsTop: chipsTopFor(client, chips.top()),
       onlinebj: onlinebj.state(),
       notify: webhook.state(),
       machine: machine.state(),
@@ -1090,6 +1099,7 @@ export async function startServer(cfg: Config) {
     });
     ws.on('close', () => {
       clients.delete(id);
+      chips.topCheck(); // offline now, on the leaderboard
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
       // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
@@ -1442,6 +1452,7 @@ export async function startServer(cfg: Config) {
         if (name && !c.accountId) c.peer.name = name;
         if (COLOR_RE.test(msg.color)) c.peer.color = msg.color;
         c.peer.look = sanitizeLook(msg.look, c.peer.look);
+        chips.seen(c.chips, { name: c.peer.name, color: c.peer.color });
         broadcast({ t: 'peer.update', peer: c.peer });
         break;
       }

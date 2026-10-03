@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HOOP, THREE_POINT, backboard, launch, simulate } from '../shared/hoop.js';
-import { EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type EarnKind } from '../shared/chips.js';
+import { CHIPS_TOP, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type ChipsTopRow, type EarnKind } from '../shared/chips.js';
 
 /** How long after a change the file is written, gathering a burst of changes into one write (ms). */
 const SAVE_AFTER = 1000;
@@ -9,6 +9,8 @@ const SAVE_AFTER = 1000;
 const FORGET_BROWSER_MS = 180 * 24 * 60 * 60_000;
 /** How many one-off payouts (see once) are remembered. */
 const ONCE_KEPT = 2000;
+/** How long after a change the leaderboard is looked at again, gathering a burst of changes into one (ms). */
+const TOP_AFTER = 1000;
 
 /** One person's chips, as saved. */
 interface Wallet {
@@ -25,6 +27,14 @@ interface Wallet {
   online: number;
   /** When they were last about. */
   seen: number;
+  /** What they were called, and their colour, when last about: for the leaderboard while they're away. */
+  name?: string;
+  color?: string;
+}
+
+/** A place on the leaderboard, with whose it is (`id`, which stays on the server: a browser's id is its key). */
+export interface ChipsTopEntry extends ChipsTopRow {
+  id: string;
 }
 
 interface Saved {
@@ -39,6 +49,13 @@ export interface ChipsOptions {
   onChange?: (id: string, state: ChipsState, entry: ChipsEntry, quiet: boolean) => void;
   /** How long after a change it's written to disk (ms); tests pass 0 and call flush. */
   saveAfter?: number;
+  /** The leaderboard (see top) changed: sent at most once every `topAfter` ms, and only when it's different. */
+  onTop?: (top: ChipsTopEntry[]) => void;
+  topAfter?: number;
+  /** Someone's name as it is now, when the office knows better than what they were last called (an account's). */
+  nameOf?: (id: string) => string | undefined;
+  /** Whether `id` is in the office right now. */
+  online?: (id: string) => boolean;
 }
 
 /** Options for a bet or payout: `quiet` changes the balance without a toast on the person's page (their game shows it). */
@@ -63,6 +80,13 @@ export class Chips {
   private onChange: ChipsOptions['onChange'];
   private saveAfter: number;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private onTop: ChipsOptions['onTop'];
+  private topAfter: number;
+  private nameOf: ChipsOptions['nameOf'];
+  private online: ChipsOptions['online'];
+  private topTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The leaderboard as last sent, to send it only when it's different. */
+  private lastTop = '';
   /** The file is there but couldn't be read: never write over it, or everyone's chips are gone. */
   private unreadable = false;
 
@@ -71,6 +95,10 @@ export class Chips {
     this.now = opts.now ?? Date.now;
     this.onChange = opts.onChange;
     this.saveAfter = opts.saveAfter ?? SAVE_AFTER;
+    this.onTop = opts.onTop;
+    this.topAfter = opts.topAfter ?? TOP_AFTER;
+    this.nameOf = opts.nameOf;
+    this.online = opts.online;
     this.load();
   }
 
@@ -145,11 +173,47 @@ export class Chips {
     }
   }
 
-  /** `id` came in: they have a wallet from now on (START_CHIPS, if they're new), seen now. */
-  seen(id: string) {
+  /**
+   * `id` came in (or changed their name or colour): they have a wallet from now on (START_CHIPS, if
+   * they're new), seen now, and they're on the leaderboard under `who`'s name.
+   */
+  seen(id: string, who: { name?: string; color?: string } = {}) {
     if (!idOk(id)) return;
-    this.wallet(id).seen = this.now();
+    const w = this.wallet(id);
+    w.seen = this.now();
+    if (who.name) w.name = who.name.slice(0, 24);
+    if (who.color) w.color = who.color;
     this.dirty();
+    this.topCheck();
+  }
+
+  /**
+   * The `n` biggest balances, most first (the same balance: by name), whether they're online or not.
+   * Someone the office has no name for (from before it kept them) isn't on it until they're back.
+   */
+  top(n = CHIPS_TOP): ChipsTopEntry[] {
+    const rows: ChipsTopEntry[] = [];
+    for (const [id, w] of Object.entries(this.data.wallets)) {
+      const name = this.nameOf?.(id) ?? w.name;
+      if (!name) continue;
+      rows.push({ id, name, chips: w.balance, ...(w.color ? { color: w.color } : {}), ...(this.online?.(id) ? { online: true } : {}) });
+    }
+    rows.sort((a, b) => b.chips - a.chips || a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
+    return rows.slice(0, n);
+  }
+
+  /** Something the leaderboard shows may have changed (someone came or went): it's looked at again shortly, and sent if it's different. */
+  topCheck() {
+    if (!this.onTop || this.topTimer) return;
+    this.topTimer = setTimeout(() => {
+      this.topTimer = null;
+      const top = this.top();
+      const json = JSON.stringify(top);
+      if (json === this.lastTop) return;
+      this.lastTop = json;
+      this.onTop?.(top);
+    }, this.topAfter);
+    this.topTimer.unref?.();
   }
 
   /** True the first time it's given `key` (like "pr:<floor>:<n>"), false ever after: for payouts that happen once. */
@@ -191,6 +255,7 @@ export class Chips {
     if (w.ledger.length > LEDGER_SIZE) w.ledger.length = LEDGER_SIZE;
     this.dirty();
     this.onChange?.(id, this.state(id), { ...entry }, quiet);
+    this.topCheck();
   }
 
   private dirty() {
@@ -220,6 +285,8 @@ export class Chips {
           last: w.last && typeof w.last === 'object' ? w.last : {},
           online: Number.isInteger(w.online) ? w.online : 0,
           seen,
+          ...(typeof w.name === 'string' && w.name ? { name: w.name.slice(0, 24) } : {}),
+          ...(typeof w.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(w.color) ? { color: w.color } : {}),
         };
       }
       this.data = { wallets, once: Array.isArray(saved.once) ? saved.once.filter((k) => typeof k === 'string') : [] };

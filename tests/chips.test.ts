@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Chips, activeMsg, basketOf, chipsId } from '../src/server/chips.js';
-import { EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry } from '../src/shared/chips.js';
+import { CHIPS_TOP, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry } from '../src/shared/chips.js';
 import { HOOP, THREE_POINT, idealSpeed } from '../src/shared/hoop.js';
 
 const MIN = 60_000;
@@ -213,6 +213,68 @@ test('once is true only the first time', () => {
   assert.equal(chips.once('pr:f:1'), true);
   assert.equal(chips.once('pr:f:1'), false);
   assert.equal(chips.once('pr:f:2'), true);
+  rmSync(dir, { recursive: true });
+});
+
+test('the leaderboard ranks everyone by balance (online or not), by their names, at most CHIPS_TOP of them', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'agent-office-chips-'));
+  const online = new Set<string>([B]);
+  // An account goes by its name as it is now; anyone else by what they were last called.
+  const chips = new Chips(dir, { saveAfter: 0, nameOf: (id) => (id === A ? 'Ada Lovelace' : undefined), online: (id) => online.has(id) });
+  chips.seen(A, { name: 'Ada', color: '#ff0000' });
+  chips.seen(B, { name: 'Bob', color: '#00ff00' });
+  chips.seen('browser:nameless0000000000');
+  chips.award(B, 500, 'slots.win');
+  chips.bet(A, 300, 'roulette.bet');
+  for (let i = 0; i < 12; i++) chips.seen(`browser:extra${String(i).padStart(16, '0')}`, { name: `Extra ${String(i).padStart(2, '0')}` });
+  const top = chips.top();
+  assert.equal(top.length, CHIPS_TOP);
+  assert.deepEqual(top[0], { id: B, name: 'Bob', chips: START_CHIPS + 500, color: '#00ff00', online: true });
+  // The same balance: by name. Ada (700) is below all the extras (1000), so she's off the board; nobody nameless is on it.
+  assert.deepEqual(top.slice(1).map((r) => r.name), ['Extra 00', 'Extra 01', 'Extra 02', 'Extra 03', 'Extra 04', 'Extra 05', 'Extra 06', 'Extra 07', 'Extra 08']);
+  assert.deepEqual(chips.top(20).at(-1), { id: A, name: 'Ada Lovelace', chips: START_CHIPS - 300, color: '#ff0000' });
+  assert.ok(!chips.top(50).some((r) => r.id === 'browser:nameless0000000000'));
+  // Names and colours are kept, for when they're away after a restart.
+  chips.flush();
+  const again = new Chips(dir, { saveAfter: 0 });
+  assert.deepEqual(again.top()[0], { id: B, name: 'Bob', chips: START_CHIPS + 500, color: '#00ff00' });
+  rmSync(dir, { recursive: true });
+});
+
+test('the leaderboard is sent once for a burst of changes, and only when it is different', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'agent-office-chips-'));
+  const sent: string[][] = [];
+  const online = new Set<string>();
+  const chips = new Chips(dir, { saveAfter: 0, topAfter: 20, online: (id) => online.has(id), onTop: (top) => sent.push(top.map((r) => `${r.name}:${r.chips}${r.online ? '*' : ''}`)) });
+  const settle = () => new Promise((r) => setTimeout(r, 40));
+  chips.seen(A, { name: 'Ada' });
+  chips.seen(B, { name: 'Bob' });
+  chips.award(A, 10, 'slots.win');
+  chips.award(B, 50, 'slots.win');
+  await settle();
+  assert.deepEqual(sent, [['Bob:1050', 'Ada:1010']]);
+  // A bet and a payout that cancel out: nothing to send.
+  chips.bet(A, 5, 'roulette.bet');
+  chips.award(A, 5, 'roulette.win');
+  await settle();
+  assert.equal(sent.length, 1);
+  // The order changes.
+  chips.award(A, 100, 'poker.win');
+  await settle();
+  assert.deepEqual(sent.at(-1), ['Ada:1110', 'Bob:1050']);
+  // Bob comes online: a check shows it.
+  online.add(B);
+  chips.topCheck();
+  await settle();
+  assert.deepEqual(sent.at(-1), ['Ada:1110', 'Bob:1050*']);
+  // Someone with no chips moving outside it: a change, but not to the top, and only the top is compared.
+  for (let i = 0; i < 12; i++) chips.seen(`browser:extra${String(i).padStart(16, '0')}`, { name: `Extra ${i}` });
+  await settle();
+  const n = sent.length;
+  chips.bet('browser:extra0000000000000009', 1, 'slots.spin'); // "Extra 9" sorts last of them, off the board
+  await settle();
+  assert.equal(sent.length, n);
+  chips.flush();
   rmSync(dir, { recursive: true });
 });
 
