@@ -9,9 +9,10 @@ import { JUKEBOX_TUNES, type JukeboxState } from '../shared/jukebox';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
+import { emptyBlackjack, type BlackjackState } from '../shared/blackjack';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'pool';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'pool' | 'blackjack';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -186,6 +187,8 @@ class Store {
   darts: DartsState = emptyDarts();
   /** The pool table on this floor: who's at it on which side, and the game (see shared/pool.ts). */
   pool: PoolState = emptyPool();
+  /** The blackjack table in the casino (only while you're down there): the seats, the round and the clock (see shared/blackjack.ts). */
+  blackjack: BlackjackState = emptyBlackjack();
   /** The shot that came with the latest news of the table, if one did: to roll it out (see world/pool.ts). */
   poolShot: PoolPlayback | undefined;
   /** Outside the windows; null until the server says. */
@@ -269,8 +272,9 @@ class Store {
     this.ball = v.ball ?? {};
     this.darts = v.darts ?? emptyDarts();
     this.pool = v.pool ?? emptyPool();
+    this.blackjack = v.blackjack ?? emptyBlackjack();
     this.poolShot = undefined;
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool'] as Topic[]) this.emit(t);
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -414,6 +418,10 @@ class Store {
         this.pool = msg.pool;
         this.poolShot = msg.shot;
         this.emit('pool');
+        break;
+      case 'blackjack':
+        this.blackjack = msg.blackjack;
+        this.emit('blackjack');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

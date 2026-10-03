@@ -21,7 +21,9 @@ import { djFrame, djTime } from './dnb';
 import { openBar } from './ui/bar';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
-import { CASINO } from '../shared/casino';
+import { CASINO, casinoSpotOf } from '../shared/casino';
+import { BlackjackPlayer } from './blackjack';
+import { allowed } from '../shared/blackjack';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, roundText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
@@ -622,6 +624,39 @@ function stepUpToPool() {
   cueist.start(store.pool, store.you);
 }
 
+// ---- Blackjack --------------------------------------------------------------------------------------
+// The casino's table: sit on one of its stools and you're at it (see blackjack.ts). The cards and the
+// stakes on the felt are for everyone down there.
+const blackjack = new BlackjackPlayer(player, camera, canvas, {
+  bet: (amount) => net.send({ t: 'blackjack.bet', amount }),
+  deal: () => net.send({ t: 'blackjack.deal' }),
+  act: (action) => net.send({ t: 'blackjack.act', action }),
+  insure: (take) => net.send({ t: 'blackjack.insure', take }),
+  skip: () => net.send({ t: 'blackjack.skip' }),
+  leave: () => net.send({ t: 'blackjack.leave' }),
+  getUp: () => player.seat && standUp(),
+});
+blackjack.onCard = (at, flip) => sound.blackjack(flip ? 'flip' : 'card', at);
+/** Whether the next news of the table is all new (you just came down): what's on the felt is just there, not dealt. */
+let blackjackFresh = true;
+store.on('blackjack', () => {
+  const before = store.blackjack.round;
+  blackjack.sync(store.blackjack, store.you, chips.balance, blackjackFresh);
+  blackjackFresh = false;
+  const mine = before?.phase === 'done' ? before.players.find((p) => store.blackjack.seats.some((s) => s.id === p.id && s.peer === store.you)) : undefined;
+  if (mine && mine !== blackjackWon && (mine.paid ?? 0) > mine.hands.reduce((a, h) => a + h.bet, 0) + (mine.insurance ?? 0)) sound.blackjack('win');
+  blackjackWon = mine;
+});
+let blackjackWon: unknown;
+chips.onChange(() => blackjack.setBalance(chips.balance));
+/** Every frame: at the blackjack table while you sit on one of its stools down in the casino, and not otherwise. */
+function blackjackSeat() {
+  if (casino) blackjack.attach(casino.blackjack);
+  const at = downstairs ? casinoSpotOf(player.seat?.key) : undefined;
+  if (at?.game === 'blackjack') blackjack.sit(at.spot);
+  else if (blackjack.active) blackjack.stop();
+}
+
 sky.onThunder = (delay, loud) => sound.thunder(delay, loud);
 const hanger = new Hanger(net, camera, canvas, player, office, gallery);
 scene.add(hanger.ghost.group);
@@ -790,6 +825,7 @@ net.onMessage((msg) => {
     // Whatever's in the dartboard there is just there: nobody threw it as you walked in.
     dartsFresh = true;
     poolFresh = true;
+    blackjackFresh = true;
   }
   // Back after a reconnect, which let go of your place at the dartboard: ask for it again (before the board's news says you're not at it).
   if (msg.t === 'welcome' && darter.active) darter.rejoin(msg.you);
@@ -2653,6 +2689,7 @@ function renderHint() {
   if (golf.active && !modalOpen()) return renderGolfHint(el);
   if (darter.active && !modalOpen()) return renderDartsHint(el);
   if (cueist.active && !modalOpen()) return renderPoolHint(el);
+  if (blackjack.active && !modalOpen()) return renderBlackjackHint(el);
   const withBall = holdingBall();
   const emoting = me.emoteLooping ? me.emoteId : null;
   if ((!target && !carrying && !withBall && !emoting) || modalOpen()) {
@@ -3039,6 +3076,35 @@ function renderPoolHint(el: HTMLElement) {
   el.classList.remove('hidden');
 }
 
+/** The keys for your moves at the blackjack table (see BlackjackPanel.key). */
+const BJ_KEYS = [
+  ['hit', '1', 'menus.bjHit'],
+  ['stand', '2', 'menus.bjStand'],
+  ['double', '3', 'menus.bjDouble'],
+  ['split', '4', 'menus.bjSplit'],
+] as const;
+/** At the blackjack table: whose turn it is, your keys on yours (only the moves you have), and how to get up. */
+function renderBlackjackHint(el: HTMLElement) {
+  const title = (text: string) => h('span.title', {}, text);
+  const d = store.blackjack;
+  const turn = d.round?.turn ? d.round.players[d.round.turn.player] : undefined;
+  const mine = !!turn && d.seats.some((s) => s.id === turn.id && s.peer === store.you);
+  const reserved = blackjack.reserved;
+  const seat = d.seats.find((o) => o.peer === store.you);
+  const can = d.round && seat ? allowed(d.round, seat.id) : [];
+  const k = `blackjack|${d.stage}|${turn?.name}|${mine}|${reserved}|${can}`;
+  if (k === hintKey) return;
+  hintKey = k;
+  const done = key(t('main.keyEsc'), t('main.bjStepAway'));
+  const parts = reserved
+    ? [title(t('main.bjReserved', { name: clip(reserved, 24) })), done]
+    : mine
+      ? [title(t('main.bjYourTurn')), ...BJ_KEYS.filter(([a]) => can.includes(a)).map(([a, k, label]) => key(k, t(label))), done]
+      : [title(t('main.bjTable')), aside(t(turn ? 'main.bjTheirTurn' : 'main.bjAbout', { name: clip(turn?.name ?? '', 24) })), done];
+  el.replaceChildren(...parts);
+  el.classList.remove('hidden');
+}
+
 function renderHangHint(el: HTMLElement) {
   const spot = hanger.spot;
   const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}`;
@@ -3052,7 +3118,7 @@ function renderHangHint(el: HTMLElement) {
 let crossKey = '';
 const finePointer = window.matchMedia('(pointer: fine)').matches;
 function renderCrosshair() {
-  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active && !cueist.active;
+  const show = player.view === 'first' && !modalOpen() && !golf.active && !darter.active && !cueist.active && !blackjack.active;
   const free = show && finePointer && player.canLock && !player.locked;
   const k = `${show}|${!!target}|${free}|${relookOnKey}`;
   if (k === crossKey) return;
@@ -3185,6 +3251,15 @@ window.addEventListener('keydown', (e) => {
   // At the pool table, the same: E does nothing, as it mustn't take you out of the game. Esc or walking
   // off steps away, Leave in the panel leaves (the mouse or Space shoots, Q goes round, see Cueist).
   if (cueist.active && (e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'KeyQ' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) return;
+  // At the blackjack table, 1–4 play your hand and E does nothing (it would get you up mid-round): Esc
+  // or walking off gets you up, your seat kept, and Leave in the panel gives it up.
+  if (blackjack.active && (e.code === 'Escape' || e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'KeyQ' || e.code in DESK_KEYS || /^(?:Digit|Numpad)[1-7]$/.test(e.code))) {
+    if (e.code === 'Escape') {
+      blackjack.stop();
+      standUp();
+    } else blackjack.key(e.code);
+    return;
+  }
   // With the ball in your hands, E winds up a shot (let go to shoot) and Q drops it.
   if (holdingBall() && (e.code === 'KeyE' || e.code === 'KeyQ')) {
     if (e.repeat) return;
@@ -3412,7 +3487,7 @@ canvas.addEventListener('pointerleave', () => (pointer = null));
 
 player.onClick = (ndc) => {
   // At the tee, a click is you steadying the mouse to aim: nothing else is in reach. At the dartboard, the mouse aims.
-  if (modalOpen() || golf.active || darter.active || cueist.active) return;
+  if (modalOpen() || golf.active || darter.active || cueist.active || blackjack.active) return;
   if (emoteWheel.isOpen) return emoteWheel.click();
   // The ball in your hands: press to wind up, let go (or click again, with no mouse captured) to shoot.
   if (holdingBall()) {
@@ -3712,6 +3787,8 @@ function frame(ts?: number) {
   boardDarts.update(dt);
   if (cueist.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) cueist.stop();
   cueist.update(dt);
+  blackjackSeat();
+  blackjack.update(dt);
   poolBalls.update();
   showTheirCue();
   // A dance that keeps going doesn't go with a club in your hands or up the ladder: it stops for everyone.
@@ -3736,7 +3813,7 @@ function frame(ts?: number) {
   // In first person you are the camera; in third, hide yourself when it's zoomed in right behind your head.
   // At the tee the camera's behind the ball, and you're the one holding the club; at the pool table you're there too, unless you're in the way.
   me.root.visible = golf.active || (cueist.active && !cueist.inTheWay(me.root.position)) || (!cueist.active && !firstPerson && camera.position.distanceTo(headPos.set(player.pos.x, player.pos.y + 1.3, player.pos.z)) > 1.5);
-  if (firstPerson && !golf.active && !darter.active && !cueist.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
+  if (firstPerson && !golf.active && !darter.active && !cueist.active && !blackjack.active) hands.update(dt, t, { yaw: player.camYaw, pitch: player.lookPitch, walkPhase: player.walkPhase, walking: player.moving && player.grounded, airborne: !player.grounded, jitter: player.jitter, grip });
   // Down a pole: the view widens and the edges streak past.
   const rush = reduceMotion.matches ? 0 : climber.rush;
   const fov = 55 + rush * 16;
@@ -3847,7 +3924,7 @@ function frame(ts?: number) {
   }
 
   aimedNote = null;
-  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active) target = null;
+  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active || blackjack.active) target = null;
   else if (firstPerson) {
     const aim = aimedAt(CROSSHAIR);
     target = aim?.near ? aim.it : (mySeat() ?? ballAtFeet());
@@ -3886,7 +3963,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active) {
+  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
@@ -3939,7 +4016,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;
