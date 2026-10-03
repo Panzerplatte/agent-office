@@ -50,6 +50,8 @@ import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, isDrink } from '../shared/rooftop.js';
 import { CASINO, casinoSpotOf } from '../shared/casino.js';
 import { BlackjackTable } from './blackjack.js';
+import { SLOT_MACHINES } from '../shared/casino.js';
+import { Slots } from './slots.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -235,6 +237,13 @@ export async function startServer(cfg: Config) {
     const at = c.peer.floor === CASINO ? casinoSpotOf(c.peer.seat) : undefined;
     const changed = at?.game === 'blackjack' ? blackjack.join(c.id, c.peer.name, c.chips, at.spot) : blackjack.away(c.id);
     if (changed) blackjackChanged();
+  };
+  // The casino's slot machines, one bank for the whole building: bets and payouts go through the chips,
+  // and the jackpot they share is kept on disk. Everyone in the casino hears about every spin.
+  const slots = new Slots(SLOT_MACHINES.length, chips, { dataDir: cfg.dataDir, onPaid: () => slotsChanged() });
+  const slotsChanged = () => {
+    const json = JSON.stringify({ t: 'slots', slots: slots.state() } satisfies ServerMsg);
+    for (const c of clients.values()) if (c.peer.floor === CASINO && c.ws.readyState === WebSocket.OPEN) c.ws.send(json);
   };
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
@@ -1063,6 +1072,8 @@ export async function startServer(cfg: Config) {
         // Their seat in a pool game that's running is kept for them, away, until they're back.
         if (f.pool.away(id)) poolChanged(f);
       }
+      // Their slot machine is kept for them a while.
+      if (slots.away(id)) slotsChanged();
       broadcast({ t: 'peer.leave', id });
       if (account) accountsChanged();
       floorsChanged();
@@ -1208,6 +1219,8 @@ export async function startServer(cfg: Config) {
     const poolLeft = !!was?.pool.away(c.id);
     // Up from the casino: away from the blackjack table, their seat kept.
     const blackjackLeft = blackjack.away(c.id);
+    // Out of the casino, their slot machine is kept for them a while.
+    if (slots.away(c.id)) slotsChanged();
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1530,6 +1543,26 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (not their turn, not the chips for it) is told how it really is.
         if (changed) blackjackChanged();
         else sendTo(c, { t: 'blackjack', blackjack: b.state() });
+        break;
+      }
+      case 'slots.look':
+      case 'slots.join':
+      case 'slots.away':
+      case 'slots.leave':
+      case 'slots.spin': {
+        if (c.peer.floor !== CASINO) break;
+        // Only from the stool at that machine, and only while they're still on it.
+        const spot = casinoSpotOf(c.peer.seat);
+        const at = spot?.game === 'slots' ? spot.spot : -1;
+        const changed =
+          msg.t === 'slots.join' ? at === msg.machine && slots.join(c.id, msg.machine, c.peer.name, c.chips)
+          : msg.t === 'slots.away' ? slots.away(c.id)
+          : msg.t === 'slots.leave' ? slots.left(c.id)
+          : msg.t === 'slots.spin' ? at >= 0 && slots.machineOf(c.id) === at && slots.spin(c.id, msg.bet)
+          : false;
+        // Whoever it didn't work for (someone else's machine, a bet they haven't got) is told how it really is.
+        if (changed) slotsChanged();
+        else sendTo(c, { t: 'slots', slots: slots.state() });
         break;
       }
       case 'dog.pet':
@@ -2216,6 +2249,8 @@ export async function startServer(cfg: Config) {
   const shutdown = (keep = false) => {
     clearInterval(heartbeat);
     clearInterval(chipsMinute);
+    // Spins still on their reels are paid before the chips are written down.
+    slots.flush();
     chips.flush();
     clearInterval(resync);
     clearTimeout(floorsTimer);

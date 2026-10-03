@@ -396,6 +396,23 @@ button { font-family: inherit; }
 .bj-amount.down { color: var(--ink); }
 .bj-move kbd { font-size: 10px; opacity: .7; }
 #hud:has(.bj:not(.hidden)) #toasts { top: auto; bottom: 120px; }
+/* At a slot machine: on the right, out of the way of the machine's screen. */
+.slots { position: absolute; right: 16px; top: 80px; width: min(280px, calc(100vw - 32px)); padding: 10px 12px; display: grid; gap: 6px; font-size: 13px; font-weight: 800; }
+.slots-title { font-weight: 900; font-size: 15px; text-align: center; }
+.slots-jackpot { text-align: center; font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; color: #b5179e; }
+.slots-bet-label { font-size: 12px; color: var(--muted); }
+.slots-bets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.slots .btn { padding: 4px 6px; font-size: 13px; }
+.slots .btn:disabled { opacity: .4; cursor: not-allowed; }
+.slots > .slots-spin { padding: 8px; font-size: 16px; }
+.slots-status { text-align: center; color: var(--muted); min-height: 1.3em; }
+.slots-status.won { color: var(--ink); font-size: 15px; font-weight: 900; }
+.slots-status.jackpot { color: #b5179e; font-size: 18px; font-weight: 900; }
+.slots-foot { display: flex; justify-content: space-between; gap: 6px; }
+.slots-table { display: grid; gap: 2px; border-top: 2px solid var(--ink); padding-top: 6px; }
+.slots-pay { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+.slots-pay-symbols { letter-spacing: 1px; }
+.slots-note { font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 4px; }
 .caffeine.jittery .bar span { background: var(--bad); }
 @keyframes jitters { 50% { transform: translate(1px, -1px) rotate(-1.5deg); } }
 @media (prefers-reduced-motion: reduce) { .caffeine.jittery { animation: none; } }
