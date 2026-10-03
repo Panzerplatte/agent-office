@@ -13,15 +13,16 @@ interface Saved {
 }
 
 /**
- * The lounge jukebox on one floor, saved in .agent-office/jukebox.json. It only says what's on and
- * since when; every browser plays it for itself, from the same point.
+ * The lounge jukebox on one floor, saved in .agent-office/jukebox.json (the casino's, in the office's
+ * own data dir as casino-jukebox.json). It only says what's on and since when; every browser plays it
+ * for itself, from the same point.
  */
 export class Jukebox {
   private s: Saved = { on: false, track: JUKEBOX_TUNES[0].id, startedAt: Date.now() };
   private file: string;
 
-  constructor(dataDir: string) {
-    this.file = path.join(dataDir, 'jukebox.json');
+  constructor(dataDir: string, file = 'jukebox.json') {
+    this.file = path.join(dataDir, file);
     this.load();
   }
 

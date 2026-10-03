@@ -1,3 +1,4 @@
+import { CASINO } from '../../shared/casino';
 import { JUKEBOX_TUNES, STREAM, checkStreamUrl, trackTitle, tuneById } from '../../shared/jukebox';
 import { noticeText, t } from '../i18n';
 import type { Net } from '../net';
@@ -12,6 +13,8 @@ export function openJukebox(net: Net, openVolume: () => void) {
   const url = h('input', { type: 'text', placeholder: t('windows.jukebox.urlPlaceholder'), 'aria-label': t('windows.jukebox.urlLabel'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
   const playUrl = h('button.btn.primary', { type: 'button' }, t('windows.jukebox.playStream'));
   const volume = h('button.btn', { type: 'button' }, t('windows.jukebox.volume'));
+  // Down in the casino, it's the casino's jukebox, for everyone down there.
+  const casino = store.floor === CASINO;
   const el = h(
     'div.modal.jukebox',
     { role: 'dialog', 'aria-label': t('windows.jukebox.title') },
@@ -24,9 +27,9 @@ export function openJukebox(net: Net, openVolume: () => void) {
       list,
       h('label', { style: 'margin-top:16px' }, t('windows.jukebox.orStream')),
       h('div.webhook', {}, url, playUrl),
-      h('p.setting-note', {}, t('windows.jukebox.streamNote')),
+      h('p.setting-note', {}, t(casino ? 'windows.jukebox.casinoStreamNote' : 'windows.jukebox.streamNote')),
     ),
-    h('footer', {}, h('span.grow', {}, t('windows.jukebox.footer')), volume),
+    h('footer', {}, h('span.grow', {}, t(casino ? 'windows.jukebox.casinoFooter' : 'windows.jukebox.footer')), volume),
   );
 
   const button = (label: string, title: string, send: () => void, primary = false) => h(primary ? 'button.btn.primary' : 'button.btn', { type: 'button', title, onclick: send }, label);

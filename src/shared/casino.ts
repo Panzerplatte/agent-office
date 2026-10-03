@@ -164,6 +164,11 @@ export const CHIP_BOARD = { x: 14.8, y: 3.72, z: CASINO_ROOM.minZ + 0.06, width:
 export const CASINO_BAR = { x: 15.9, minZ: 1.2, maxZ: 8.4, depth: 0.7, height: 1.1 } as const;
 /** The lounge, in the south-east corner: sofas round a low table. */
 export const CASINO_LOUNGE = { x: 8.6, z: 8.4 } as const;
+/**
+ * The casino's jukebox: the office's (JUKEBOX in layout.ts, the same size), against the east wall in
+ * the corner between the bar and the lounge, facing into the room (-x). `y` is its speaker.
+ */
+export const CASINO_JUKEBOX = { x: CASINO_ROOM.maxX - 0.42, y: 0.75, z: 10.4, width: 1.3, depth: 0.72, height: 1.85 } as const;
 
 /** A box on the floor that nobody walks through: the tables, the machines, the counters. */
 export interface Footprint {
@@ -193,6 +198,7 @@ export function casinoFootprints(): Footprint[] {
   // The bar's counter, and the bartender's side of it up to the wall.
   out.push({ minX: CASINO_BAR.x - CASINO_BAR.depth / 2, maxX: CASINO_ROOM.maxX, minZ: CASINO_BAR.minZ, maxZ: CASINO_BAR.maxZ, top: 9 });
   out.push({ minX: CASINO_LOUNGE.x - 0.6, maxX: CASINO_LOUNGE.x + 0.6, minZ: CASINO_LOUNGE.z - 0.4, maxZ: CASINO_LOUNGE.z + 0.4, top: 0.42 });
+  out.push({ minX: CASINO_JUKEBOX.x - CASINO_JUKEBOX.depth / 2 - 0.05, maxX: CASINO_ROOM.maxX, minZ: CASINO_JUKEBOX.z - CASINO_JUKEBOX.width / 2 - 0.05, maxZ: CASINO_JUKEBOX.z + CASINO_JUKEBOX.width / 2 + 0.05, top: CASINO_JUKEBOX.height });
   return out;
 }
 

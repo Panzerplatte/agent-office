@@ -91,6 +91,8 @@ import { renderLimits } from './ui/limits';
 import { MachineTexture, officeFull, pressureNote } from './world/machine';
 import { mountHud } from './ui/menu';
 import { openJukebox } from './ui/jukebox';
+import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
+import type { JukeboxView } from './world/jukebox';
 import { openBookshelf } from './ui/bookshelf';
 import { Arcade } from './ui/arcade';
 import { OnlineBlackjack } from './ui/onlineblackjack';
@@ -326,6 +328,8 @@ function theCasino(): Casino {
     casino = buildCasino();
     casino.group.visible = false;
     scene.add(casino.group);
+    casinoJukebox = addCasinoJukebox(casino);
+    casinoJukebox.show(store.jukebox.on, trackTitle(store.jukebox));
     noOutline(casino.group);
   }
   return casino;
@@ -389,10 +393,14 @@ store.on('cat', () => cat.sync(store.cat, store.catStart));
 sound.setMusicVolume(settings.music, settings.musicMuted);
 sound.onMusicError = (text) => toast(text, 'warn');
 // The jukebox on your floor: everyone there hears it from the same bar, and its lights say what's on.
+// Down in the casino it's the casino's own, by the lounge (built with the casino).
+let casinoJukebox: JukeboxView | null = null;
 store.on('jukebox', () => {
   const j = store.jukebox;
+  sound.setJukeboxAt(jukeboxAt(store.floor === CASINO));
   sound.setJukebox(j.on ? { track: j.track, url: j.url, startedAt: j.startedAt, since: j.since } : null);
   office.jukebox.show(j.on, trackTitle(j));
+  casinoJukebox?.show(j.on, trackTitle(j));
 });
 // The arcade cabinet next to it: BLOCKFALL up close, and on its screen for everyone else on the floor.
 const cabinet = new Cabinet(office.cabinet.screen, net, { openTerminal: (id) => openWorkerTerminal(id), sound: (kind, lines) => sound.arcade(kind, lines) });
@@ -4075,6 +4083,7 @@ function frame(ts?: number) {
   if (downstairs && casino) {
     lightCasino();
     casino.update(t, dt);
+    casinoJukebox?.update(t, dt, sound.beat());
     if (!pokerFelt) {
       pokerFelt = new PokerFelt(casino.poker);
       pokerFelt.render(store.poker, true);
