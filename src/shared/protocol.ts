@@ -5,6 +5,7 @@ import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
 import type { BjAction, BlackjackState } from './blackjack.js';
+import type { SlotsState } from './slots.js';
 import type { ChipsEntry, ChipsState } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -1198,6 +1199,17 @@ export type ClientMsg =
   | { t: 'blackjack.skip' }
   /** Give up your seat at the blackjack table for good (your hands in a round stand, and are still paid). */
   | { t: 'blackjack.leave' }
+  /** In the casino: how the slot machines are (the office answers with `slots`). */
+  | { t: 'slots.look' }
+  /**
+   * Sitting on the stool at slot machine `machine` (0-based, see SLOT_MACHINES): it's yours, unless
+   * it's someone else's (or kept for them). Step away from it (it's kept for you a while), or leave it.
+   */
+  | { t: 'slots.join'; machine: number }
+  | { t: 'slots.away' }
+  | { t: 'slots.leave' }
+  /** At your machine, pull the lever for `bet` chips (one of BETS in shared/slots.ts); the office spins. */
+  | { t: 'slots.spin'; bet: number }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1313,6 +1325,8 @@ export type ServerMsg =
   | { t: 'pool'; pool: PoolState; shot?: PoolPlayback }
   /** The blackjack table in the casino changed (a seat, a bet, a card, the clock's stage): to everyone down there. */
   | { t: 'blackjack'; blackjack: BlackjackState }
+  /** The casino's slot machines: who's at which, each one's last spin (a new one sets its reels going), and the jackpot. */
+  | { t: 'slots'; slots: SlotsState }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).
