@@ -76,6 +76,7 @@ export function mountChips() {
     setTimeout(() => fly.remove(), 1400);
     if (ledgerList) ledgerList.replaceChildren(...ledgerRows());
   });
+  chips.onTop(() => topList?.replaceChildren(...topRows()));
 }
 
 /** Called with each change, when it isn't quiet: "+50 Chips: Won at darts". */
@@ -85,6 +86,23 @@ export function chipsToast(change: ChipsEntry) {
 
 /** The ledger window's list, while it's open. */
 let ledgerList: HTMLElement | null = null;
+/** Its leaderboard, likewise. */
+let topList: HTMLElement | null = null;
+
+/** The building's biggest balances, as on the casino's board: medals for the first three, your own row marked. */
+function topRows(): HTMLElement[] {
+  if (!chips.top.length) return [h('li.empty', {}, t('main.chipsLedgerEmpty'))];
+  return chips.top.map((r, i) =>
+    h(
+      'li',
+      { class: r.you ? 'you' : '' },
+      h('span.rank', {}, ['🥇', '🥈', '🥉'][i] ?? `${i + 1}`),
+      h('span.dot', { style: `background: ${r.color ?? '#adb5bd'}` }),
+      h('span.why', {}, r.name),
+      h('b.amount', {}, r.chips.toLocaleString(locale())),
+    ),
+  );
+}
 
 function ledgerRows(): HTMLElement[] {
   const { ledger } = chips.state;
@@ -103,12 +121,13 @@ function ledgerRows(): HTMLElement[] {
 function openLedger() {
   const close = h('button.btn.close', { 'aria-label': t('menus.close') }, '✕');
   ledgerList = h('ul.chips-ledger', {}, ...ledgerRows());
+  topList = h('ol.chips-ledger.chips-top', {}, ...topRows());
   const el = h(
     'div.modal.chips-window',
     { role: 'dialog', 'aria-label': t('main.chipsLedger') },
     h('header', {}, h('h2', {}, chipIcon(), ' ', t('main.chipsLedger'), ' ', h('span.chips-total', {}, chips.balance.toLocaleString(locale()))), close),
-    h('div.body', {}, ledgerList, h('p.chips-note', {}, t('main.chipsEarnNote')), h('p.chips-note', {}, t('main.chipsNote'))),
+    h('div.body', {}, ledgerList, h('h3', {}, t('main.chipsTop')), topList, h('p.chips-note', {}, t('main.chipsEarnNote')), h('p.chips-note', {}, t('main.chipsNote'))),
   );
-  const modal = openModal(el, { onClose: () => (ledgerList = null) });
+  const modal = openModal(el, { onClose: () => (ledgerList = topList = null) });
   close.addEventListener('click', () => modal.close());
 }

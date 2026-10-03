@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  BLACKJACK_FELT,
   BLACKJACK_TABLE,
   CASHIER,
   CASINO_BAR,
@@ -20,6 +21,7 @@ import {
 import { ELEVATOR, ELEVATOR_FRONT, WALL_T } from '../../shared/layout';
 import { t } from '../i18n';
 import { Worker } from './character';
+import { buildCasinoBartender } from './casinobartender';
 import { buildElevator, type Elevator } from './elevator';
 import type { Collider, Interactable } from './office';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
@@ -145,12 +147,14 @@ export interface ChipBoardRow {
   color?: string;
   /** Online in the office right now. */
   online?: boolean;
+  /** It's whoever's looking: their row is lit up. */
+  you?: boolean;
 }
 
 /** The board over the cashier's cage: everyone's chips, most first. */
 export interface ChipBoard {
   mesh: THREE.Mesh;
-  /** Draws the board: the title, then a row for each (the first 10 fit). With none, it says there's nothing yet. */
+  /** Draws the board: the title, then a row for each (the first 10 fit), medals for the first three. With none, it says there's nothing yet. */
   setRows(rows: readonly ChipBoardRow[]): void;
 }
 
@@ -183,6 +187,9 @@ function canvasTexture(w: number, h: number, draw?: (g: CanvasRenderingContext2D
 }
 
 /** Sets `g`'s font to `px` pixels (`weight`), or smaller so `text` fits in `width`. */
+/** The chips board's first three places. */
+const MEDALS = ['🥇', '🥈', '🥉'];
+
 function fitFont(g: CanvasRenderingContext2D, text: string, px: number, width: number, weight = 900) {
   const font = (n: number) => `${weight} ${n}px Nunito, ui-rounded, system-ui, sans-serif`;
   g.font = font(px);
@@ -798,16 +805,13 @@ export function buildCasino(): Casino {
     parts.add(mesh(halfMoonRail(L, W, rail, 0.045), toon(RAIL), 0, TH - 0.01, 0));
     g.add(mergeByMaterial(parts));
     const cx0 = -W / 2;
-    // Each seat's bet, on an arc in front of it, and its cards just inside that, toward the dealer.
-    const bjSpots = T.seats.map((s) => {
-      const a = Math.atan2((s.z + 0.52) / 1.5, s.x / 1.62);
-      return { cards: { x: +(Math.cos(a) * 0.5).toFixed(3), y: +(cx0 + Math.sin(a) * 0.48).toFixed(3) }, bet: { x: +(Math.cos(a) * 0.74).toFixed(3), y: +(cx0 + Math.sin(a) * 0.72).toFixed(3) } };
-    });
+    // Each seat's cards in front of it, and its bet behind them, nearer the rail (see BLACKJACK_FELT).
+    const bjSpots = BLACKJACK_FELT.spots;
     const feltTex = feltTexture(L, W, (c, label) => {
       // The house rules in an arc over the betting boxes, and a betting box in front of each seat.
-      label('BLACKJACK PAYS 3 TO 2', 0, cx0 + 0.2, 0.07, 'rgba(255, 230, 160, 0.8)', { weight: 900, width: 1.1 });
-      label('Dealer must draw to 16 and stand on all 17s', 0, cx0 + 0.27, 0.032, 'rgba(255, 230, 160, 0.7)', { weight: 700, width: 1 });
-      label('INSURANCE PAYS 2 TO 1', 0, cx0 + 0.32, 0.03, 'rgba(255, 230, 160, 0.45)', { weight: 700 });
+      label('BLACKJACK PAYS 3 TO 2', 0, cx0 + 0.36, 0.06, 'rgba(255, 230, 160, 0.8)', { weight: 900, width: 0.8 });
+      label('Dealer must draw to 16 and stand on all 17s', 0, cx0 + 0.41, 0.028, 'rgba(255, 230, 160, 0.7)', { weight: 700, width: 0.6 });
+      label('INSURANCE PAYS 2 TO 1', 0, cx0 + 0.45, 0.026, 'rgba(255, 230, 160, 0.45)', { weight: 700 });
       c.strokeStyle = 'rgba(255, 230, 160, 0.7)';
       c.lineWidth = 0.01;
       for (const s of bjSpots) {
@@ -829,13 +833,13 @@ export function buildCasino(): Casino {
     wedge.rotation.x = -0.4;
     shoe.add(wedge);
     shoe.add(mesh(new THREE.BoxGeometry(0.064, 0.003, 0.09), toon('#b91c1c'), 0, 0.03, 0.15, false));
-    shoe.position.set(0.66, 0, cx0 + 0.2);
+    shoe.position.set(0.78, 0, cx0 + 0.15);
     shoe.rotation.y = -0.5;
     top.add(shoe);
     const discard = new THREE.Group();
     discard.add(mesh(new THREE.BoxGeometry(0.1, 0.11, 0.1), toon('#3a3a3a'), 0, 0.055, 0, false));
     discard.add(mesh(new THREE.BoxGeometry(0.066, 0.06, 0.092), toon('#b91c1c'), 0, 0.09, 0, false));
-    discard.position.set(-0.66, 0, cx0 + 0.18);
+    discard.position.set(-0.78, 0, cx0 + 0.12);
     top.add(discard);
     group.add(g);
     lamp(T.x, T.z, 1.8, T.rotY);
@@ -847,11 +851,11 @@ export function buildCasino(): Casino {
       group: g,
       ...feltFrame(top),
       spots: bjSpots,
-      dealerSpot: { x: 0, y: cx0 + 0.36 },
+      dealerSpot: BLACKJACK_FELT.dealer,
       dealer,
       chipTray: tray,
       shoe,
-      shoeMouth: { x: 0.6, y: cx0 + 0.32 },
+      shoeMouth: { x: 0.71, y: cx0 + 0.28 },
       discard,
     };
   })();
@@ -1305,10 +1309,19 @@ export function buildCasino(): Casino {
         const row = i % 5;
         const x = 40 + col * (W / 2);
         const y = 116 + row * 54;
+        if (r.you) {
+          g.fillStyle = 'rgba(255, 209, 102, 0.22)';
+          g.strokeStyle = '#ffd166';
+          g.lineWidth = 3;
+          g.beginPath();
+          g.roundRect(x - 16, y - 25, W / 2 - 48, 50, 12);
+          g.fill();
+          g.stroke();
+        }
         g.textAlign = 'left';
         g.fillStyle = i === 0 ? '#ffd166' : '#8d86a0';
-        g.font = '900 34px Nunito, ui-rounded, system-ui, sans-serif';
-        g.fillText(`${i + 1}`, x, y);
+        fitFont(g, MEDALS[i] ?? `${i + 1}`, 34, 40);
+        g.fillText(MEDALS[i] ?? `${i + 1}`, x - (MEDALS[i] ? 6 : 0), y);
         g.fillStyle = r.color ?? '#adb5bd';
         g.beginPath();
         g.arc(x + 58, y, 12, 0, Math.PI * 2);
@@ -1360,11 +1373,7 @@ export function buildCasino(): Casino {
   statics.add(bar);
   group.add(mesh(new THREE.PlaneGeometry(blen - 0.8, 1.5).rotateY(-Math.PI / 2), glow('#b8641f'), R.maxX - 0.05, 1.75, bz, false));
   group.add(mesh(new THREE.BoxGeometry(0.02, 0.05, blen), glow('#ff2bd6'), front - 0.02, 0.06, bz, false));
-  const bartender = new Worker(t('world.casinoBartender'), '#e76f51');
-  bartender.setStatus('idle', false);
-  bartender.root.position.set(B.x + B.depth / 2 + 0.55, 0, bz);
-  bartender.root.rotation.y = -Math.PI / 2;
-  group.add(bartender.root);
+  const bartender = buildCasinoBartender(group, interactables);
   const barStool = stoolParts(0.74, '#9b1d20');
   for (let i = 1; i <= 5; i++) placeSeat(barStool, `casino-stool-${i}`, group, interactables);
 

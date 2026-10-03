@@ -33,12 +33,13 @@ import type { ChatLine, ClientMsg, FloorInfo, FloorView, Me, MeetingRequest, Pee
 import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider, isSmokable } from '../shared/protocol.js';
 import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layout.js';
 import { JUKEBOX_TUNES, STREAM } from '../shared/jukebox.js';
+import { Jukebox } from './jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
-import { Chips, activeMsg, basketOf, chipsId } from './chips.js';
+import { Chips, activeMsg, basketOf, chipsId, type ChipsTopEntry } from './chips.js';
 import { Poker } from './poker.js';
-import { ACTIVE_FOR, GOLF_CLOSE } from '../shared/chips.js';
+import { ACTIVE_FOR, GOLF_CLOSE, type ChipsTopRow } from '../shared/chips.js';
 import { SEARCH_MAX, SEARCH_MIN, searchKey } from '../shared/search.js';
 import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
@@ -48,7 +49,7 @@ import { WHISTLE_SERVER_EVERY, WhistleGate, whistleHearers } from '../shared/whi
 import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
-import { ROOF, isDrink } from '../shared/rooftop.js';
+import { ROOF, drinkAt } from '../shared/rooftop.js';
 import { CASINO, casinoSpotOf } from '../shared/casino.js';
 import { hasAshtray } from '../shared/smoking.js';
 import { BlackjackTable } from './blackjack.js';
@@ -217,7 +218,15 @@ export async function startServer(cfg: Config) {
     onChange: (who, state, change, quiet) => {
       for (const c of clients.values()) if (c.chips === who) sendTo(c, { t: 'chips', chips: state, change, ...(quiet ? { quiet } : {}) });
     },
+    // The leaderboard, for the casino's board: to everyone, each with their own row marked.
+    onTop: (top) => {
+      for (const c of clients.values()) sendTo(c, { t: 'chips.top', top: chipsTopFor(c, top) });
+    },
+    nameOf: (who) => (who.startsWith('account:') ? accounts.get(who.slice('account:'.length))?.name : undefined),
+    online: (who) => [...clients.values()].some((c) => c.chips === who),
   });
+  /** The leaderboard as `c` sees it: names and balances, their own row marked, nobody's id. */
+  const chipsTopFor = (c: Client, top: ChipsTopEntry[]): ChipsTopRow[] => top.map(({ id, ...row }) => (id === c.chips ? { ...row, you: true } : row));
   // Blackjack: the casino's table, one for the whole building. Every stake and payout goes through the
   // chips bank (quietly: the table's panel shows them), by the chips id they sat down with.
   const blackjack = new BlackjackTable(
@@ -248,6 +257,13 @@ export async function startServer(cfg: Config) {
   const slotsChanged = () => {
     const json = JSON.stringify({ t: 'slots', slots: slots.state() } satisfies ServerMsg);
     for (const c of clients.values()) if (c.peer.floor === CASINO && c.ws.readyState === WebSocket.OPEN) c.ws.send(json);
+  };
+  // The casino's jukebox, one for everyone down there, kept in the office's own data dir (not a project's).
+  const casinoJukebox = new Jukebox(cfg.dataDir, 'casino-jukebox.json');
+  /** Everyone in the casino hears what its jukebox plays now, and who put it on. */
+  const casinoJukeboxChanged = (toast: Notice) => {
+    const msgs = [{ t: 'jukebox', state: casinoJukebox.state() }, { t: 'toast', ...toast, level: 'info' }] satisfies ServerMsg[];
+    for (const c of clients.values()) if (c.peer.floor === CASINO) for (const m of msgs) sendTo(c, m);
   };
   // Online blackjack at the office PCs: tables for everyone sitting at a PC, on any floor, betting
   // through the same chips bank (quietly: the screen shows it). Every page hears it, for the monitors.
@@ -612,7 +628,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state() });
+  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
   };
@@ -1030,7 +1046,7 @@ export async function startServer(cfg: Config) {
     };
     clients.set(id, client);
     if (account) accounts.seen(account.id);
-    chips.seen(client.chips);
+    chips.seen(client.chips, { name, color: client.peer.color });
     ws.on('pong', () => (client.isAlive = true));
 
     sendTo(client, {
@@ -1048,6 +1064,7 @@ export async function startServer(cfg: Config) {
       limits: limits.state,
       me,
       chips: chips.state(client.chips),
+      chipsTop: chipsTopFor(client, chips.top()),
       onlinebj: onlinebj.state(),
       notify: webhook.state(),
       machine: machine.state(),
@@ -1083,6 +1100,7 @@ export async function startServer(cfg: Config) {
     });
     ws.on('close', () => {
       clients.delete(id);
+      chips.topCheck(); // offline now, on the leaderboard
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
       // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
@@ -1162,6 +1180,19 @@ export async function startServer(cfg: Config) {
     if (owner) chips.earn(owner, 'merged');
   };
   const jukeboxChanged = (floor: Floor) => toFloor(floor, { t: 'jukebox', state: floor.jukebox.state() });
+  /** The jukebox `c` hears: their floor's, or down in the casino the casino's (no floor); else a note that they have to be on a floor. */
+  const jukeboxOf = (c: Client): { floor?: Floor; jukebox: Jukebox } | undefined => {
+    if (c.peer.floor === CASINO) return { jukebox: casinoJukebox };
+    const floor = floorOf(c);
+    if (!floor) warn(c, notice('floor.pickOne'));
+    return floor && { floor, jukebox: floor.jukebox };
+  };
+  /** Everyone who hears that jukebox: what's on now, and `toast`. */
+  const jukeboxHeard = (floor: Floor | undefined, toast: Notice) => {
+    if (!floor) return casinoJukeboxChanged(toast);
+    jukeboxChanged(floor);
+    toastFloor(floor, toast);
+  };
   const teamChanged = async () => broadcast({ t: 'team', state: await team.state() });
 
   /** To everyone else on the same floor as `c`: nobody on another floor can see them. */
@@ -1336,8 +1367,8 @@ export async function startServer(cfg: Config) {
       }
       case 'act': {
         if (msg.drink !== undefined) {
-          // A drink from the rooftop bar, which stays up there.
-          const drink = isDrink(msg.drink) && c.peer.floor === ROOF ? msg.drink : undefined;
+          // A drink from the rooftop bar or the casino's, which stays at the bar it came from.
+          const drink = drinkAt(msg.drink, { roof: c.peer.floor === ROOF, casino: c.peer.floor === CASINO });
           if (drink === c.peer.drink) break;
           if (drink) c.peer.drink = drink;
           else delete c.peer.drink;
@@ -1424,6 +1455,7 @@ export async function startServer(cfg: Config) {
         if (name && !c.accountId) c.peer.name = name;
         if (COLOR_RE.test(msg.color)) c.peer.color = msg.color;
         c.peer.look = sanitizeLook(msg.look, c.peer.look);
+        chips.seen(c.chips, { name: c.peer.name, color: c.peer.color });
         broadcast({ t: 'peer.update', peer: c.peer });
         break;
       }
@@ -2216,21 +2248,19 @@ export async function startServer(cfg: Config) {
         break;
       }
       case 'jukebox.play': {
-        const floor = here();
-        if (!floor) break;
-        const r = floor.jukebox.play({ track: msg.track, url: msg.url }, who);
+        const at = jukeboxOf(c);
+        if (!at) break;
+        const r = at.jukebox.play({ track: msg.track, url: msg.url }, who);
         if ('error' in r) return warn(c, r.error);
         if (!r.changed) break;
-        jukeboxChanged(floor);
-        toastFloor(floor, notice(floor.jukebox.state().track === STREAM ? 'jukebox.radio' : 'jukebox.playing', { who, title: floor.jukebox.title() }));
+        jukeboxHeard(at.floor, notice(at.jukebox.state().track === STREAM ? 'jukebox.radio' : 'jukebox.playing', { who, title: at.jukebox.title() }));
         break;
       }
       case 'jukebox.skip': {
-        const floor = here();
-        if (!floor) break;
-        floor.jukebox.skip(who);
-        jukeboxChanged(floor);
-        toastFloor(floor, notice('jukebox.skipped', { who, title: floor.jukebox.title() }));
+        const at = jukeboxOf(c);
+        if (!at) break;
+        at.jukebox.skip(who);
+        jukeboxHeard(at.floor, notice('jukebox.skipped', { who, title: at.jukebox.title() }));
         break;
       }
       case 'cabinet.play': {
@@ -2268,10 +2298,9 @@ export async function startServer(cfg: Config) {
         break;
       }
       case 'jukebox.stop': {
-        const floor = here();
-        if (!floor || !floor.jukebox.stop(who)) break;
-        jukeboxChanged(floor);
-        toastFloor(floor, notice('jukebox.off', { who }));
+        const at = jukeboxOf(c);
+        if (!at || !at.jukebox.stop(who)) break;
+        jukeboxHeard(at.floor, notice('jukebox.off', { who }));
         break;
       }
       case 'ping':

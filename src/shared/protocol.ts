@@ -9,7 +9,7 @@ import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
-import type { ChipsEntry, ChipsState } from './chips.js';
+import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
 import type { DogState } from './dog.js';
@@ -1287,6 +1287,8 @@ export type ServerMsg =
       me: Me;
       /** Chips: your balance and latest changes (see shared/chips.ts). */
       chips: ChipsState;
+      /** Chips: the top CHIPS_TOP balances in the building, most first, for the casino's board. */
+      chipsTop: ChipsTopRow[];
       /** Online blackjack at the PCs: every table, for the PC monitors and for playing. */
       onlinebj: OnlineBlackjackState;
       notify: NotifyState;
@@ -1388,6 +1390,8 @@ export type ServerMsg =
    * unless `quiet` (a casino game that shows it itself).
    */
   | { t: 'chips'; chips: ChipsState; change: ChipsEntry; quiet?: boolean }
+  /** Chips: the top CHIPS_TOP balances changed (a new order, a balance, a name, someone came or went). */
+  | { t: 'chips.top'; top: ChipsTopRow[] }
   | { t: 'jukebox'; state: JukeboxState }
   /** Who's at the arcade cabinet on your floor now, and the building's high scores. */
   | { t: 'cabinet'; state: CabinetState }

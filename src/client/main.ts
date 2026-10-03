@@ -20,6 +20,7 @@ import { DrunkVision } from './world/drunk';
 import { Booze, type Stage as Feeling } from './booze';
 import { djFrame, djTime } from './dnb';
 import { openBar } from './ui/bar';
+import { casinoBartender } from './world/casinobartender';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { CASINO, casinoSpotOf } from '../shared/casino';
@@ -95,6 +96,8 @@ import { renderLimits } from './ui/limits';
 import { MachineTexture, officeFull, pressureNote } from './world/machine';
 import { mountHud } from './ui/menu';
 import { openJukebox } from './ui/jukebox';
+import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
+import type { JukeboxView } from './world/jukebox';
 import { openBookshelf } from './ui/bookshelf';
 import { Arcade } from './ui/arcade';
 import { OnlineBlackjack } from './ui/onlineblackjack';
@@ -331,8 +334,14 @@ function theCasino(): Casino {
   if (!casino) {
     casino = buildCasino();
     casinoAshtray = addCasinoAshtray(casino);
+    // The board over the cashier's cage: the building's biggest balances, kept up to date.
+    const board = casino.chipBoard;
+    board.setRows(chips.top);
+    chips.onTop((top) => board.setRows(top));
     casino.group.visible = false;
     scene.add(casino.group);
+    casinoJukebox = addCasinoJukebox(casino);
+    casinoJukebox.show(store.jukebox.on, trackTitle(store.jukebox));
     noOutline(casino.group);
   }
   return casino;
@@ -396,10 +405,14 @@ store.on('cat', () => cat.sync(store.cat, store.catStart));
 sound.setMusicVolume(settings.music, settings.musicMuted);
 sound.onMusicError = (text) => toast(text, 'warn');
 // The jukebox on your floor: everyone there hears it from the same bar, and its lights say what's on.
+// Down in the casino it's the casino's own, by the lounge (built with the casino).
+let casinoJukebox: JukeboxView | null = null;
 store.on('jukebox', () => {
   const j = store.jukebox;
+  sound.setJukeboxAt(jukeboxAt(store.floor === CASINO));
   sound.setJukebox(j.on ? { track: j.track, url: j.url, startedAt: j.startedAt, since: j.since } : null);
   office.jukebox.show(j.on, trackTitle(j));
+  casinoJukebox?.show(j.on, trackTitle(j));
 });
 // The arcade cabinet next to it: BLOCKFALL up close, and on its screen for everyone else on the floor.
 const cabinet = new Cabinet(office.cabinet.screen, net, { openTerminal: (id) => openWorkerTerminal(id), sound: (kind, lines) => sound.arcade(kind, lines) });
@@ -1030,6 +1043,7 @@ net.onMessage((msg) => {
   switch (msg.t) {
     case 'welcome': {
       chips.set(msg.chips);
+      chips.setTop(msg.chipsTop ?? []);
       // A few pings, to line this page's clock up with the office's for the jukebox.
       for (let i = 0; i < 5; i++) setTimeout(() => net.send({ t: 'ping', at: performance.now() }), 200 + i * 500);
       const mine = store.peers.get(store.you);
@@ -1109,7 +1123,7 @@ net.onMessage((msg) => {
     case 'peer.act': {
       const r = remotes.get(msg.id);
       if (msg.drink !== undefined) {
-        // A drink from the rooftop bar in their hand, or put down.
+        // A drink from the rooftop bar (or the casino's) in their hand, or put down.
         const p = store.peers.get(msg.id);
         if (p) {
           if (msg.drink) p.drink = msg.drink;
@@ -1151,6 +1165,9 @@ net.onMessage((msg) => {
     case 'chips':
       chips.set(msg.chips, msg.change);
       if (!msg.quiet) chipsToast(msg.change);
+      break;
+    case 'chips.top':
+      chips.setTop(msg.top);
       break;
     case 'gong':
       gongRang(msg.why, msg.pr);
@@ -1368,6 +1385,9 @@ function setPlace() {
   office.group.visible = !up && !down;
   // The holiday decorations are dressed round the office and the street below it, not up here (or down there).
   holiday.group.visible = !up && !down;
+  // The pool balls (and cue) and the golf balls are the office floor's too, though not in its group (they're not for clicking).
+  poolBalls.group.visible = !up && !down;
+  balls.group.visible = !up && !down;
   if (r) r.group.visible = up;
   if (c) c.group.visible = down;
   player.colliders = up ? r!.colliders : down ? c!.colliders : office.colliders;
@@ -1378,8 +1398,8 @@ function setPlace() {
   // You can see the whole city from up there (and its clouds); from the top floors, as far as the haze.
   camera.far = up ? 700 : FAR;
   camera.updateProjectionMatrix();
-  // Drinks stay at the bar (what you've had comes down with you).
-  if (!up) booze.putDown();
+  // Drinks stay at the bar they came from (what you've had comes with you).
+  booze.putDown();
   if (hanger.active) hanger.cancel();
   hintKey = 'stale';
 }
@@ -2184,24 +2204,28 @@ const CHEERS: Record<string, () => string> = {
   shot: () => t('notices.cheersShot'),
   mojito: () => t('notices.cheersMojito'),
   water: () => t('notices.cheersWater'),
+  croupier: () => t('notices.cheersCroupier'),
+  highroller: () => t('notices.cheersHighroller'),
 };
 
 /** E at the bar: the menu. */
 function showBar() {
-  openBar({ cutOff: booze.cutOff(performance.now() / 1000), order: orderDrink });
+  openBar({ cutOff: booze.cutOff(performance.now() / 1000), casino: downstairs, order: orderDrink });
 }
 
 /** The bartender comes over and pours it (a water, if you've had enough), and slides it across to you. */
 function orderDrink(d: Drink) {
-  const r = roof;
-  if (!r || !upTop) return;
+  // The roof's bar, or the casino's: the drink stays on the floor it was ordered on.
+  const r = downstairs ? casinoBartender() : upTop ? roof : null;
+  const at = store.floor;
+  if (!r) return;
   const cut = d.strength > 0 && booze.cutOff(performance.now() / 1000);
   const drink = cut ? DRINK_BY_ID.get('water')! : d;
   r.serve(player.pos.z);
   sound.pour(r.pourAt);
   if (cut) toast(t('notices.barCut'), 'warn');
   setTimeout(() => {
-    if (!upTop) return;
+    if (store.floor !== at) return;
     booze.drink(drink, performance.now() / 1000);
     reach();
     if (player.view === 'first') hands.sip();
@@ -3057,7 +3081,7 @@ function hintFor(it: Interactable): Hint {
     }
     case 'bar': {
       const cut = booze.cutOff(performance.now() / 1000);
-      return { k: String(cut), parts: [title(t('main.skyBar')), aside(t(cut ? 'main.hadEnough' : 'main.onTheHouse')), key('E', t(cut ? 'main.askWater' : 'main.orderDrink'))] };
+      return { k: String(cut), parts: [title(t(downstairs ? 'main.casinoBar' : 'main.skyBar')), aside(t(cut ? 'main.hadEnough' : 'main.onTheHouse')), key('E', t(cut ? 'main.askWater' : 'main.orderDrink'))] };
     }
     case 'dj': {
       const f = djFrame(djAt());
@@ -4161,6 +4185,7 @@ function frame(ts?: number) {
     lightCasino();
     casino.update(t, dt);
     casinoAshtray?.update(t, dt, (smoking ? 1 : 0) + [...remotes.values()].filter((r) => r.person.smoking).length);
+    casinoJukebox?.update(t, dt, sound.beat());
     if (!pokerFelt) {
       pokerFelt = new PokerFelt(casino.poker);
       pokerFelt.render(store.poker, true);
