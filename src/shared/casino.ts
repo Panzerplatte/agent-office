@@ -198,6 +198,12 @@ export const CASINO_BARTENDER = { x: CASINO_BAR.x + CASINO_BAR.depth / 2 + 0.55,
 /** The lounge, in the south-east corner: sofas round a low table. */
 export const CASINO_LOUNGE = { x: 8.6, z: 8.4 } as const;
 /**
+ * The standing ashtray at the lounge's north-east corner, by the end of its east sofa: smoke breaks
+ * down here, as on the balcony (see shared/smoking.ts). You can keep smoking anywhere within `area`
+ * meters of the lounge's middle (its rug and sofas), or `reach` of the ashtray itself.
+ */
+export const CASINO_ASHTRAY = { x: 10.9, z: 6.7, area: 3.4, reach: 1.6 } as const;
+/**
  * The casino's jukebox: the office's (JUKEBOX in layout.ts, the same size), against the east wall in
  * the corner between the bar and the lounge, facing into the room (-x). `y` is its speaker.
  */
@@ -231,6 +237,7 @@ export function casinoFootprints(): Footprint[] {
   // The bar's counter, and the bartender's side of it up to the wall.
   out.push({ minX: CASINO_BAR.x - CASINO_BAR.depth / 2, maxX: CASINO_ROOM.maxX, minZ: CASINO_BAR.minZ, maxZ: CASINO_BAR.maxZ, top: 9 });
   out.push({ minX: CASINO_LOUNGE.x - 0.6, maxX: CASINO_LOUNGE.x + 0.6, minZ: CASINO_LOUNGE.z - 0.4, maxZ: CASINO_LOUNGE.z + 0.4, top: 0.42 });
+  out.push({ minX: CASINO_ASHTRAY.x - 0.2, maxX: CASINO_ASHTRAY.x + 0.2, minZ: CASINO_ASHTRAY.z - 0.2, maxZ: CASINO_ASHTRAY.z + 0.2, top: 1 });
   out.push({ minX: CASINO_JUKEBOX.x - CASINO_JUKEBOX.depth / 2 - 0.05, maxX: CASINO_ROOM.maxX, minZ: CASINO_JUKEBOX.z - CASINO_JUKEBOX.width / 2 - 0.05, maxZ: CASINO_JUKEBOX.z + CASINO_JUKEBOX.width / 2 + 0.05, top: CASINO_JUKEBOX.height });
   return out;
 }
