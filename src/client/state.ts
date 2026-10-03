@@ -5,7 +5,7 @@ import type { Decoration } from '../shared/decor';
 import { newer, type WbElement } from '../shared/whiteboard';
 import type { CatState } from '../shared/cat';
 import type { DogState } from '../shared/dog';
-import { JUKEBOX_TUNES, type JukeboxState } from '../shared/jukebox';
+import { JUKEBOX_DEFAULT, type JukeboxState } from '../shared/jukebox';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
@@ -153,7 +153,7 @@ class Store {
   /** Pictures on the walls. */
   decor: Decoration[] = [];
   /** What the lounge jukebox is playing; `since` is when the track started, on performance.now()'s clock. */
-  jukebox: JukeboxState & { since: number } = { on: false, track: JUKEBOX_TUNES[0].id, startedAt: 0, elapsed: 0, since: 0 };
+  jukebox: JukeboxState & { since: number } = { on: false, track: JUKEBOX_DEFAULT, startedAt: 0, elapsed: 0, since: 0 };
   /** The office's clock minus performance.now(), from the quickest ping (see 'pong'); for the jukebox. */
   private clock?: { offset: number; rtt: number };
   /** The floor's whiteboard: the newest copy of every element anyone drew, deleted ones too. */

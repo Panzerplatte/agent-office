@@ -10,7 +10,7 @@
  */
 import { CABINET, DESKS, DJ_BOOTH, FLOOR, GONG, JUKEBOX, WINDOWS as OPENINGS } from '../shared/layout';
 import type { GongWhy } from '../shared/protocol';
-import { STREAM } from '../shared/jukebox';
+import { streamUrl } from '../shared/jukebox';
 import { TunePlayer } from './music';
 import { DjPlayer } from './dnb';
 import { t } from './i18n';
@@ -1729,7 +1729,8 @@ export class OfficeSound {
     clearInterval(this.musicTimer);
     const j = this.jukebox;
     if (!j) return;
-    if (j.track === STREAM && j.url) return this.startStream(j.url);
+    const url = streamUrl(j);
+    if (url) return this.startStream(url);
     const tune = (this.tune = new TunePlayer(ctx, this.musicIn, j.track));
     this.count('tune');
     // On a timer rather than every frame, so it carries on in a background tab.
