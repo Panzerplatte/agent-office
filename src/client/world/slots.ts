@@ -232,7 +232,10 @@ export class SlotScreens {
       }
       c.globalAlpha = 1;
       const text = lit.jackpot ? `JACKPOT! +${lit.win.toLocaleString()}` : `WIN +${lit.win.toLocaleString()}`;
-      c.font = `900 ${lit.jackpot ? 40 : 34}px Nunito, ui-rounded, system-ui, sans-serif`;
+      // As big as fits across the reels.
+      let px = lit.jackpot ? 40 : 34;
+      do c.font = `900 ${px}px Nunito, ui-rounded, system-ui, sans-serif`;
+      while (c.measureText(text).width > W - 24 && --px > 12);
       c.lineWidth = 7;
       c.strokeStyle = '#2b2d42';
       c.fillStyle = lit.jackpot ? (blink ? '#ffd166' : '#ff4d6d') : '#ffffff';
