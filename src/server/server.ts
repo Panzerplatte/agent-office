@@ -48,7 +48,7 @@ import { WHISTLE_SERVER_EVERY, WhistleGate, whistleHearers } from '../shared/whi
 import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
-import { ROOF, isDrink } from '../shared/rooftop.js';
+import { ROOF, drinkAt } from '../shared/rooftop.js';
 import { CASINO, casinoSpotOf } from '../shared/casino.js';
 import { BlackjackTable } from './blackjack.js';
 import { SLOT_MACHINES } from '../shared/casino.js';
@@ -1335,8 +1335,8 @@ export async function startServer(cfg: Config) {
       }
       case 'act': {
         if (msg.drink !== undefined) {
-          // A drink from the rooftop bar, which stays up there.
-          const drink = isDrink(msg.drink) && c.peer.floor === ROOF ? msg.drink : undefined;
+          // A drink from the rooftop bar or the casino's, which stays at the bar it came from.
+          const drink = drinkAt(msg.drink, { roof: c.peer.floor === ROOF, casino: c.peer.floor === CASINO });
           if (drink === c.peer.drink) break;
           if (drink) c.peer.drink = drink;
           else delete c.peer.drink;

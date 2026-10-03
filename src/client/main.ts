@@ -19,6 +19,7 @@ import { DrunkVision } from './world/drunk';
 import { Booze, type Stage as Feeling } from './booze';
 import { djFrame, djTime } from './dnb';
 import { openBar } from './ui/bar';
+import { casinoBartender } from './world/casinobartender';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { CASINO, casinoSpotOf } from '../shared/casino';
@@ -1104,7 +1105,7 @@ net.onMessage((msg) => {
     case 'peer.act': {
       const r = remotes.get(msg.id);
       if (msg.drink !== undefined) {
-        // A drink from the rooftop bar in their hand, or put down.
+        // A drink from the rooftop bar (or the casino's) in their hand, or put down.
         const p = store.peers.get(msg.id);
         if (p) {
           if (msg.drink) p.drink = msg.drink;
@@ -1376,8 +1377,8 @@ function setPlace() {
   // You can see the whole city from up there (and its clouds); from the top floors, as far as the haze.
   camera.far = up ? 700 : FAR;
   camera.updateProjectionMatrix();
-  // Drinks stay at the bar (what you've had comes down with you).
-  if (!up) booze.putDown();
+  // Drinks stay at the bar they came from (what you've had comes with you).
+  booze.putDown();
   if (hanger.active) hanger.cancel();
   hintKey = 'stale';
 }
@@ -2182,24 +2183,28 @@ const CHEERS: Record<string, () => string> = {
   shot: () => t('notices.cheersShot'),
   mojito: () => t('notices.cheersMojito'),
   water: () => t('notices.cheersWater'),
+  croupier: () => t('notices.cheersCroupier'),
+  highroller: () => t('notices.cheersHighroller'),
 };
 
 /** E at the bar: the menu. */
 function showBar() {
-  openBar({ cutOff: booze.cutOff(performance.now() / 1000), order: orderDrink });
+  openBar({ cutOff: booze.cutOff(performance.now() / 1000), casino: downstairs, order: orderDrink });
 }
 
 /** The bartender comes over and pours it (a water, if you've had enough), and slides it across to you. */
 function orderDrink(d: Drink) {
-  const r = roof;
-  if (!r || !upTop) return;
+  // The roof's bar, or the casino's: the drink stays on the floor it was ordered on.
+  const r = downstairs ? casinoBartender() : upTop ? roof : null;
+  const at = store.floor;
+  if (!r) return;
   const cut = d.strength > 0 && booze.cutOff(performance.now() / 1000);
   const drink = cut ? DRINK_BY_ID.get('water')! : d;
   r.serve(player.pos.z);
   sound.pour(r.pourAt);
   if (cut) toast(t('notices.barCut'), 'warn');
   setTimeout(() => {
-    if (!upTop) return;
+    if (store.floor !== at) return;
     booze.drink(drink, performance.now() / 1000);
     reach();
     if (player.view === 'first') hands.sip();
@@ -3056,7 +3061,7 @@ function hintFor(it: Interactable): Hint {
     }
     case 'bar': {
       const cut = booze.cutOff(performance.now() / 1000);
-      return { k: String(cut), parts: [title(t('main.skyBar')), aside(t(cut ? 'main.hadEnough' : 'main.onTheHouse')), key('E', t(cut ? 'main.askWater' : 'main.orderDrink'))] };
+      return { k: String(cut), parts: [title(t(downstairs ? 'main.casinoBar' : 'main.skyBar')), aside(t(cut ? 'main.hadEnough' : 'main.onTheHouse')), key('E', t(cut ? 'main.askWater' : 'main.orderDrink'))] };
     }
     case 'dj': {
       const f = djFrame(djAt());

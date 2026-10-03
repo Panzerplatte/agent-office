@@ -13,7 +13,7 @@ export const ROOF_NAME = 'Rooftop bar';
 /** What a drink comes in: a pint, a wine glass, a martini glass, a tall glass or a shot glass. */
 export type Glass = 'pint' | 'wine' | 'martini' | 'highball' | 'shot';
 
-export type DrinkId = 'beer' | 'wine' | 'martini' | 'maitai' | 'shot' | 'mojito' | 'water';
+export type DrinkId = 'beer' | 'wine' | 'martini' | 'maitai' | 'shot' | 'mojito' | 'water' | 'croupier' | 'highroller';
 
 export interface Drink {
   id: DrinkId;
@@ -29,6 +29,8 @@ export interface Drink {
   /** The drink in the glass. */
   color: string;
   glass: Glass;
+  /** Only poured at the casino's bar, down in the basement (see shared/casino.ts). */
+  casino?: true;
 }
 
 export const DRINKS: readonly Drink[] = [
@@ -39,12 +41,24 @@ export const DRINKS: readonly Drink[] = [
   { id: 'shot', name: 'Tequila shot', emoji: '🥃', blurb: 'Salt, shot, lime. Careful', strength: 0.6, color: '#f7d488', glass: 'shot' },
   { id: 'mojito', name: 'Virgin mojito', emoji: '🍃', blurb: 'All of the mint, none of the rum', strength: 0, color: '#b7e4a0', glass: 'highball' },
   { id: 'water', name: 'Water', emoji: '💧', blurb: 'Clears your head a little', strength: -0.3, color: '#d6f1ff', glass: 'highball' },
+  // The casino's own, on its bar's menu under the roof's.
+  { id: 'croupier', name: "Croupier's Special", emoji: '🎰', blurb: 'Cherry, rum and a splash of luck. On the house', strength: 0.38, color: '#d62839', glass: 'martini', casino: true },
+  { id: 'highroller', name: 'High roller', emoji: '🥂', blurb: 'Champagne, for when the chips are up', strength: 0.32, color: '#f3e5ab', glass: 'wine', casino: true },
 ];
 
 export const DRINK_BY_ID = new Map(DRINKS.map((d) => [d.id, d]));
 
 export function isDrink(v: unknown): v is DrinkId {
   return typeof v === 'string' && DRINK_BY_ID.has(v as DrinkId);
+}
+
+/**
+ * The drink someone may hold where they are, or undefined: the bars are on the roof and in the
+ * casino (`casino` says it's that one, which pours its own few too). Anywhere else it's put down.
+ */
+export function drinkAt(v: unknown, at: { roof: boolean; casino: boolean }): DrinkId | undefined {
+  if (!isDrink(v) || !(at.roof || at.casino)) return undefined;
+  return DRINK_BY_ID.get(v)!.casino && !at.casino ? undefined : v;
 }
 
 /** How drunk you can get: past this the bartender cuts you off and pours you a water. */

@@ -20,6 +20,7 @@ import {
 import { ELEVATOR, ELEVATOR_FRONT, WALL_T } from '../../shared/layout';
 import { t } from '../i18n';
 import { Worker } from './character';
+import { buildCasinoBartender } from './casinobartender';
 import { buildElevator, type Elevator } from './elevator';
 import type { Collider, Interactable } from './office';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
@@ -1360,11 +1361,7 @@ export function buildCasino(): Casino {
   statics.add(bar);
   group.add(mesh(new THREE.PlaneGeometry(blen - 0.8, 1.5).rotateY(-Math.PI / 2), glow('#b8641f'), R.maxX - 0.05, 1.75, bz, false));
   group.add(mesh(new THREE.BoxGeometry(0.02, 0.05, blen), glow('#ff2bd6'), front - 0.02, 0.06, bz, false));
-  const bartender = new Worker(t('world.casinoBartender'), '#e76f51');
-  bartender.setStatus('idle', false);
-  bartender.root.position.set(B.x + B.depth / 2 + 0.55, 0, bz);
-  bartender.root.rotation.y = -Math.PI / 2;
-  group.add(bartender.root);
+  const bartender = buildCasinoBartender(group, interactables);
   const barStool = stoolParts(0.74, '#9b1d20');
   for (let i = 1; i <= 5; i++) placeSeat(barStool, `casino-stool-${i}`, group, interactables);
 
