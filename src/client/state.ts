@@ -9,9 +9,10 @@ import { JUKEBOX_TUNES, type JukeboxState } from '../shared/jukebox';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
+import { emptyPoker, type PokerState } from '../shared/poker';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'pool';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -184,6 +185,8 @@ class Store {
   ball: BallState = {};
   /** The dartboard on this floor: who's at it, the options for the next game, and the game (see shared/darts.ts). */
   darts: DartsState = emptyDarts();
+  /** The casino's poker table, as you see it (your own cards only): sent while you're down in the casino (see shared/poker.ts). */
+  poker: PokerState = emptyPoker();
   /** The pool table on this floor: who's at it on which side, and the game (see shared/pool.ts). */
   pool: PoolState = emptyPool();
   /** The shot that came with the latest news of the table, if one did: to roll it out (see world/pool.ts). */
@@ -409,6 +412,10 @@ class Store {
       case 'darts':
         this.darts = msg.darts;
         this.emit('darts');
+        break;
+      case 'poker':
+        this.poker = msg.poker;
+        this.emit('poker');
         break;
       case 'pool':
         this.pool = msg.pool;

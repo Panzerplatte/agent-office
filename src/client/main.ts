@@ -21,7 +21,7 @@ import { djFrame, djTime } from './dnb';
 import { openBar } from './ui/bar';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
-import { CASINO } from '../shared/casino';
+import { CASINO, casinoSpotOf } from '../shared/casino';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, roundText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
@@ -29,6 +29,8 @@ import { Darter, dartsKey } from './darts';
 import { BoardDarts } from './world/darts';
 import { MAX_PLAYERS, type DartsState } from '../shared/darts';
 import { Cueist } from './pool';
+import { PokerPlayer } from './poker';
+import { PokerFelt } from './world/pokercards';
 import { PoolBalls, seatColor } from './world/pool';
 import { sideName } from './ui/pool';
 import { MAX_PLAYERS as POOL_PLAYERS, isSolo, type PoolState } from '../shared/pool';
@@ -543,6 +545,42 @@ function stepUpToDarts() {
   darter.start(store.darts, store.you);
 }
 
+// ---- Poker ------------------------------------------------------------------------------------------
+// The casino's poker table: the panel while you sit at it (see poker.ts), and the cards and chips on
+// its felt for everyone down there (see world/pokercards.ts).
+let pokerFelt: PokerFelt | null = null;
+const pokerer = new PokerPlayer(
+  player,
+  {
+    sit: (seat, buyIn) => net.send({ t: 'poker.sit', seat, ...(buyIn ? { buyIn } : {}) }),
+    away: () => net.send({ t: 'poker.away' }),
+    leave: () => net.send({ t: 'poker.leave' }),
+    act: (a) => net.send({ t: 'poker.act', ...a }),
+    topUp: (amount) => net.send({ t: 'poker.topup', amount }),
+    bot: (add) => net.send({ t: 'poker.bot', add }),
+    sitIn: (seat) => {
+      const chair = SEATING_BY_ID.get(`poker-${seat + 1}`);
+      const place = chair && seatPlace(chair, 0);
+      if (!place || [...store.peers.values()].some((p) => p.id !== store.you && p.seat === place.key && store.onMyFloor(p))) return;
+      player.sit(place);
+      me.sit(place.hips);
+      net.send({ t: 'sit', seat: place.key });
+    },
+    standUp: () => player.seat && standUp(),
+  },
+  () => chips.balance,
+);
+store.on('poker', () => {
+  pokerer.sync(store.poker);
+  pokerFelt?.render(store.poker);
+});
+chips.onChange(() => pokerer.sync(store.poker));
+/** The poker table's chair you're sitting in (its seat at the table), or -1. */
+function pokerChair(): number {
+  const at = downstairs ? casinoSpotOf(player.seat?.key) : undefined;
+  return at?.game === 'poker' ? at.spot : -1;
+}
+
 // ---- Pool -------------------------------------------------------------------------------------------
 // The balls on the table, as the office says they rolled, for everyone on the floor.
 const poolBalls = new PoolBalls(office.poolTable);
@@ -793,6 +831,8 @@ net.onMessage((msg) => {
   }
   // Back after a reconnect, which let go of your place at the dartboard: ask for it again (before the board's news says you're not at it).
   if (msg.t === 'welcome' && darter.active) darter.rejoin(msg.you);
+  // And of your seat at the poker table (the office sends the table as it is now, kept seat and all).
+  if (msg.t === 'welcome' && pokerer.active) pokerer.rejoin();
   if (msg.t === 'welcome' && cueist.active) cueist.rejoin(msg.you);
   if (msg.t === 'worker.remove') sentHome.add(msg.workerId);
   store.apply(msg);
@@ -2495,6 +2535,8 @@ function useSeat(seatId: string) {
     if (seat.tv && tvShowing()) watchShare();
     else if (seat.game) arcade.play();
     else if (seat.bar) showBar();
+    // At the poker table E doesn't get you up: you're playing (walk off to stand up, Esc to leave).
+    else if (seat.play === 'poker') return;
     else standUp();
     return;
   }
@@ -2794,6 +2836,11 @@ function hintFor(it: Interactable): Hint {
     case 'seat': {
       const seat = SEATING_BY_ID.get(it.seatId ?? '');
       if (!seat) return { k: '', parts: [] };
+      if (seat.play === 'poker') {
+        const n = store.poker.seats.filter(Boolean).length;
+        if (player.seat?.seatId === seat.id) return { k: `${seat.id}|poker`, parts: [title(seatLabel(seat)), key('Esc', t('main.pokerLeaveTable')), key('W A S D', t('main.pokerStandUp'))] };
+        return { k: `${seat.id}|poker|${n}|${!freePlace(seat)}`, parts: [title(seatLabel(seat)), aside(n ? t('main.pokerAt', { n }) : t('main.pokerAbout')), !freePlace(seat) ? aside(t('main.noRoom')) : key('E', t('main.sitDown'))] };
+      }
       if (player.seat?.seatId === seat.id) {
         const tv = !!seat.tv && tvShowing();
         const use = tv ? t('main.watchTv') : seat.game ? t('main.playMinesweeper') : seat.bar ? t('main.orderDrink') : '';
@@ -3714,6 +3761,7 @@ function frame(ts?: number) {
   cueist.update(dt);
   poolBalls.update();
   showTheirCue();
+  pokerer.update(pokerChair());
   // A dance that keeps going doesn't go with a club in your hands or up the ladder: it stops for everyone.
   if ((golf.active || climber.active || darter.active || cueist.active) && me.emoteLooping) stopEmote();
   balls.update(dt);
@@ -3844,6 +3892,11 @@ function frame(ts?: number) {
   if (downstairs && casino) {
     lightCasino();
     casino.update(t, dt);
+    if (!pokerFelt) {
+      pokerFelt = new PokerFelt(casino.poker);
+      pokerFelt.render(store.poker, true);
+    }
+    pokerFelt.update(dt);
   }
 
   aimedNote = null;

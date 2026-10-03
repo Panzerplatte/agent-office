@@ -4,6 +4,7 @@ import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
+import type { ActionKind, PokerState } from './poker.js';
 import type { ChipsEntry, ChipsState } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -1182,6 +1183,20 @@ export type ClientMsg =
   | { t: 'pool.place'; x: number; y: number }
   /** Clear the game off the table, for a new one (a game that's still on, only its players can). */
   | { t: 'pool.reset' }
+  /**
+   * Poker, in the casino (see shared/poker.ts): sit down at seat `seat` (0–5) with `buyIn` chips off
+   * your balance, or back in the seat that's kept for you (you, by your chips: account or browser).
+   * Step away (your seat's kept; you sit out), or leave the table with what's in front of you.
+   */
+  | { t: 'poker.sit'; seat?: number; buyIn?: number }
+  | { t: 'poker.away' }
+  | { t: 'poker.leave' }
+  /** On your turn at the poker table: fold, check, call, bet or raise to `to` (all in this round), or all-in. */
+  | { t: 'poker.act'; kind: ActionKind; to?: number }
+  /** Between hands, more chips in front of you (MAX_BUY_IN in all). */
+  | { t: 'poker.topup'; amount: number }
+  /** Sit a Dealer-Bot down at the poker table, or send one away (the one at `seat`, or the last). */
+  | { t: 'poker.bot'; add: boolean; seat?: number }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1295,6 +1310,8 @@ export type ServerMsg =
    * `pool` already as it is once the balls have stopped.
    */
   | { t: 'pool'; pool: PoolState; shot?: PoolPlayback }
+  /** The casino's poker table changed, as you see it: your own cards, and anyone's that were shown. */
+  | { t: 'poker'; poker: PokerState }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).
