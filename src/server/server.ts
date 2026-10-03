@@ -1187,8 +1187,8 @@ export async function startServer(cfg: Config) {
       }
       case 'act': {
         if (msg.drink !== undefined) {
-          // A drink from the rooftop bar, which stays up there.
-          const drink = isDrink(msg.drink) && c.peer.floor === ROOF ? msg.drink : undefined;
+          // A drink from the rooftop bar (or the casino's), which stays there.
+          const drink = isDrink(msg.drink) && (c.peer.floor === ROOF || c.peer.floor === CASINO) ? msg.drink : undefined;
           if (drink === c.peer.drink) break;
           if (drink) c.peer.drink = drink;
           else delete c.peer.drink;

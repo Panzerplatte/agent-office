@@ -6,6 +6,8 @@ import { drinkBlurb, drinkName } from '../i18n/labels';
 export interface BarOptions {
   /** Had enough: nothing stronger than water or a mocktail. */
   cutOff: boolean;
+  /** The menu's heading, if it isn't the Sky Bar's. */
+  title?: string;
   order(d: Drink): void;
 }
 
@@ -16,7 +18,7 @@ function kick(d: Drink): string {
   return t(d.strength >= 0.55 ? 'menus.barStrong' : d.strength >= 0.4 ? 'menus.barMedium' : 'menus.barLight');
 }
 
-/** The rooftop bar's menu: pick a drink and the bartender pours it. */
+/** A bar's menu (the rooftop's, or the casino's): pick a drink and the bartender pours it. */
 export function openBar(opts: BarOptions) {
   const close = h('button.btn.close', { 'aria-label': t('menus.close') }, '✕');
   const list = h(
@@ -54,7 +56,7 @@ export function openBar(opts: BarOptions) {
   const el = h(
     'div.modal.jukebox',
     { role: 'dialog', 'aria-label': t('menus.bar') },
-    h('header', {}, h('h2', {}, t('menus.barTitle')), close),
+    h('header', {}, h('h2', {}, opts.title ?? t('menus.barTitle')), close),
     h(
       'div.body',
       {},

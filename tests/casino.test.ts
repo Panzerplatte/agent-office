@@ -93,6 +93,8 @@ test("the casino's seats are in SEATING with ids of their own, and only down in 
     assert.equal(seatHere(`${s.id}:0`, ROOF), undefined);
     assert.equal(seatHere(`${s.id}:0`, 'agent-office'), undefined);
   }
+  // The bar's stools order a drink, as the roof's do; nothing else down there does.
+  assert.deepEqual(CASINO_SEATING.filter((s) => s.bar).map((s) => s.id), ['casino-stool-1', 'casino-stool-2', 'casino-stool-3', 'casino-stool-4', 'casino-stool-5']);
 });
 
 test('the furniture keeps off the walls, the elevator doors and itself', () => {

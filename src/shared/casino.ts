@@ -1,7 +1,7 @@
 // The casino: a basement under the ground floor, one for the whole building. The elevator goes down
 // there from every floor, the way it goes up to the roof. Nobody works down there: there's a poker
 // table, a blackjack table, a roulette wheel, a bank of slot machines, the cashier's cage with a board
-// of everyone's chips over it, and a little bar with a lounge. This is only the room; the games
+// of everyone's chips over it, and a little bar (which pours the rooftop bar's drinks) with a lounge. This is only the room; the games
 // (and the chips they're played for) are their own. Shared by the server (who's down there, where
 // they sit) and the client (which builds it).
 //
@@ -235,7 +235,7 @@ export const CASINO_SEATING: SeatDef[] = [
   ...tableSeats(BLACKJACK_TABLE, 'blackjackStool', '🂡 Blackjack table', 0.55),
   ...tableSeats(ROULETTE_TABLE, 'rouletteStool', '🎡 Roulette table', 0.55),
   ...SLOT_MACHINES.map((m, i): SeatDef => ({ id: `slots-${i + 1}`, kind: 'slotStool', label: '🎰 Slot machine', x: m.x + 0.95, y: 0, z: m.z, rotY: -Math.PI / 2, places: [0], hips: 0.6, depth: 0, out: -0.7, casino: true, play: 'slots', spot: i })),
-  ...[0, 1, 2, 3, 4].map((i): SeatDef => ({ id: `casino-stool-${i + 1}`, kind: 'barStool', label: '🪑 Bar stool', x: CASINO_BAR.x - CASINO_BAR.depth / 2 - 0.45, y: 0, z: CASINO_BAR.minZ + 0.8 + i * 1.4, rotY: Math.PI / 2, places: [0], hips: 0.78, depth: 0, out: -0.75, casino: true })),
+  ...[0, 1, 2, 3, 4].map((i): SeatDef => ({ id: `casino-stool-${i + 1}`, kind: 'barStool', label: '🪑 Bar stool', x: CASINO_BAR.x - CASINO_BAR.depth / 2 - 0.45, y: 0, z: CASINO_BAR.minZ + 0.8 + i * 1.4, rotY: Math.PI / 2, places: [0], hips: 0.78, depth: 0, out: -0.75, casino: true, bar: true })),
   // Round the lounge's low table: one on its south side facing north, one either end.
   { id: 'casino-sofa-1', kind: 'sofa', label: '🛋️ Sofa', x: CASINO_LOUNGE.x, y: 0, z: CASINO_LOUNGE.z + 1.5, rotY: Math.PI, places: [-0.7, 0.7], hips: 0.5, depth: -0.05, out: 0.8, casino: true },
   { id: 'casino-sofa-2', kind: 'sofa', label: '🛋️ Sofa', x: CASINO_LOUNGE.x - 2.1, y: 0, z: CASINO_LOUNGE.z, rotY: Math.PI / 2, places: [-0.5, 0.5], hips: 0.5, depth: -0.05, out: 0.8, casino: true },

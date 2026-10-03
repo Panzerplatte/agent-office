@@ -29,6 +29,7 @@ export default strings(
     casinoCashier: 'Cashier',
     casinoCashierSummary: 'Your chips, counted out',
     casinoBartender: 'Bartender',
+    casinoBartenderSummary: "What'll it be? E at the bar",
     casinoChipBoard: 'CHIPS · TOP 10',
     casinoChipBoardEmpty: 'Nobody has any chips yet',
     // The dartboard's chalkboards
@@ -179,6 +180,7 @@ export default strings(
     casinoCashier: 'Kasse',
     casinoCashierSummary: 'Deine Chips, abgezählt',
     casinoBartender: 'Barkeeper',
+    casinoBartenderSummary: 'Was darf’s sein? E an der Bar',
     casinoChipBoard: 'CHIPS · TOP 10',
     casinoChipBoardEmpty: 'Noch hat niemand Chips',
     dartsBust: 'ÜBERWORFEN',

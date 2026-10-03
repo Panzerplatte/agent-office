@@ -168,6 +168,10 @@ export interface Casino {
   chipBoard: ChipBoard;
   /** Where you stand at the cashier's window, and the cashier behind it. */
   cashier: { at: { x: number; z: number }; worker: Worker };
+  /** Where drinks are poured at the bar, for the sound of one. */
+  pourAt: { x: number; y: number; z: number };
+  /** Someone ordered a drink at the bar, standing (or sitting) at `z` along it: the bartender comes over. */
+  serve(z: number): void;
   update(t: number, dt: number): void;
 }
 
@@ -1357,14 +1361,22 @@ export function buildCasino(): Casino {
     }
   }
   bar.add(bottles);
-  statics.add(bar);
+  // Its own mesh, not the room's, so looking at it and pressing E orders a drink (see the stools too).
+  const barMesh = mergeByMaterial(bar);
+  const barIts = [-2.4, 0, 2.4].map((dz): Interactable => ({ kind: 'bar', x: front - 0.7, z: bz + dz, radius: 1.7 }));
+  interactables.push(...barIts);
+  barMesh.userData.interact = barIts[1];
+  group.add(barMesh);
   group.add(mesh(new THREE.PlaneGeometry(blen - 0.8, 1.5).rotateY(-Math.PI / 2), glow('#b8641f'), R.maxX - 0.05, 1.75, bz, false));
   group.add(mesh(new THREE.BoxGeometry(0.02, 0.05, blen), glow('#ff2bd6'), front - 0.02, 0.06, bz, false));
   const bartender = new Worker(t('world.casinoBartender'), '#e76f51');
   bartender.setStatus('idle', false);
   bartender.root.position.set(B.x + B.depth / 2 + 0.55, 0, bz);
   bartender.root.rotation.y = -Math.PI / 2;
+  bartender.setTask({ name: `🍹 ${t('world.casinoBartender')}`, summary: t('world.casinoBartenderSummary') });
   group.add(bartender.root);
+  let tendZ = bz;
+  let wander = 0;
   const barStool = stoolParts(0.74, '#9b1d20');
   for (let i = 1; i <= 5; i++) placeSeat(barStool, `casino-stool-${i}`, group, interactables);
 
@@ -1447,8 +1459,22 @@ export function buildCasino(): Casino {
     slots,
     chipBoard,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
+    pourAt: { x: B.x + 0.2, y: B.height + 0.2, z: bz },
+    serve(z) {
+      tendZ = THREE.MathUtils.clamp(z, B.minZ + 0.6, B.maxZ - 0.6);
+      wander = 6;
+      bartender.cheer(1.2);
+    },
     update(time, dt) {
       elevator.update(dt);
+      // The bartender drifts along the bar between customers, and comes over when someone orders.
+      wander -= dt;
+      if (wander <= 0) {
+        wander = 5 + Math.random() * 6;
+        tendZ = B.minZ + 1 + Math.random() * (blen - 2);
+      }
+      const bp = bartender.root.position;
+      bp.z += THREE.MathUtils.clamp(tendZ - bp.z, -dt * 1.6, dt * 1.6);
       for (const wk of workers) wk.update(dt, time);
       // The marquee's bulbs chase under the sign; the neon hums.
       const step = Math.floor(time * 6);
