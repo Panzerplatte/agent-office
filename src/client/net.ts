@@ -1,5 +1,6 @@
 import type { ClientMsg, ServerMsg } from '../shared/protocol';
 import { lastFloor, store, type Profile } from './state';
+import { chipsKey } from './chips';
 
 type Handler = (msg: ServerMsg) => void;
 
@@ -30,6 +31,8 @@ export class Net {
     // Back to the floor you were on (after a reload or a restart).
     const floor = store.floor ?? lastFloor();
     if (floor) q.set('floor', floor);
+    // Chips: whose balance this is, on the shared password (see chips.ts).
+    q.set('chips', chipsKey());
     const ws = new WebSocket(`${proto}://${location.host}/ws?${q}`);
     this.ws = ws;
     ws.onopen = () => {

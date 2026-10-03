@@ -266,6 +266,35 @@ button { font-family: inherit; }
 .caffeine .bar span { display: block; width: 0; height: 100%; background: #9c6644; transition: width 1s linear; }
 .caffeine .left { min-width: 24px; font-variant-numeric: tabular-nums; }
 .caffeine.jittery { animation: jitters .1s steps(2) infinite; }
+/* Chips: your balance in the top bar, next to the floor's name (ui/chips.ts), and your latest changes. */
+.topbar .chips-hud { position: relative; margin-right: auto; height: 44px; padding: 0 12px 0 8px; display: flex; align-items: center; gap: 7px; font: 900 17px/1 var(--font); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
+.chips-hud:hover { background: var(--paper-2); }
+.chip-icon { width: 24px; height: 24px; flex: none; }
+.chips-hud.up .chip-icon { animation: chip-flip .6s ease-out; }
+.chips-hud.up .n { animation: chip-glow .9s ease-out; }
+.chips-hud.down .n { animation: chip-dip .6s ease-out; }
+@keyframes chip-flip { 40% { transform: rotateY(180deg) scale(1.25); } to { transform: rotateY(360deg); } }
+@keyframes chip-glow { 30% { color: #07875f; transform: scale(1.15); } }
+@keyframes chip-dip { 30% { color: #c9184a; transform: translateY(2px); } }
+.chips-fly { position: absolute; right: 8px; top: 100%; font-size: 15px; font-weight: 900; pointer-events: none; animation: chip-fly 1.4s ease-out forwards; text-shadow: 0 1px 0 #fff; }
+.chips-fly.up { color: #07875f; }
+.chips-fly.down { color: #c9184a; }
+@keyframes chip-fly { from { opacity: 0; transform: translateY(-8px); } 20% { opacity: 1; } to { opacity: 0; transform: translateY(18px); } }
+.modal.chips-window { width: min(420px, 100%); }
+.chips-window h2 { display: flex; align-items: center; gap: 4px; }
+.chips-window h2 .chip-icon { width: 22px; height: 22px; }
+.chips-total { margin-left: auto; font-variant-numeric: tabular-nums; }
+.chips-ledger { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.chips-ledger li { display: flex; align-items: baseline; gap: 10px; padding: 5px 6px; border-radius: 8px; font-size: 14px; font-weight: 700; }
+.chips-ledger li:nth-child(odd) { background: var(--paper-2); }
+.chips-ledger li.empty { color: var(--muted); }
+.chips-ledger .why { flex: 1; min-width: 0; }
+.chips-ledger .when { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
+.chips-ledger .amount { font-variant-numeric: tabular-nums; }
+.chips-ledger .amount.up { color: #07875f; }
+.chips-ledger .amount.down { color: #c9184a; }
+.chips-ledger .after { min-width: 56px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chips-note { margin: 12px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
 .golf { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: min(300px, calc(100vw - 32px)); padding: 8px 12px 9px; display: grid; gap: 6px; font-size: 13px; font-weight: 900; text-align: center; pointer-events: none !important; }
 .golf-meter { position: relative; height: 16px; border: 3px solid var(--ink); border-radius: 999px; background: linear-gradient(90deg, #caffbf, #ffd166 70%, #ef476f); overflow: hidden; }
 /* Covers the part of the meter's colors that isn't filled, from the right. */

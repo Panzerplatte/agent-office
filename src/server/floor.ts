@@ -56,6 +56,8 @@ export interface FloorContext {
   peers(floor: Floor): PeerInfo[];
   /** ⚙️ Settings: a worker whose pull request merged goes home by itself. */
   leaveOnMerge(): boolean;
+  /** Chips: pull request `n` merged on this floor (once, when the gong rings for it). */
+  prMerged?(floor: Floor, n: number): void;
 }
 
 /** How long after a PR list or a worker's change the office looks for workers whose PR merged. */
@@ -271,7 +273,9 @@ export class Floor {
 
   /** Pull request `n` merged (`by` someone, from the PR window): the gong rings, once per PR. */
   merged(n: number, by?: string) {
-    if (this.merges.ring(n)) this.ctx.emit(this, { t: 'gong', why: 'merged', pr: n, by });
+    if (!this.merges.ring(n)) return;
+    this.ctx.emit(this, { t: 'gong', why: 'merged', pr: n, by });
+    this.ctx.prMerged?.(this, n);
   }
 
   /**

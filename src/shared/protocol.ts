@@ -4,6 +4,7 @@ import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
+import type { ChipsEntry, ChipsState } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
 import type { DogState } from './dog.js';
@@ -984,6 +985,8 @@ export type ClientMsg =
    * and power (0–1). Everyone on your floor works out where it goes the same way (world/golf.ts fly).
    */
   | { t: 'golf'; yaw: number; loft: number; power: number }
+  /** Chips: where your last golf ball stopped (in the cup, or how far from the pin), for the office to pay for (see EARN). */
+  | { t: 'golf.landed'; holed: boolean; fromPin: number }
   /** You sat down in a place on a couch, a beanbag, a chair or the bench (see seatAt in layout), or got up again (no seat). */
   | { t: 'sit'; seat?: string }
   /** You picked an issue card up off the board (or put it down again, no issue): everyone sees it in your hands. */
@@ -1208,6 +1211,8 @@ export type ServerMsg =
       usage: UsageState;
       limits: PlanLimits;
       me: Me;
+      /** Chips: your balance and latest changes (see shared/chips.ts). */
+      chips: ChipsState;
       notify: NotifyState;
       machine: MachineState;
       /** Outside the windows: the same on every floor. */
@@ -1290,6 +1295,11 @@ export type ServerMsg =
    * `pool` already as it is once the balls have stopped.
    */
   | { t: 'pool'; pool: PoolState; shot?: PoolPlayback }
+  /**
+   * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
+   * unless `quiet` (a casino game that shows it itself).
+   */
+  | { t: 'chips'; chips: ChipsState; change: ChipsEntry; quiet?: boolean }
   | { t: 'jukebox'; state: JukeboxState }
   /** Who's at the arcade cabinet on your floor now, and the building's high scores. */
   | { t: 'cabinet'; state: CabinetState }

@@ -66,6 +66,8 @@ import { openQueue } from './ui/queue';
 import { openUpgrade, restarting, showRestarting, showUpgraded } from './ui/upgrade';
 import { localizeHud, openHelp, renderCaffeine, renderChat, renderPeople, renderWorkers, updateSpeaking } from './ui/hud';
 import { Compass, type Bearing } from './ui/compass';
+import { chips } from './chips';
+import { chipsToast, mountChips } from './ui/chips';
 import { openCharacter } from './ui/character';
 import { openSettings } from './ui/settings';
 import { hiringPaused, renderUsage, usageLabel, usageTitle } from './ui/usage';
@@ -92,6 +94,8 @@ import { issueMeeting, openMeeting, type MeetingPreset } from './ui/meeting';
 
 // index.html's HUD is written in English: into your language before anything else draws on it.
 localizeHud();
+// Chips: your balance in the top bar (hidden until the office says what it is).
+mountChips();
 
 // ---- Renderer & scene ---------------------------------------------------------------------------
 const canvas = $('scene') as HTMLCanvasElement;
@@ -407,6 +411,8 @@ balls.onRest = (f: Flight, who: string, mine: boolean) => {
     return;
   }
   golf.landed(f);
+  // Chips: a hole in one, or one close to the pin, pays (the office checks it was your shot).
+  net.send({ t: 'golf.landed', holed: f.holed, fromPin: Number.isFinite(f.fromPin) ? f.fromPin : -1 });
   const rec = golfRecord();
   if (f.holed) {
     rec.holes++;
@@ -772,6 +778,7 @@ net.onMessage((msg) => {
   routeWhiteboardMessage(msg, net);
   switch (msg.t) {
     case 'welcome': {
+      chips.set(msg.chips);
       // A few pings, to line this page's clock up with the office's for the jukebox.
       for (let i = 0; i < 5; i++) setTimeout(() => net.send({ t: 'ping', at: performance.now() }), 200 + i * 500);
       const mine = store.peers.get(store.you);
@@ -889,6 +896,10 @@ net.onMessage((msg) => {
       break;
     case 'golf':
       theirShot(msg.id, { yaw: msg.yaw, loft: msg.loft, power: msg.power });
+      break;
+    case 'chips':
+      chips.set(msg.chips, msg.change);
+      if (!msg.quiet) chipsToast(msg.change);
       break;
     case 'gong':
       gongRang(msg.why, msg.pr);

@@ -35,7 +35,9 @@ import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layou
 import { JUKEBOX_TUNES, STREAM } from '../shared/jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
 import { emptyDarts } from '../shared/darts.js';
-import { emptyPool, type PoolPlayback } from '../shared/pool.js';
+import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
+import { Chips, activeMsg, basketOf, chipsId } from './chips.js';
+import { ACTIVE_FOR, GOLF_CLOSE } from '../shared/chips.js';
 import { SEARCH_MAX, SEARCH_MIN, searchKey } from '../shared/search.js';
 import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
@@ -84,6 +86,10 @@ interface Client {
   lastGongAt: number;
   /** When they last hit a golf ball off the balcony. */
   lastGolfAt: number;
+  /** Chips: who they are to the bank (see server/chips.ts), when they last did something, and when their last golf ball (not paid for yet) was hit. */
+  chips: string;
+  chipsActiveAt: number;
+  golfShotAt: number;
   /** When they last blew the DJ's air horn on the roof. */
   lastHornAt: number;
   /** When they may blow the whistle again (see 'whistle'), and whether it's still trilling. */
@@ -198,6 +204,12 @@ export async function startServer(cfg: Config) {
   // The arcade's high scores: one table for the whole building, on every floor's cabinet. The office
   // follows every game and puts the scores up itself (see Arcade).
   const highScores = new HighScores(cfg.dataDir);
+  // Chips: everyone's balance, kept on disk. A change goes to every page of theirs.
+  const chips = new Chips(cfg.dataDir, {
+    onChange: (who, state, change, quiet) => {
+      for (const c of clients.values()) if (c.chips === who) sendTo(c, { t: 'chips', chips: state, change, ...(quiet ? { quiet } : {}) });
+    },
+  });
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -458,6 +470,7 @@ export async function startServer(cfg: Config) {
     },
     peers: (floor) => [...clients.values()].filter((c) => c.peer.floor === floor.id).map((c) => c.peer),
     leaveOnMerge: () => leaveOnMerge.on,
+    prMerged: (floor, n) => mergedChips(floor, n),
   };
   const openFloor = (def: FloorDef): Floor | undefined => {
     if (!existsSync(def.dir)) {
@@ -922,6 +935,9 @@ export async function startServer(cfg: Config) {
       lastActAt: 0,
       lastGongAt: 0,
       lastGolfAt: 0,
+      chips: chipsId(account?.id, url.searchParams.get('chips'), id),
+      chipsActiveAt: Date.now(),
+      golfShotAt: 0,
       lastHornAt: 0,
       whistle: new WhistleGate(WHISTLE_SERVER_EVERY),
       whistling: false,
@@ -954,6 +970,7 @@ export async function startServer(cfg: Config) {
     };
     clients.set(id, client);
     if (account) accounts.seen(account.id);
+    chips.seen(client.chips);
     ws.on('pong', () => (client.isAlive = true));
 
     sendTo(client, {
@@ -970,6 +987,7 @@ export async function startServer(cfg: Config) {
       usage: ledger.state(),
       limits: limits.state,
       me,
+      chips: chips.state(client.chips),
       notify: webhook.state(),
       machine: machine.state(),
       sky: sky.state,
@@ -981,6 +999,8 @@ export async function startServer(cfg: Config) {
     screensOf(client, floor);
     broadcast({ t: 'peer.join', peer: client.peer }, id);
     if (account) accountsChanged(); // now online
+    // Chips: the first visit of the day pays (once a day: see EARN).
+    chips.earn(client.chips, 'daily');
     floorsChanged();
     if (floor) {
       floor.arrived();
@@ -1024,6 +1044,39 @@ export async function startServer(cfg: Config) {
   const poolChanged = (floor: Floor, shot?: PoolPlayback) => toFloor(floor, { t: 'pool', pool: floor.pool.state(), ...(shot && { shot }) });
   /** Who's at the pool table, whatever their connection: their account, or their browser's own key (or, without one, just this connection). */
   const poolKey = (c: Client, key: unknown) => (c.accountId ? `account:${c.accountId}` : typeof key === 'string' && key ? `browser:${key.slice(0, 64)}` : `conn:${c.id}`);
+  // --- Chips for games round the office (amounts, cooldowns and caps: EARN in shared/chips.ts) ---
+  /** A throw of `c`'s that goes in pays once it does, as long as nobody caught it on the way. */
+  const basketChips = (c: Client, floor: Floor) => {
+    const shot = floor.court.state().shot;
+    const made = shot && basketOf(shot);
+    if (!made) return;
+    setTimeout(() => {
+      const now = floor.court.state().shot;
+      if (now && now.by === shot.by && now.x === shot.x && now.vx === shot.vx && now.vz === shot.vz) chips.earn(c.chips, made.kind);
+    }, made.after).unref();
+  };
+  /** `c`'s dart just won the game: more for beating others than for finishing on your own. */
+  const dartsChips = (c: Client, floor: Floor) => {
+    const g = floor.darts.state().game;
+    const winner = g?.over && g.players.find((p) => p.id === g.winner);
+    if (winner && winner.peer === c.id) chips.earn(c.chips, g.players.length > 1 ? 'dartsWin' : 'dartsSolo');
+  };
+  /** A game of pool just ended: each winner still at the table is paid (on your own, for clearing the rack). */
+  const poolChips = (floor: Floor) => {
+    const g = floor.pool.state().game;
+    if (!g?.over || g.winner === null) return;
+    const winners = g.players.filter((p) => p.team === g.winner && !p.away).map((p) => clients.get(p.id)?.chips);
+    for (const id of new Set(winners)) if (id) chips.earn(id, isSolo(g) ? 'poolSolo' : 'poolWin');
+  };
+  /** Pull request `n` merged on `floor`: it pays (once) whoever queued its task, or else hired its worker. */
+  const mergedChips = (floor: Floor, n: number) => {
+    if (!chips.once(`pr:${floor.id}:${n}`)) return;
+    const by = floor.queue.state().tasks.find((t) => t.pr?.number === n)?.addedBy ?? floor.workers.list().find((w) => w.pr?.number === n)?.createdBy.replace(/ \(queue\)$/, '');
+    if (!by) return;
+    const account = accounts.byName(by);
+    const owner = account ? `account:${account.id}` : [...clients.values()].find((c) => !c.accountId && c.peer.name === by)?.chips;
+    if (owner) chips.earn(owner, 'merged');
+  };
   const jukeboxChanged = (floor: Floor) => toFloor(floor, { t: 'jukebox', state: floor.jukebox.state() });
   const teamChanged = async () => broadcast({ t: 'team', state: await team.state() });
 
@@ -1147,6 +1200,8 @@ export async function startServer(cfg: Config) {
 
   const handleMessage = (c: Client, msg: ClientMsg) => {
     const who = c.peer.name;
+    // Chips: being about pays now and then (see the minute timer).
+    if (activeMsg(msg)) c.chipsActiveAt = Date.now();
     /** The floor `c` is on, or a note to them that they have to be on one. */
     const here = (): Floor | undefined => {
       const f = floorOf(c);
@@ -1207,7 +1262,16 @@ export async function startServer(cfg: Config) {
         const [yaw, loft, power] = [num(msg.yaw), num(msg.loft), num(msg.power)];
         if (!c.peer.golfing || now - c.lastGolfAt < 800 || Math.abs(yaw) > 2 || loft < 0 || loft > 1.6 || power < 0 || power > 1) break;
         c.lastGolfAt = now;
+        c.golfShotAt = now;
         toNeighbors(c, { t: 'golf', id: c.id, yaw, loft, power });
+        break;
+      }
+      case 'golf.landed': {
+        // Chips: the page says where its own last ball stopped; it's paid once per shot, soon after it.
+        if (!c.golfShotAt || Date.now() - c.golfShotAt > 40_000) break;
+        c.golfShotAt = 0;
+        if (msg.holed === true) chips.earn(c.chips, 'golfHole');
+        else if (typeof msg.fromPin === 'number' && msg.fromPin >= 0 && msg.fromPin < GOLF_CLOSE) chips.earn(c.chips, 'golfClose');
         break;
       }
       case 'emote':
@@ -1334,6 +1398,7 @@ export async function startServer(cfg: Config) {
         // Whoever didn't get it (someone else caught it first) is told where it really is.
         if (changed) ballChanged(floor);
         else sendTo(c, { t: 'ball', ball: floor.court.state() });
+        if (changed && msg.t === 'ball.throw') basketChips(c, floor);
         break;
       }
       case 'darts.join':
@@ -1359,6 +1424,7 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (not their turn, the board was full) is told how it really is.
         if (changed) dartsChanged(floor);
         else sendTo(c, { t: 'darts', darts: d.state() });
+        if (changed && msg.t === 'darts.throw') dartsChips(c, floor);
         break;
       }
       case 'pool.shoot': {
@@ -1367,6 +1433,7 @@ export async function startServer(cfg: Config) {
         const shot = floor.pool.shoot(c.id, { angle: msg.angle, power: msg.power, top: msg.top, side: msg.side });
         if (shot) poolChanged(floor, shot);
         else sendTo(c, { t: 'pool', pool: floor.pool.state() });
+        if (shot?.outcome === 'won' || shot?.outcome === 'lost') poolChips(floor);
         break;
       }
       case 'pool.join':
@@ -2069,8 +2136,16 @@ export async function startServer(cfg: Config) {
   services.start();
 
   /** With `keep` (a restart), workers' terminals keep running for the next office to pick up. */
+  // Chips: every minute, everyone who's been doing something (once per person, however many pages) gets a minute towards `online`.
+  const chipsMinute = setInterval(() => {
+    const now = Date.now();
+    chips.minute([...clients.values()].filter((c) => now - c.chipsActiveAt < ACTIVE_FOR).map((c) => c.chips));
+  }, 60_000);
+
   const shutdown = (keep = false) => {
     clearInterval(heartbeat);
+    clearInterval(chipsMinute);
+    chips.flush();
     clearInterval(resync);
     clearTimeout(floorsTimer);
     arcade.flush();
