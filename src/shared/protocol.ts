@@ -8,6 +8,7 @@ import type { ActionKind, PokerState } from './poker.js';
 import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
+import type { RouletteState } from './roulette.js';
 import type { ChipsEntry, ChipsState } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -717,6 +718,8 @@ export interface FloorView {
   pool: PoolState;
   /** The blackjack table in the casino (only down there): the seats, the round with the hole card hidden, and the clock. */
   blackjack?: BlackjackState;
+  /** The casino's roulette table (only in the casino): who's at it, the chips on the layout, the round and the last numbers. */
+  roulette?: RouletteState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1241,6 +1244,18 @@ export type ClientMsg =
   | { t: 'onlinebj.skip' }
   /** Pull a face at your online table, for everyone there (and on the monitors showing it). */
   | { t: 'onlinebj.emote'; emote: OnlineEmote }
+  /**
+   * Roulette, in the casino, sitting on one of its stools: take your place at the table (back in the
+   * one kept for you, if you were away), get up from it (keeping your place and your chips on the
+   * layout), or leave it (taking your chips back while bets are still open).
+   */
+  | { t: 'roulette.join' }
+  | { t: 'roulette.away' }
+  | { t: 'roulette.leave' }
+  /** Put `amount` chips on `spot` (a Spot id, see shared/roulette.ts), while bets are open. */
+  | { t: 'roulette.bet'; spot: string; amount: number }
+  /** Pick your chips up off `spot`, or off the whole layout, while bets are open. */
+  | { t: 'roulette.unbet'; spot?: string }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1366,6 +1381,8 @@ export type ServerMsg =
   | { t: 'onlinebj'; onlinebj: OnlineBlackjackState }
   /** Someone at online table `table`, in seat `seat`, pulled a face. */
   | { t: 'onlinebj.emote'; table: number; seat: number; emote: OnlineEmote }
+  /** In the casino: someone sat down at the roulette table or got up, put chips down or picked them up, or the round moved on. */
+  | { t: 'roulette'; roulette: RouletteState }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

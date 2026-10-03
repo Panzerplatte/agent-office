@@ -12,9 +12,10 @@ import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
 import { emptyPoker, type PokerState } from '../shared/poker';
 import { emptyBlackjack, type BlackjackState } from '../shared/blackjack';
 import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } from '../shared/onlineblackjack';
+import { emptyRoulette, type RouletteState } from '../shared/roulette';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -199,6 +200,9 @@ class Store {
   onlinebjEmote: { table: number; seat: number; emote: OnlineEmote } | null = null;
   /** The shot that came with the latest news of the table, if one did: to roll it out (see world/pool.ts). */
   poolShot: PoolPlayback | undefined;
+  /** The casino's roulette table (see shared/roulette.ts), and when the office's news of it came (performance.now()), for its clock. */
+  roulette: RouletteState = emptyRoulette();
+  rouletteAt = 0;
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -282,7 +286,9 @@ class Store {
     this.pool = v.pool ?? emptyPool();
     this.blackjack = v.blackjack ?? emptyBlackjack();
     this.poolShot = undefined;
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack'] as Topic[]) this.emit(t);
+    this.roulette = v.roulette ?? emptyRoulette();
+    this.rouletteAt = performance.now();
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -444,6 +450,11 @@ class Store {
       case 'onlinebj.emote':
         this.onlinebjEmote = { table: msg.table, seat: msg.seat, emote: msg.emote };
         this.emit('onlinebjEmote');
+        break;
+      case 'roulette':
+        this.roulette = msg.roulette;
+        this.rouletteAt = performance.now();
+        this.emit('roulette');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

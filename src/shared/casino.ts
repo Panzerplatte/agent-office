@@ -106,6 +106,34 @@ export const BLACKJACK_TABLE: CasinoTable = {
 };
 
 /**
+ * Where things go on the blackjack felt, in the felt's own frame (x along the table, y across it
+ * toward the players, from the middle of its top; the straight edge at y = -width/2), measured out
+ * from the middle of the straight edge as on a real table: the chip tray along the straight edge, the
+ * dealer's cards in a row just in front of it, the rules printed across the middle, and in front of
+ * each stool its cards and then, nearer the rail, its betting circle. The seats' places are drawn in
+ * a little toward the middle seat (SPREAD of the way round from it to the stool), so the end seats'
+ * keep clear of the shoe and the discard holder in the corners.
+ */
+export const BLACKJACK_FELT = (() => {
+  const edge = -BLACKJACK_TABLE.size.width / 2;
+  /** How far out from the middle of the straight edge: the dealer's cards, a seat's cards, its bet. */
+  const DEALER_OUT = 0.25;
+  const CARDS_OUT = 0.62;
+  const BET_OUT = 0.79;
+  const SPREAD = 0.85;
+  const at = (a: number, r: number) => ({ x: +(Math.cos(a) * r).toFixed(3), y: +(edge + Math.sin(a) * r).toFixed(3) });
+  return {
+    /** The dealer's row, its middle. */
+    dealer: { x: 0, y: +(edge + DEALER_OUT).toFixed(3) },
+    /** Each seat's places, in seat order: where its cards go, and its bet's circle behind them. */
+    spots: BLACKJACK_TABLE.seats.map((s) => {
+      const a = Math.PI / 2 + (Math.atan2(s.z - edge, s.x) - Math.PI / 2) * SPREAD;
+      return { cards: at(a, CARDS_OUT), bet: at(a, BET_OUT) };
+    }),
+  };
+})();
+
+/**
  * The roulette table: the wheel at its west end (-x), the betting layout down the rest of it. The
  * croupier stands beside the wheel; six places round the layout.
  */
@@ -162,6 +190,11 @@ export const CHIP_BOARD = { x: 14.8, y: 3.72, z: CASINO_ROOM.minZ + 0.06, width:
 
 /** The bar along the east wall, south of the cashier: its counter (`x` the middle of it), the bartender behind. */
 export const CASINO_BAR = { x: 15.9, minZ: 1.2, maxZ: 8.4, depth: 0.7, height: 1.1 } as const;
+/**
+ * The casino's bartender: `x` where they stand behind the counter, and along it (`z`) the places in
+ * front of it where E orders a drink, each `reach` meters round, as at the rooftop bar.
+ */
+export const CASINO_BARTENDER = { x: CASINO_BAR.x + CASINO_BAR.depth / 2 + 0.55, order: [2.4, 4.8, 7.2], reach: 1.6 } as const;
 /** The lounge, in the south-east corner: sofas round a low table. */
 export const CASINO_LOUNGE = { x: 8.6, z: 8.4 } as const;
 /**
@@ -241,7 +274,7 @@ export const CASINO_SEATING: SeatDef[] = [
   ...tableSeats(BLACKJACK_TABLE, 'blackjackStool', '🂡 Blackjack table', 0.55),
   ...tableSeats(ROULETTE_TABLE, 'rouletteStool', '🎡 Roulette table', 0.55),
   ...SLOT_MACHINES.map((m, i): SeatDef => ({ id: `slots-${i + 1}`, kind: 'slotStool', label: '🎰 Slot machine', x: m.x + 0.95, y: 0, z: m.z, rotY: -Math.PI / 2, places: [0], hips: 0.6, depth: 0, out: -0.7, casino: true, play: 'slots', spot: i })),
-  ...[0, 1, 2, 3, 4].map((i): SeatDef => ({ id: `casino-stool-${i + 1}`, kind: 'barStool', label: '🪑 Bar stool', x: CASINO_BAR.x - CASINO_BAR.depth / 2 - 0.45, y: 0, z: CASINO_BAR.minZ + 0.8 + i * 1.4, rotY: Math.PI / 2, places: [0], hips: 0.78, depth: 0, out: -0.75, casino: true })),
+  ...[0, 1, 2, 3, 4].map((i): SeatDef => ({ id: `casino-stool-${i + 1}`, kind: 'barStool', label: '🪑 Bar stool', x: CASINO_BAR.x - CASINO_BAR.depth / 2 - 0.45, y: 0, z: CASINO_BAR.minZ + 0.8 + i * 1.4, rotY: Math.PI / 2, places: [0], hips: 0.78, depth: 0, out: -0.75, casino: true, bar: true })),
   // Round the lounge's low table: one on its south side facing north, one either end.
   { id: 'casino-sofa-1', kind: 'sofa', label: '🛋️ Sofa', x: CASINO_LOUNGE.x, y: 0, z: CASINO_LOUNGE.z + 1.5, rotY: Math.PI, places: [-0.7, 0.7], hips: 0.5, depth: -0.05, out: 0.8, casino: true },
   { id: 'casino-sofa-2', kind: 'sofa', label: '🛋️ Sofa', x: CASINO_LOUNGE.x - 2.1, y: 0, z: CASINO_LOUNGE.z, rotY: Math.PI / 2, places: [-0.5, 0.5], hips: 0.5, depth: -0.05, out: 0.8, casino: true },
