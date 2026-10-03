@@ -24,11 +24,11 @@ const CAM_UP = 1.05;
 const LOOK_AT = { x: 0, y: -0.1 };
 /** Keys that get you up off the stool. */
 const GET_UP = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'];
-/** A card's overlap in a hand: each next one this far along and this far in toward the dealer (m). */
-const FAN_ALONG = 0.02;
-const FAN_IN = 0.028;
-/** Two hands after a split: this far apart, either side of the seat's place. */
-const SPLIT_GAP = 0.13;
+/** A card's overlap in a hand: each next one this far along (so its corner stays in sight) and this far in toward the dealer (m). */
+const FAN_ALONG = 0.024;
+const FAN_IN = 0.014;
+/** Two hands after a split: this far apart, either side of the seat's place (a card and a few more fanned beside it). */
+const SPLIT_GAP = 0.15;
 
 export interface BlackjackHooks {
   bet(amount: number): void;
