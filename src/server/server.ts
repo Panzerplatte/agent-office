@@ -32,7 +32,7 @@ import { Arcade, HighScores } from './cabinet.js';
 import type { ChatLine, ClientMsg, FloorInfo, FloorView, Me, MeetingRequest, PeerInfo, SearchResults, ServerMsg, ServicesState } from '../shared/protocol.js';
 import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider, isSmokable } from '../shared/protocol.js';
 import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layout.js';
-import { JUKEBOX_TUNES, STREAM } from '../shared/jukebox.js';
+import { JUKEBOX_DEFAULT } from '../shared/jukebox.js';
 import { Jukebox } from './jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
 import { emptyDarts } from '../shared/darts.js';
@@ -620,7 +620,7 @@ export async function startServer(cfg: Config) {
     ball: floor?.court.state() ?? {},
     darts: floor?.darts.state() ?? emptyDarts(),
     pool: floor?.pool.state() ?? emptyPool(),
-    jukebox: floor?.jukebox.state() ?? { on: false, track: JUKEBOX_TUNES[0].id, startedAt: Date.now(), elapsed: 0 },
+    jukebox: floor?.jukebox.state() ?? { on: false, track: JUKEBOX_DEFAULT, startedAt: Date.now(), elapsed: 0 },
     whiteboard: { elements: floor?.whiteboard.scene() ?? [], people: floor ? drawing(floor) : [] },
     meeting: floor?.meetings.state() ?? { current: null, past: [] },
     cabinet: { ...cabinetState(floor), frame: (floor && cabinetPlayer(floor)?.frame) ?? null },
@@ -2274,7 +2274,7 @@ export async function startServer(cfg: Config) {
         const r = at.jukebox.play({ track: msg.track, url: msg.url }, who);
         if ('error' in r) return warn(c, r.error);
         if (!r.changed) break;
-        jukeboxHeard(at.floor, notice(at.jukebox.state().track === STREAM ? 'jukebox.radio' : 'jukebox.playing', { who, title: at.jukebox.title() }));
+        jukeboxHeard(at.floor, notice(at.jukebox.radio() ? 'jukebox.radio' : 'jukebox.playing', { who, title: at.jukebox.title() }));
         break;
       }
       case 'jukebox.skip': {
