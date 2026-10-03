@@ -50,6 +50,7 @@ import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, isDrink } from '../shared/rooftop.js';
 import { CASINO, casinoSpotOf } from '../shared/casino.js';
+import { hasAshtray } from '../shared/smoking.js';
 import { BlackjackTable } from './blackjack.js';
 import { SLOT_MACHINES } from '../shared/casino.js';
 import { Slots } from './slots.js';
@@ -1344,6 +1345,8 @@ export async function startServer(cfg: Config) {
           break;
         }
         if (msg.smoke === false || isSmokable(msg.smoke)) {
+          // Lit only where there's an ashtray: an office floor's balcony, or the casino's lounge.
+          if (msg.smoke && !hasAshtray(c.peer.floor)) break;
           if (msg.smoke === (c.peer.smoking ?? false)) break;
           if (msg.smoke) c.peer.smoking = msg.smoke;
           else delete c.peer.smoking;

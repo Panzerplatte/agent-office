@@ -2,7 +2,7 @@ import './style.css';
 import * as THREE from 'three';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { sameLook } from '../shared/avatar';
-import { BALCONY, DESK_BY_ID, DESKS, ELEVATOR, ELEVATOR_CAR, FLOOR, GOLF_HOLE, LADDER, LOFT, POLE, POLES, SEATING_BY_ID, SLAB, STATIONS, STATION_AGENT, STOREY, WALL_HEIGHT, beanbagsOut, deskSeat, inElevator, nextFreeSeat, roofDrop, seatAt, seatPlace, streetBelow, vacantSeats, type DeskDef, type SeatDef, type SeatPlace, type StationKind } from '../shared/layout';
+import { DESK_BY_ID, DESKS, ELEVATOR, ELEVATOR_CAR, FLOOR, GOLF_HOLE, LADDER, LOFT, POLE, POLES, SEATING_BY_ID, SLAB, STATIONS, STATION_AGENT, STOREY, WALL_HEIGHT, beanbagsOut, deskSeat, inElevator, nextFreeSeat, roofDrop, seatAt, seatPlace, streetBelow, vacantSeats, type DeskDef, type SeatDef, type SeatPlace, type StationKind } from '../shared/layout';
 import { floorPalette } from '../shared/floors';
 import type { AgentEffort, AgentProvider, CarriedIssue, FloorInfo, GhIssue, GongWhy, PeerInfo, Smokable, WorkerInfo, WorkerTask } from '../shared/protocol';
 import { MEETING_PATTERNS } from '../shared/meetings';
@@ -15,6 +15,7 @@ import { Caffeine } from './caffeine';
 import { buildOffice, type DeskView, type InteractKind, type Interactable } from './world/office';
 import { buildRooftop, type Rooftop } from './world/rooftop';
 import { buildCasino, type Casino } from './world/casino';
+import { addCasinoAshtray, type CasinoAshtray } from './world/casinoashtray';
 import { DrunkVision } from './world/drunk';
 import { Booze, type Stage as Feeling } from './booze';
 import { djFrame, djTime } from './dnb';
@@ -22,6 +23,7 @@ import { openBar } from './ui/bar';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { CASINO, casinoSpotOf } from '../shared/casino';
+import { canSmokeAt } from '../shared/smoking';
 import { BlackjackPlayer } from './blackjack';
 import { allowed } from '../shared/blackjack';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
@@ -323,9 +325,12 @@ const drunkVision = new DrunkVision(renderer);
 // ---- The casino ------------------------------------------------------------------------------------
 /** Down in the basement: built the first time anyone goes down there. The games find their tables here. */
 let casino: Casino | null = null;
+/** The ashtray in the casino's lounge, and the haze over it while people smoke down there. */
+let casinoAshtray: CasinoAshtray | null = null;
 function theCasino(): Casino {
   if (!casino) {
     casino = buildCasino();
+    casinoAshtray = addCasinoAshtray(casino);
     casino.group.visible = false;
     scene.add(casino.group);
     noOutline(casino.group);
@@ -2331,7 +2336,7 @@ function rollJoint() {
   if (smoking) return stubOut();
   openAshtray((s) => {
     // Wandered off (or lit up some other way) while choosing.
-    if (smoking || !onBalcony()) return;
+    if (smoking || !canSmoke()) return;
     // Another one on top of the last: it doesn't get any gentler.
     highPeak = Math.max(s.strength, high);
     highFelt = false;
@@ -2367,18 +2372,17 @@ function mellowSpeed(now: number): number {
   return 1;
 }
 
-/** Out on the balcony (a little slack at the door), where smoking is allowed. */
-function onBalcony(): boolean {
-  const p = player.pos;
-  return p.y > -0.5 && p.y < 2 && p.x > BALCONY.minX - 0.5 && p.x < BALCONY.maxX + 0.5 && p.z > BALCONY.minZ - 0.8 && p.z < BALCONY.maxZ + 0.5;
+/** Out on the balcony (a little slack at the door), or down in the casino's lounge: where smoking is allowed. */
+function canSmoke(): boolean {
+  return canSmokeAt(store.floor, player.pos);
 }
 
 /** Ends the break when the cigarette burns down, or when you take it back inside. */
 function checkSmokeBreak(now: number) {
   if (!smokeBreakUntil) return;
-  if (!onBalcony()) {
+  if (!canSmoke()) {
     setSmoking(false);
-    toast(t('notices.smokeInside'));
+    toast(t(downstairs ? 'notices.smokeLounge' : 'notices.smokeInside'));
   } else if (now > smokeBreakUntil) {
     const was = smoking;
     setSmoking(false);
@@ -4156,6 +4160,7 @@ function frame(ts?: number) {
   if (downstairs && casino) {
     lightCasino();
     casino.update(t, dt);
+    casinoAshtray?.update(t, dt, (smoking ? 1 : 0) + [...remotes.values()].filter((r) => r.person.smoking).length);
     if (!pokerFelt) {
       pokerFelt = new PokerFelt(casino.poker);
       pokerFelt.render(store.poker, true);
