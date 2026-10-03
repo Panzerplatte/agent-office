@@ -555,6 +555,37 @@ export class OfficeSound {
     }
   }
 
+  // ---- Blackjack ----------------------------------------------------------------------------------
+
+  /**
+   * The blackjack table: a card sliding out of the shoe onto the felt (`card`), one turned over
+   * (`flip`), and a little run up for a round you won (`win`). `at` is where.
+   */
+  blackjack(kind: 'card' | 'flip' | 'win', at?: Pos) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`blackjack-${kind}`);
+    const out = at ? this.panner(at, 2, 1) : ctx.createGain();
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    if (kind === 'win') {
+      [659, 784, 1047].forEach((f, i) => this.blip(out, t0 + i * 0.09, f, 1, i === 2 ? 0.4 : 0.12, 0.07, 'triangle'));
+      return;
+    }
+    // A short brush of paper on cloth: a burst of noise through a band, softer for a flip.
+    const n = this.noise(this.buf.white);
+    const band = biquad(ctx, 'bandpass', kind === 'card' ? rand(2600, 3200) : rand(1800, 2200), 1.2);
+    const g = ctx.createGain();
+    const len = kind === 'card' ? 0.09 : 0.06;
+    envelope(g.gain, t0, [
+      [0.008, kind === 'card' ? 0.35 : 0.22],
+      [len, 0],
+    ]);
+    n.connect(band).connect(g).connect(out);
+    n.start(t0);
+    n.stop(t0 + len + 0.02);
+  }
+
   // ---- Pool ---------------------------------------------------------------------------------------
 
   /** When the last pool click went (ctx time): a break's dozens of them in a moment are thinned out. */
@@ -605,6 +636,46 @@ export class OfficeSound {
           const len = i === 4 ? 0.9 : 0.18;
           this.blip(out, when, f, 1, len, 0.1, 'triangle');
           this.blip(out, when, f * 2, 1, len * 0.7, 0.03);
+        });
+        break;
+    }
+  }
+
+  // ---- Slot machines ------------------------------------------------------------------------------
+
+  /**
+   * A slot machine: the lever pulled and the reels whirring off (`pull`), a reel clunking to a stop
+   * (`stop`), the bells of a win, and a long fanfare for the jackpot. `at` is the machine.
+   */
+  slots(kind: 'pull' | 'stop' | 'win' | 'jackpot', at?: Pos) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`slots-${kind}`);
+    const out = at ? this.panner(at, 2.5, 1) : ctx.createGain();
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    switch (kind) {
+      case 'pull':
+        // The lever's ratchet, then the reels ticking round.
+        for (let i = 0; i < 4; i++) this.clink(out, t0 + i * 0.05, rand(1500, 1700), 0.05);
+        for (let i = 0; i < 14; i++) this.blip(out, t0 + 0.3 + i * 0.06, rand(900, 1000), 0.9, 0.02, 0.03, 'square');
+        break;
+      case 'stop':
+        this.play(pick(this.buf.steps), { gain: 0.35, rate: rand(2.4, 2.7), dest: out });
+        this.blip(out, t0, rand(200, 230), 0.7, 0.08, 0.12, 'triangle');
+        break;
+      case 'win':
+        // A few bright bells, going up.
+        [784, 988, 1175, 1568].forEach((f, i) => this.blip(out, t0 + i * 0.09, f, 1, 0.22, 0.09, 'triangle'));
+        break;
+      case 'jackpot':
+        // Bells ringing on and on, over a fanfare.
+        for (let i = 0; i < 24; i++) this.blip(out, t0 + i * 0.08, [1047, 1319, 1568, 2093][i % 4], 1, 0.12, 0.07, 'triangle');
+        [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => {
+          const when = t0 + 0.3 + i * 0.16;
+          const len = i === 5 ? 1.4 : 0.22;
+          this.blip(out, when, f, 1, len, 0.12, 'sawtooth');
+          this.blip(out, when, f * 2, 1, len * 0.7, 0.04);
         });
         break;
     }

@@ -173,6 +173,7 @@ export function openHelp() {
     ['🏀', t('menus.helpHoop')],
     ['🎯', t('menus.helpDarts')],
     ['🎱', t('menus.helpPool')],
+    ['🎰', t('menus.helpSlots')],
     ['🍸', t('menus.helpRoof')],
     ['🎰', t('menus.helpCasino')],
     ['🃏', t('menus.helpPoker')],

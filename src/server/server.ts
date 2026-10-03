@@ -49,7 +49,11 @@ import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, isDrink } from '../shared/rooftop.js';
-import { CASINO } from '../shared/casino.js';
+import { CASINO, casinoSpotOf } from '../shared/casino.js';
+import { BlackjackTable } from './blackjack.js';
+import { SLOT_MACHINES } from '../shared/casino.js';
+import { Slots } from './slots.js';
+import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -212,6 +216,52 @@ export async function startServer(cfg: Config) {
       for (const c of clients.values()) if (c.chips === who) sendTo(c, { t: 'chips', chips: state, change, ...(quiet ? { quiet } : {}) });
     },
   });
+  // Blackjack: the casino's table, one for the whole building. Every stake and payout goes through the
+  // chips bank (quietly: the table's panel shows them), by the chips id they sat down with.
+  const blackjack = new BlackjackTable(
+    {
+      balance: (who) => chips.balance(who),
+      take: (who, amount, why) => chips.bet(who, amount, why, { quiet: true }),
+      give: (who, amount, why) => void chips.award(who, amount, why, { quiet: true }),
+    },
+    { changed: () => blackjackChanged() },
+  );
+  /** Everyone in the casino hears how the blackjack table is now. */
+  const blackjackChanged = () => {
+    const json = JSON.stringify({ t: 'blackjack', blackjack: blackjack.state() } satisfies ServerMsg);
+    for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+  };
+  /**
+   * Whoever sits on one of the blackjack table's stools sits at the table, at that place (or back in
+   * their own, kept while they were away); getting up, going upstairs or dropping out leaves them away.
+   */
+  const blackjackSeat = (c: Client) => {
+    const at = c.peer.floor === CASINO ? casinoSpotOf(c.peer.seat) : undefined;
+    const changed = at?.game === 'blackjack' ? blackjack.join(c.id, c.peer.name, c.chips, at.spot) : blackjack.away(c.id);
+    if (changed) blackjackChanged();
+  };
+  // The casino's slot machines, one bank for the whole building: bets and payouts go through the chips,
+  // and the jackpot they share is kept on disk. Everyone in the casino hears about every spin.
+  const slots = new Slots(SLOT_MACHINES.length, chips, { dataDir: cfg.dataDir, onPaid: () => slotsChanged() });
+  const slotsChanged = () => {
+    const json = JSON.stringify({ t: 'slots', slots: slots.state() } satisfies ServerMsg);
+    for (const c of clients.values()) if (c.peer.floor === CASINO && c.ws.readyState === WebSocket.OPEN) c.ws.send(json);
+  };
+  // Online blackjack at the office PCs: tables for everyone sitting at a PC, on any floor, betting
+  // through the same chips bank (quietly: the screen shows it). Every page hears it, for the monitors.
+  const onlinebj = new OnlineBlackjack(
+    {
+      balance: (who) => chips.balance(who),
+      take: (who, amount, why) => chips.bet(who, amount, why, { quiet: true }),
+      give: (who, amount, why) => void chips.award(who, amount, why, { quiet: true }),
+    },
+    { changed: () => onlinebjChanged() },
+  );
+  const onlinebjChanged = () => broadcast({ t: 'onlinebj', onlinebj: onlinebj.state() });
+  /** Getting up from the PC (or leaving the floor) leaves the online table: away, the seat kept for a while. */
+  const onlinebjSeat = (c: Client) => {
+    if (!atPc(c.peer.seat) && onlinebj.away(c.id)) onlinebjChanged();
+  };
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -558,7 +608,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO });
+  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
   };
@@ -994,6 +1044,7 @@ export async function startServer(cfg: Config) {
       limits: limits.state,
       me,
       chips: chips.state(client.chips),
+      onlinebj: onlinebj.state(),
       notify: webhook.state(),
       machine: machine.state(),
       sky: sky.state,
@@ -1030,6 +1081,10 @@ export async function startServer(cfg: Config) {
       clients.delete(id);
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
+      // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
+      if (blackjack.away(id)) blackjackChanged();
+      // At an online table, likewise: their seat waits for them a while.
+      if (onlinebj.away(id)) onlinebjChanged();
       for (const f of floors.values()) {
         f.workers.detachAll(id);
         f.changes.unwatchAll(id);
@@ -1039,6 +1094,8 @@ export async function startServer(cfg: Config) {
         if (f.pool.away(id)) poolChanged(f);
       }
       if (poker.away(id)) pokerChanged();
+      // Their slot machine is kept for them a while.
+      if (slots.away(id)) slotsChanged();
       broadcast({ t: 'peer.leave', id });
       if (account) accountsChanged();
       floorsChanged();
@@ -1192,6 +1249,12 @@ export async function startServer(cfg: Config) {
     const poolLeft = !!was?.pool.away(c.id);
     // Out of the casino: their seat at the poker table is kept, and they sit out till they're back.
     const pokerLeft = c.peer.floor === CASINO && poker.away(c.id);
+    // Up from the casino: away from the blackjack table, their seat kept.
+    const blackjackLeft = blackjack.away(c.id);
+    // Out of the casino, their slot machine is kept for them a while.
+    if (slots.away(c.id)) slotsChanged();
+    // Off the floor their PC is on: away from the online table, the seat kept for a while.
+    const onlinebjLeft = onlinebj.away(c.id);
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1206,7 +1269,7 @@ export async function startServer(cfg: Config) {
     // An issue card belongs to the board it came off, which is on the floor they left; a drink stays at the bar.
     delete c.peer.carrying;
     delete c.peer.drink;
-    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft, pokerLeft };
+    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft, pokerLeft, blackjackLeft, onlinebjLeft };
   };
 
   const arrived = (c: Client, left: ReturnType<typeof leave>) => {
@@ -1217,6 +1280,8 @@ export async function startServer(cfg: Config) {
     if (left.poolLeft && left.was) poolChanged(left.was);
     if (left.pokerLeft) pokerChanged();
     else if (c.peer.floor === CASINO) pokerTo(c);
+    if (left.blackjackLeft) blackjackChanged();
+    if (left.onlinebjLeft) onlinebjChanged();
   };
 
   /**
@@ -1325,6 +1390,8 @@ export async function startServer(cfg: Config) {
         if (seat) c.peer.seat = seat;
         else delete c.peer.seat;
         broadcast({ t: 'peer.update', peer: c.peer }, c.id);
+        blackjackSeat(c);
+        onlinebjSeat(c);
         break;
       }
       case 'carry': {
@@ -1515,6 +1582,76 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (not their turn, the seat was taken) is told how it really is.
         if (changed) pokerChanged();
         else pokerTo(c);
+        break;
+      }
+      case 'blackjack.bet':
+      case 'blackjack.deal':
+      case 'blackjack.act':
+      case 'blackjack.insure':
+      case 'blackjack.skip':
+      case 'blackjack.leave': {
+        if (c.peer.floor !== CASINO) break;
+        const b = blackjack;
+        const changed =
+          msg.t === 'blackjack.bet' ? b.bet(c.id, msg.amount)
+          : msg.t === 'blackjack.deal' ? b.deal(c.id)
+          : msg.t === 'blackjack.act' ? b.act(c.id, msg.action)
+          : msg.t === 'blackjack.insure' ? b.insure(c.id, msg.take)
+          : msg.t === 'blackjack.skip' ? b.skip(c.id)
+          : b.left(c.id);
+        // Whoever it didn't work for (not their turn, not the chips for it) is told how it really is.
+        if (changed) blackjackChanged();
+        else sendTo(c, { t: 'blackjack', blackjack: b.state() });
+        break;
+      }
+      case 'slots.look':
+      case 'slots.join':
+      case 'slots.away':
+      case 'slots.leave':
+      case 'slots.spin': {
+        if (c.peer.floor !== CASINO) break;
+        // Only from the stool at that machine, and only while they're still on it.
+        const spot = casinoSpotOf(c.peer.seat);
+        const at = spot?.game === 'slots' ? spot.spot : -1;
+        const changed =
+          msg.t === 'slots.join' ? at === msg.machine && slots.join(c.id, msg.machine, c.peer.name, c.chips)
+          : msg.t === 'slots.away' ? slots.away(c.id)
+          : msg.t === 'slots.leave' ? slots.left(c.id)
+          : msg.t === 'slots.spin' ? at >= 0 && slots.machineOf(c.id) === at && slots.spin(c.id, msg.bet)
+          : false;
+        // Whoever it didn't work for (someone else's machine, a bet they haven't got) is told how it really is.
+        if (changed) slotsChanged();
+        else sendTo(c, { t: 'slots', slots: slots.state() });
+        break;
+      }
+      case 'onlinebj.join':
+      case 'onlinebj.away':
+      case 'onlinebj.leave':
+      case 'onlinebj.bet':
+      case 'onlinebj.deal':
+      case 'onlinebj.act':
+      case 'onlinebj.insure':
+      case 'onlinebj.skip': {
+        // Only sitting at a PC (the boss's chair on their floor) to sit down at a table; anything else at the table they're at.
+        if (msg.t === 'onlinebj.join' && (!atPc(c.peer.seat) || !c.peer.floor)) break;
+        const o = onlinebj;
+        const changed =
+          msg.t === 'onlinebj.join' ? o.join(c.id, c.peer.name, c.chips, c.peer.floor!)
+          : msg.t === 'onlinebj.away' ? o.away(c.id)
+          : msg.t === 'onlinebj.leave' ? o.left(c.id)
+          : msg.t === 'onlinebj.bet' ? o.bet(c.id, msg.amount)
+          : msg.t === 'onlinebj.deal' ? o.deal(c.id)
+          : msg.t === 'onlinebj.act' ? o.act(c.id, msg.action)
+          : msg.t === 'onlinebj.insure' ? o.insure(c.id, msg.take)
+          : o.skip(c.id);
+        // Whoever it didn't work for (not their turn, not the chips for it) is told how it really is.
+        if (changed) onlinebjChanged();
+        else sendTo(c, { t: 'onlinebj', onlinebj: o.state() });
+        break;
+      }
+      case 'onlinebj.emote': {
+        const e = onlinebj.emote(c.id, msg.emote);
+        if (e) broadcast({ t: 'onlinebj.emote', ...e });
         break;
       }
       case 'dog.pet':
@@ -2204,6 +2341,8 @@ export async function startServer(cfg: Config) {
     // Everyone at the poker table gets their chips back (a hand that's on is called off) before the bank's saved.
     clearInterval(pokerTick);
     poker.cashOutAll();
+    // Spins still on their reels are paid before the chips are written down.
+    slots.flush();
     chips.flush();
     clearInterval(resync);
     clearTimeout(floorsTimer);
