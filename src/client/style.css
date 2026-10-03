@@ -440,6 +440,68 @@ button { font-family: inherit; }
 .slots-pay { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
 .slots-pay-symbols { letter-spacing: 1px; }
 .slots-note { font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+/* At the roulette table (casino): the betting layout at the bottom, the clock and the last numbers over it, the chips under it. */
+.roulette { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); padding: 8px 12px 10px; display: grid; gap: 6px; font-size: 13px; font-weight: 800; }
+.rl-top { display: flex; align-items: center; gap: 10px; }
+.rl-title { font-weight: 900; white-space: nowrap; }
+.rl-status { flex: 1; text-align: center; color: var(--muted); }
+.rl-status.closed { color: var(--bad); font-weight: 900; letter-spacing: .02em; }
+.rl-clock { min-width: 34px; text-align: right; font-size: 20px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.rl-clock.soon { color: var(--bad); }
+.rl-history { display: flex; gap: 3px; overflow: hidden; min-height: 22px; }
+.rl-history span { flex: none; min-width: 22px; height: 22px; padding: 0 3px; border-radius: 6px; display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; border: 2px solid transparent; }
+.rl-history span.last { border-color: var(--ink); transform: scale(1.1); }
+.rl-history span.none { color: var(--muted); background: none; font-weight: 800; }
+.roulette .red { background: #c1121f; }
+.roulette .black { background: #1b1b1f; }
+.roulette .green { background: #0f7a3f; }
+.rl-board { display: grid; grid-template-columns: 34px 1fr 34px; gap: 3px; padding: 6px; border-radius: 10px; background: #0f5a32; user-select: none; }
+.rl-cell { position: relative; display: grid; place-items: center; height: 30px; border-radius: 4px; border: 1.5px solid rgba(255, 245, 220, .7); color: #fff5dc; font-weight: 900; font-variant-numeric: tabular-nums; cursor: pointer; }
+.rl-cell.cover { outline: 3px solid #ffd84d; outline-offset: -3px; }
+.rl-cell.win { animation: rl-win .6s ease-in-out infinite alternate; outline: 3px solid #ffd84d; outline-offset: -3px; }
+@keyframes rl-win { from { box-shadow: 0 0 0 0 rgba(255, 216, 77, .9); } to { box-shadow: 0 0 12px 4px rgba(255, 216, 77, .9); } }
+.rl-zero { height: auto; grid-row: span 1; }
+.rl-nums { position: relative; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(3, 30px); gap: 0; cursor: pointer; }
+.rl-nums .rl-cell { border-radius: 0; height: auto; }
+.rl-columns { display: grid; grid-template-rows: repeat(3, 30px); }
+.rl-columns .rl-cell, .rl-dozens .rl-cell, .rl-outside .rl-cell { height: auto; border-radius: 4px; }
+.rl-dozens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.rl-dozens .rl-cell { height: 26px; }
+.rl-outside { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.rl-outside .rl-cell { height: 26px; }
+.rl-out { background: transparent; }
+.rl-out.win { background: rgba(255, 216, 77, .25); }
+.rl-out.diamond.red, .rl-out.diamond.black { background: transparent; font-size: 20px; }
+.rl-out.diamond.red { color: #ff2a3a; }
+.rl-out.diamond.black { color: #111; text-shadow: 0 0 2px #fff5dc; }
+.rl-marks { position: absolute; inset: 0; pointer-events: none; }
+/* A player's chips on a spot: a disc in their colour, a little apart where several share one. */
+.rl-stack { position: absolute; display: grid; place-items: center; width: 22px; height: 22px; margin: calc(-11px - var(--nth) * 7px) 0 0 calc(-11px + var(--nth) * 9px); border-radius: 50%; background: var(--who); border: 2px dashed #fff; box-shadow: 0 0 0 1.5px var(--ink); color: #fff; font-size: 9px; font-weight: 900; text-shadow: 0 0 2px #000, 0 0 2px #000; pointer-events: none; z-index: 1; }
+.rl-stack.mine { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--ink); }
+.rl-stack.won { animation: rl-win .6s ease-in-out infinite alternate; border-style: solid; border-color: #ffd84d; }
+.rl-stack.lost { opacity: .35; filter: grayscale(.8); }
+.rl-stack-wrap { position: absolute; right: 2px; top: 50%; pointer-events: none; }
+.rl-stack-wrap .rl-stack { position: absolute; right: 0; top: 0; margin: -11px calc(var(--nth) * 18px) 0 0; }
+.rl-hover { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--chip); border: 2px dashed #fff; box-shadow: 0 0 0 1.5px var(--ink); opacity: .75; pointer-events: none; z-index: 2; }
+.roulette.closed .rl-board { filter: saturate(.75); }
+.roulette.closed .rl-cell, .roulette.closed .rl-nums { cursor: default; }
+.rl-result { text-align: center; font-size: 16px; font-weight: 900; }
+.rl-result.won { color: #0a8f61; }
+.rl-result.lost { color: var(--muted); font-size: 13px; }
+.rl-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rl-chips { display: flex; gap: 4px; }
+.rl-chip { width: 32px; height: 32px; border-radius: 50%; border: 3px dashed #fff; background: var(--chip); color: #fff; font: inherit; font-size: 11px; font-weight: 900; text-shadow: 0 0 2px #000; box-shadow: 0 0 0 2px var(--ink); cursor: pointer; }
+.rl-chip.on { transform: translateY(-3px); box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px #ffd84d; }
+.rl-chip.short { opacity: .35; }
+.rl-sums { flex: 1; display: grid; font-size: 12px; font-variant-numeric: tabular-nums; }
+.rl-down { color: var(--muted); }
+.rl-buttons { display: flex; gap: 4px; }
+.roulette .btn { padding: 4px 10px; font-size: 13px; }
+.roulette .btn:disabled { opacity: .45; cursor: default; }
+/* The hint line goes up top while the layout's at the bottom. */
+#hud:has(.roulette:not(.hidden)) .hint { bottom: auto; top: 14px; font-size: 13px; padding: 6px 12px; }
+#hud:has(.roulette:not(.hidden)) #toasts { top: 132px; }
+@media (max-width: 520px) { .rl-cell { font-size: 10px; } .rl-board { grid-template-columns: 24px 1fr 24px; } }
 .caffeine.jittery .bar span { background: var(--bad); }
 @keyframes jitters { 50% { transform: translate(1px, -1px) rotate(-1.5deg); } }
 @media (prefers-reduced-motion: reduce) { .caffeine.jittery { animation: none; } }

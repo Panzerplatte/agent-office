@@ -54,6 +54,7 @@ import { BlackjackTable } from './blackjack.js';
 import { SLOT_MACHINES } from '../shared/casino.js';
 import { Slots } from './slots.js';
 import { OnlineBlackjack, atPc } from './onlineblackjack.js';
+import { Roulette } from './roulette.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -262,6 +263,8 @@ export async function startServer(cfg: Config) {
   const onlinebjSeat = (c: Client) => {
     if (!atPc(c.peer.seat) && onlinebj.away(c.id)) onlinebjChanged();
   };
+  /** The casino's roulette table, one for the building: bets and payouts go through the chips bank (see roulette.ts). */
+  const roulette = new Roulette(chips);
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -608,7 +611,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state() });
+  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
   };
@@ -1096,6 +1099,8 @@ export async function startServer(cfg: Config) {
       if (poker.away(id)) pokerChanged();
       // Their slot machine is kept for them a while.
       if (slots.away(id)) slotsChanged();
+      // At the roulette table their place, and their chips on the layout, wait for them.
+      if (roulette.away(id)) rouletteChanged();
       broadcast({ t: 'peer.leave', id });
       if (account) accountsChanged();
       floorsChanged();
@@ -1107,6 +1112,11 @@ export async function startServer(cfg: Config) {
   const ballChanged = (floor: Floor) => toFloor(floor, { t: 'ball', ball: floor.court.state() });
   const dartsChanged = (floor: Floor) => toFloor(floor, { t: 'darts', darts: floor.darts.state() });
   const poolChanged = (floor: Floor, shot?: PoolPlayback) => toFloor(floor, { t: 'pool', pool: floor.pool.state(), ...(shot && { shot }) });
+  /** To everyone in the casino: the roulette table, as it is now. */
+  const rouletteChanged = () => {
+    const json = JSON.stringify({ t: 'roulette', roulette: roulette.state() } satisfies ServerMsg);
+    for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+  };
   // --- Poker: one table, down in the casino. Everyone down there sees it, each with only their own cards (see server/poker.ts).
   const poker = new Poker(chips);
   const pokerTo = (c: Client) => sendTo(c, { t: 'poker', poker: poker.state(c.id, c.chips) });
@@ -1255,6 +1265,8 @@ export async function startServer(cfg: Config) {
     if (slots.away(c.id)) slotsChanged();
     // Off the floor their PC is on: away from the online table, the seat kept for a while.
     const onlinebjLeft = onlinebj.away(c.id);
+    // Out of the casino: their place at the roulette table (and their chips on it) waits for them.
+    const rouletteLeft = roulette.away(c.id);
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1269,7 +1281,7 @@ export async function startServer(cfg: Config) {
     // An issue card belongs to the board it came off, which is on the floor they left; a drink stays at the bar.
     delete c.peer.carrying;
     delete c.peer.drink;
-    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft, pokerLeft, blackjackLeft, onlinebjLeft };
+    return { was, wasDrawing, ballLeft, dartsLeft, poolLeft, pokerLeft, blackjackLeft, onlinebjLeft, rouletteLeft };
   };
 
   const arrived = (c: Client, left: ReturnType<typeof leave>) => {
@@ -1282,6 +1294,7 @@ export async function startServer(cfg: Config) {
     else if (c.peer.floor === CASINO) pokerTo(c);
     if (left.blackjackLeft) blackjackChanged();
     if (left.onlinebjLeft) onlinebjChanged();
+    if (left.rouletteLeft) rouletteChanged();
   };
 
   /**
@@ -1652,6 +1665,25 @@ export async function startServer(cfg: Config) {
       case 'onlinebj.emote': {
         const e = onlinebj.emote(c.id, msg.emote);
         if (e) broadcast({ t: 'onlinebj.emote', ...e });
+        break;
+      }
+      case 'roulette.join':
+      case 'roulette.away':
+      case 'roulette.leave':
+      case 'roulette.bet':
+      case 'roulette.unbet': {
+        if (c.peer.floor !== CASINO) break;
+        // You take your place by sitting on one of the table's stools.
+        const seated = casinoSpotOf(c.peer.seat)?.game === 'roulette';
+        const changed =
+          msg.t === 'roulette.join' ? seated && roulette.join(c.id, c.peer.name, c.chips)
+          : msg.t === 'roulette.away' ? roulette.away(c.id)
+          : msg.t === 'roulette.leave' ? roulette.left(c.id)
+          : msg.t === 'roulette.bet' ? roulette.bet(c.id, msg.spot, msg.amount)
+          : roulette.unbet(c.id, msg.spot);
+        // Whoever it didn't work for (bets closed, no chips, the table full) is told how it really is.
+        if (changed) rouletteChanged();
+        else sendTo(c, { t: 'roulette', roulette: roulette.state() });
         break;
       }
       case 'dog.pet':
@@ -2335,7 +2367,15 @@ export async function startServer(cfg: Config) {
     chips.minute([...clients.values()].filter((c) => now - c.chipsActiveAt < ACTIVE_FOR).map((c) => c.chips));
   }, 60_000);
 
+  // The roulette table's clock: bets close, the wheel spins, the winners are paid, the layout's cleared.
+  const rouletteClock = setInterval(() => {
+    if (roulette.tick()) rouletteChanged();
+  }, 200);
+
   const shutdown = (keep = false) => {
+    // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
+    clearInterval(rouletteClock);
+    roulette.close();
     clearInterval(heartbeat);
     clearInterval(chipsMinute);
     // Everyone at the poker table gets their chips back (a hand that's on is called off) before the bank's saved.

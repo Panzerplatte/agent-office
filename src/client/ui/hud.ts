@@ -176,6 +176,7 @@ export function openHelp() {
     ['🎰', t('menus.helpSlots')],
     ['🍸', t('menus.helpRoof')],
     ['🎰', t('menus.helpCasino')],
+    ['🎡', t('menus.helpRoulette')],
     ['🃏', t('menus.helpPoker')],
     [t('menus.keyDrag'), t('menus.helpOrbit')],
     ['P', t('menus.helpPrompt')],
