@@ -1363,6 +1363,9 @@ function setPlace() {
   office.group.visible = !up && !down;
   // The holiday decorations are dressed round the office and the street below it, not up here (or down there).
   holiday.group.visible = !up && !down;
+  // The pool balls (and cue) and the golf balls are the office floor's too, though not in its group (they're not for clicking).
+  poolBalls.group.visible = !up && !down;
+  balls.group.visible = !up && !down;
   if (r) r.group.visible = up;
   if (c) c.group.visible = down;
   player.colliders = up ? r!.colliders : down ? c!.colliders : office.colliders;
