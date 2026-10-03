@@ -1,4 +1,4 @@
-import type { ChipsEntry, ChipsState } from '../shared/chips';
+import type { ChipsEntry, ChipsState, ChipsTopRow } from '../shared/chips';
 
 const KEY = 'agent-office.chips-key';
 let memoryKey = '';
@@ -36,6 +36,9 @@ export const chips = {
   /** Whether the office has said yet (the HUD stays hidden until it has). */
   known: false,
   listeners: new Set<Listener>(),
+  /** The building's biggest balances, most first, as the office last said (your own row marked). */
+  top: [] as ChipsTopRow[],
+  topListeners: new Set<(top: ChipsTopRow[]) => void>(),
 
   get balance(): number {
     return this.state.balance;
@@ -51,5 +54,16 @@ export const chips = {
   onChange(l: Listener): () => void {
     this.listeners.add(l);
     return () => this.listeners.delete(l);
+  },
+
+  /** What the office said the leaderboard is: in the welcome, or when it changed. */
+  setTop(top: ChipsTopRow[]) {
+    this.top = top;
+    for (const l of this.topListeners) l(top);
+  },
+
+  onTop(l: (top: ChipsTopRow[]) => void): () => void {
+    this.topListeners.add(l);
+    return () => this.topListeners.delete(l);
   },
 };
