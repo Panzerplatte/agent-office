@@ -1,5 +1,6 @@
 import { floorPalette } from '../../shared/floors';
 import { ROOF } from '../../shared/rooftop';
+import { CASINO } from '../../shared/casino';
 import type { FloorInfo } from '../../shared/protocol';
 import { store } from '../state';
 import { h } from './dom';
@@ -16,6 +17,8 @@ export interface FloorMenuOptions {
   elevator(): void;
   /** Up to the rooftop bar, by elevator. */
   roof(): void;
+  /** Down to the casino, by elevator. */
+  casino(): void;
 }
 
 let current: { el: HTMLElement; close(): void } | null = null;
@@ -85,7 +88,22 @@ export function toggleFloorMenu(anchor: HTMLElement, opts: FloorMenuOptions): vo
       close();
       opts.roof();
     });
-    el.replaceChildren(h('div.floor-menu-head', {}, `🏢 ${t('menus.floorCount', { n: floors.length })}`), ...(floors.length ? [roof] : []), ...items, add);
+    // And the casino in the basement, under them all.
+    const inCasino = store.floor === CASINO;
+    const gamblers = [...store.peers.values()].filter((p) => p.floor === CASINO).length;
+    const casino = h(
+      'button.floor-item',
+      { type: 'button', role: 'menuitem', class: inCasino ? 'here' : '', disabled: inCasino, title: inCasino ? t('menus.inCasino') : t('menus.rideDown') },
+      h('span.floor-no', { style: 'background:#5b1530' }, '🎰'),
+      h('span.floor-text', {}, h('span.floor-name', {}, t('menus.casinoName')), h('span.floor-sub', {}, inCasino ? t('menus.youAreHere') : t('menus.casinoSub'))),
+      h('span.floor-stats', {}, gamblers ? h('span', { title: t('menus.peopleDownThere') }, `🧑 ${gamblers}`) : ''),
+    );
+    casino.addEventListener('click', () => {
+      if (inCasino) return;
+      close();
+      opts.casino();
+    });
+    el.replaceChildren(h('div.floor-menu-head', {}, `🏢 ${t('menus.floorCount', { n: floors.length })}`), ...(floors.length ? [roof] : []), ...items, ...(floors.length ? [casino] : []), add);
   };
 
   const place = () => {

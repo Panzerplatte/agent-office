@@ -5,6 +5,7 @@ import { whereabouts } from '../src/client/ui/whereabouts.js';
 import { DANCE_FLOOR, ROOF_TABLES } from '../src/shared/layout.js';
 import type { PeerInfo } from '../src/shared/protocol.js';
 import { ROOF } from '../src/shared/rooftop.js';
+import { CASHIER, CASINO, ROULETTE_TABLE } from '../src/shared/casino.js';
 
 // The seats' words come from the i18n tables: in English, whatever language this machine is in.
 setLang('en');
@@ -24,6 +25,16 @@ test('up on the roof, the dance floor and the bar have their own words, and the 
   assert.equal(whereabouts(peer(11.5, 0, ROOF)), '🍸 at the bar');
   assert.equal(whereabouts(peer(0, 3, ROOF)), undefined);
   assert.equal(whereabouts({ ...peer(12, 0, ROOF), seat: 'roof-stool-3:0' }), '🪑 on the bar stool');
+});
+
+test("down in the casino, its tables, slots and cashier have their own words, and the office's rooms aren't down there", () => {
+  assert.equal(whereabouts({ ...peer(-8, -5, CASINO), seat: 'poker-2:0' }), '🃏 at the poker table');
+  assert.equal(whereabouts({ ...peer(-16.5, 0, CASINO), seat: 'slots-3:0' }), '🎰 at a slot machine');
+  assert.equal(whereabouts(peer(ROULETTE_TABLE.x + 1, ROULETTE_TABLE.z + 1.6, CASINO)), '🎡 at the roulette wheel');
+  assert.equal(whereabouts(peer(CASHIER.x, CASHIER.front + 0.6, CASINO)), '🪙 at the cashier');
+  // The meeting room's corner of a floor is just casino floor down there.
+  assert.equal(whereabouts(peer(12, 11.5, CASINO)), undefined);
+  assert.equal(whereabouts(peer(12, 11.5, 'agent-office')), '🤝 in the meeting room');
 });
 
 test('a smoke break says whether it is a cigarette or a joint', () => {

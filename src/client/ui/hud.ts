@@ -1,5 +1,6 @@
 import { BUZZ_SECONDS, type Caffeine } from '../caffeine';
 import { ROOF } from '../../shared/rooftop';
+import { CASINO } from '../../shared/casino';
 import { store } from '../state';
 import type { Voice } from '../voice';
 import type { ChatLine } from '../../shared/protocol';
@@ -61,7 +62,9 @@ export function renderPeople(voice: Voice, onEditProfile: () => void, onWalkTo: 
       !you && !store.onMyFloor(p)
         ? p.floor === ROOF
           ? h('span.where', { title: t('menus.upOnRoof') }, `🍸 ${t('menus.roofName')}`)
-          : h('span.where', { title: t('menus.otherFloor') }, `🛗 ${store.floors.find((f) => f.id === p.floor)?.name ?? t('menus.lobby')}`)
+          : p.floor === CASINO
+            ? h('span.where', { title: t('menus.downInCasino') }, `🎰 ${t('menus.casinoName')}`)
+            : h('span.where', { title: t('menus.otherFloor') }, `🛗 ${store.floors.find((f) => f.id === p.floor)?.name ?? t('menus.lobby')}`)
         : null,
       p.sharing ? h('span', { title: t('menus.sharingScreen') }, '🖥️') : null,
       h('span.mic', {}, mic),
@@ -171,6 +174,7 @@ export function openHelp() {
     ['🎯', t('menus.helpDarts')],
     ['🎱', t('menus.helpPool')],
     ['🍸', t('menus.helpRoof')],
+    ['🎰', t('menus.helpCasino')],
     [t('menus.keyDrag'), t('menus.helpOrbit')],
     ['P', t('menus.helpPrompt')],
     ['C', t('menus.helpChanges')],

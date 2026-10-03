@@ -48,6 +48,7 @@ import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, isDrink } from '../shared/rooftop.js';
+import { CASINO } from '../shared/casino.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -555,6 +556,8 @@ export async function startServer(cfg: Config) {
   });
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
+  /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
+  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
   };
@@ -916,7 +919,9 @@ export async function startServer(cfg: Config) {
     const wanted = url.searchParams.get('floor');
     // Up on the roof, as long as there's a building under it.
     const onRoof = wanted === ROOF && floors.size > 0;
-    const floor = onRoof ? undefined : arrivalFloor(wanted);
+    // Or down in the casino, the same.
+    const inCasino = wanted === CASINO && floors.size > 0;
+    const floor = onRoof || inCasino ? undefined : arrivalFloor(wanted);
     const spot = elevatorSpot();
     const account = session.account;
     // An account's name is its own; on the shared password people pick one.
@@ -965,7 +970,7 @@ export async function startServer(cfg: Config) {
         muted: true,
         sharing: false,
         ...(account ? { account: true } : {}),
-        ...(onRoof ? { floor: ROOF } : floor ? { floor: floor.id } : {}),
+        ...(onRoof ? { floor: ROOF } : inCasino ? { floor: CASINO } : floor ? { floor: floor.id } : {}),
       },
     };
     clients.set(id, client);
@@ -994,7 +999,7 @@ export async function startServer(cfg: Config) {
       theme: themes.state(),
       prompts: prompts.state(),
       leaveOnMerge: leaveOnMerge.state(),
-      ...(onRoof ? roofView() : floorView(floor)),
+      ...(onRoof ? roofView() : inCasino ? casinoView() : floorView(floor)),
     });
     screensOf(client, floor);
     broadcast({ t: 'peer.join', peer: client.peer }, id);
@@ -1117,6 +1122,16 @@ export async function startServer(cfg: Config) {
     floorsChanged();
   };
 
+  /** Down to the casino, by elevator. */
+  const goToCasino = (c: Client) => {
+    if (c.peer.floor === CASINO) return;
+    const left = leave(c);
+    c.peer.floor = CASINO;
+    sendTo(c, { t: 'floor.enter', peers: [...clients.values()].map((o) => o.peer), ...casinoView() });
+    arrived(c, left);
+    floorsChanged();
+  };
+
   /** Out to the lobby, where the elevator has nowhere to go: the building's last floor was taken off. */
   const toLobby = (c: Client) => {
     const left = leave(c);
@@ -1127,7 +1142,7 @@ export async function startServer(cfg: Config) {
 
   /**
    * Takes `floor` off the building (already out of floors.json): everyone on it rides the elevator to
-   * the next floor, or out to the lobby if it was the last (the roof goes with it), and its workers stop.
+   * the next floor, or out to the lobby if it was the last (the roof and the casino go with it), and its workers stop.
    */
   const closeFloor = (floor: Floor, who: string) => {
     const name = floor.def.name;
@@ -1137,7 +1152,7 @@ export async function startServer(cfg: Config) {
     floorsSent = JSON.stringify(list);
     broadcast({ t: 'floors', floors: list });
     for (const c of clients.values()) {
-      if (c.peer.floor === floor.id || (!next && c.peer.floor === ROOF)) {
+      if (c.peer.floor === floor.id || (!next && (c.peer.floor === ROOF || c.peer.floor === CASINO))) {
         if (next) goToFloor(c, next);
         else toLobby(c);
         sendTo(c, { t: 'toast', ...(next ? notice('floor.removedRode', { who, name, next: next.def.name }) : notice('floor.removedLast', { who, name })), level: 'warn' });
@@ -1244,7 +1259,7 @@ export async function startServer(cfg: Config) {
         }
         if (typeof msg.golf === 'boolean') {
           // The tee's on an office floor's balcony; there's none up on the roof.
-          const golf = msg.golf && c.peer.floor !== ROOF;
+          const golf = msg.golf && c.peer.floor !== ROOF && c.peer.floor !== CASINO;
           if (golf === !!c.peer.golfing) break;
           if (golf) c.peer.golfing = true;
           else delete c.peer.golfing;
@@ -1288,9 +1303,9 @@ export async function startServer(cfg: Config) {
         break;
       case 'sit': {
         // Everyone sees them sit down (or get up), and anyone who comes in later finds them sitting.
-        // Only on a seat where they are: the roof's up on the roof, the office's on a floor.
+        // Only on a seat where they are: the roof's up on the roof, the casino's down in it, the office's on a floor.
         const key = str(msg.seat, 40);
-        const seat = seatHere(key, c.peer.floor === ROOF) ? key : undefined;
+        const seat = seatHere(key, c.peer.floor) ? key : undefined;
         if (seat === c.peer.seat) break;
         if (seat) c.peer.seat = seat;
         else delete c.peer.seat;
@@ -1337,6 +1352,11 @@ export async function startServer(cfg: Config) {
         if (msg.floor === ROOF) {
           if (floors.size) goToRoof(c);
           else warn(c, notice('floor.noBuilding'));
+          break;
+        }
+        if (msg.floor === CASINO) {
+          if (floors.size) goToCasino(c);
+          else warn(c, notice('floor.noBasement'));
           break;
         }
         const floor = floors.get(str(msg.floor, 64));

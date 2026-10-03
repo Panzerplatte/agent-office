@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { CASINO } from '../src/shared/casino.js';
 import { DESK_BY_ID, seatHere, vacantSeats } from '../src/shared/layout.js';
+import { ROOF } from '../src/shared/rooftop.js';
 
 // Two floors that each have a Queue agent hired at the queue kiosk and a worker at desk 3.
 const agentOffice = [
@@ -46,10 +48,16 @@ test('a kiosk shows its idle agent again only once the hired one sent home has g
   assert.ok(!vacantSeats([{ deskId: 'station-queue' }], (id) => packing.has(id)).has('station-queue'));
 });
 
-test("you can only sit where you are: the roof's seats up on the roof, the office's on a floor", () => {
-  assert.ok(seatHere('couch:1', false));
-  assert.ok(seatHere('roof-stool-1:0', true));
-  assert.equal(seatHere('couch:1', true), undefined, 'no office couch from the roof');
-  assert.equal(seatHere('roof-stool-1:0', false), undefined, 'no bar stool from a project floor');
-  assert.equal(seatHere('couch:9', false), undefined, 'no such place on the couch');
+test("you can only sit where you are: the roof's seats up on the roof, the casino's down in it, the office's on a floor", () => {
+  assert.ok(seatHere('couch:1', 'my-floor'));
+  assert.ok(seatHere('roof-stool-1:0', ROOF));
+  assert.ok(seatHere('poker-3:0', CASINO));
+  assert.ok(seatHere('casino-sofa-1:1', CASINO));
+  assert.equal(seatHere('couch:1', ROOF), undefined, 'no office couch from the roof');
+  assert.equal(seatHere('couch:1', CASINO), undefined, 'no office couch from the casino');
+  assert.equal(seatHere('roof-stool-1:0', 'my-floor'), undefined, 'no bar stool from a project floor');
+  assert.equal(seatHere('roof-stool-1:0', CASINO), undefined, 'no roof bar stool from the casino');
+  assert.equal(seatHere('slots-1:0', 'my-floor'), undefined, 'no slot stool from a project floor');
+  assert.equal(seatHere('slots-1:0', ROOF), undefined, 'no slot stool from the roof');
+  assert.equal(seatHere('couch:9', 'my-floor'), undefined, 'no such place on the couch');
 });
