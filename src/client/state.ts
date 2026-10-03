@@ -10,9 +10,10 @@ import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
 import { emptyBlackjack, type BlackjackState } from '../shared/blackjack';
+import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } from '../shared/onlineblackjack';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'pool' | 'blackjack';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -189,6 +190,10 @@ class Store {
   pool: PoolState = emptyPool();
   /** The blackjack table in the casino (only while you're down there): the seats, the round and the clock (see shared/blackjack.ts). */
   blackjack: BlackjackState = emptyBlackjack();
+  /** Online blackjack at the PCs: every table, on any floor (see shared/onlineblackjack.ts). */
+  onlinebj: OnlineBlackjackState = emptyOnlineBlackjack();
+  /** The latest face pulled at an online table. */
+  onlinebjEmote: { table: number; seat: number; emote: OnlineEmote } | null = null;
   /** The shot that came with the latest news of the table, if one did: to roll it out (see world/pool.ts). */
   poolShot: PoolPlayback | undefined;
   /** Outside the windows; null until the server says. */
@@ -313,6 +318,8 @@ class Store {
         this.theme = msg.theme;
         this.prompts = msg.prompts ?? { custom: {} };
         this.leaveOnMerge = msg.leaveOnMerge ?? { on: false };
+        this.onlinebj = msg.onlinebj ?? emptyOnlineBlackjack();
+        this.emit('onlinebj');
         this.enter(msg);
         for (const t of ['peers', 'chat', 'upgrade', 'usage', 'limits', 'me', 'notify', 'machine', 'floors', 'projectsDir', 'sky', 'theme', 'prompts', 'leaveOnMerge'] as Topic[]) this.emit(t);
         break;
@@ -422,6 +429,14 @@ class Store {
       case 'blackjack':
         this.blackjack = msg.blackjack;
         this.emit('blackjack');
+        break;
+      case 'onlinebj':
+        this.onlinebj = msg.onlinebj;
+        this.emit('onlinebj');
+        break;
+      case 'onlinebj.emote':
+        this.onlinebjEmote = { table: msg.table, seat: msg.seat, emote: msg.emote };
+        this.emit('onlinebjEmote');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

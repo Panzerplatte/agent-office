@@ -159,6 +159,7 @@ export default strings(
     noDescription: 'No description provided.',
     doingLook: '🪞 picking a new look',
     doingMinesweeper: '💣 playing Minesweeper',
+    doingOnlineBlackjack: '🃏 playing online blackjack',
   },
   {
     signDocs: '📚 Doku',
@@ -298,5 +299,6 @@ export default strings(
     noDescription: 'Keine Beschreibung angegeben.',
     doingLook: '🪞 sucht sich einen neuen Look aus',
     doingMinesweeper: '💣 spielt Minesweeper',
+    doingOnlineBlackjack: '🃏 spielt Online-Blackjack',
   },
 );

@@ -1176,6 +1176,21 @@ a.when:hover { text-decoration: underline; }
 /* The arcade cabinet in the lounge (ui/cabinet.ts) plays on the keyboard, and says so over the game when a worker of yours needs input. */
 .arcade.cabinet canvas { cursor: default; }
 .cabinet-call { position: absolute; bottom: calc(100% + 10px); left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 10px; white-space: nowrap; padding: 6px 6px 6px 14px; background: var(--warn); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); font-weight: 900; font-size: 15px; animation: pop .18s ease-out; }
+/* Online blackjack on the office PC (ui/onlineblackjack.ts): the bets and moves under the screen wrap rather than run off it, and the game picker before. */
+.arcade.obj canvas { cursor: default; }
+.obj-bar { flex-wrap: wrap; justify-content: center; white-space: normal; width: max-content; max-width: min(calc(100vw - 24px), 980px); padding: 6px; gap: 8px; }
+.obj-do { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.obj-do .bj-chip { width: 34px; height: 34px; font-size: 11px; }
+.obj-amount { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.obj-amount.down { color: #2a9d4b; }
+.obj-faces { display: flex; gap: 2px; }
+.obj-face { padding: 2px 6px; font-size: 18px; line-height: 1; }
+.pc-pick { width: min(520px, 100%); }
+.pc-games { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pc-game { display: grid; justify-items: center; gap: 4px; padding: 14px 10px; white-space: normal; text-align: center; }
+.pc-game-icon { font-size: 34px; }
+.pc-game small { color: var(--muted); font-weight: 700; }
+@media (max-width: 520px) { .pc-games { grid-template-columns: 1fr; } }
 
 /* ---------- The ☰ menu (ui/menu.ts): it hangs under its button, and the office stays in view ---------- */
 .backdrop.menu-backdrop { background: none; display: block; padding: 0; animation: none; }

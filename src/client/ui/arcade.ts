@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { t } from '../i18n';
 import { h, openModal, type Modal } from './dom';
 import { H, Minesweeper, W } from './minesweeper';
+import { pickGame, type OnlineBlackjack } from './onlineblackjack';
 
 /** How much of the view (across or down, whichever runs out first) a screen fills while you play on it. */
 const FILL = 0.8;
@@ -55,7 +56,9 @@ export class ScreenZoom {
 }
 
 /**
- * The boss's monitor, which plays Minesweeper (ui/minesweeper.ts). The monitor shows the board as it
+ * The boss's monitor, the office PC, which plays Minesweeper (ui/minesweeper.ts) and, with `online`,
+ * online blackjack (ui/onlineblackjack.ts), picked when you sit down to it. The monitor shows the
+ * online table while someone on the floor plays at it, and otherwise the Minesweeper board as it
  * was left. Sit down and play, and the camera glides up to the screen while a board you can click is
  * laid exactly over it. The camera looks straight at the screen, so that board is a plain centered box.
  */
@@ -69,8 +72,12 @@ export class Arcade {
   /** The board you click while playing, drawn at the size it shows on screen so it stays crisp. */
   private board: HTMLCanvasElement | null = null;
 
-  constructor(screen: THREE.Mesh) {
+  constructor(
+    screen: THREE.Mesh,
+    private readonly online?: OnlineBlackjack,
+  ) {
     this.view = new ScreenZoom(screen);
+    if (online) online.onDraw = () => this.draw();
     this.picture.width = W;
     this.picture.height = H;
     this.texture.colorSpace = THREE.SRGBColorSpace;
@@ -88,7 +95,14 @@ export class Arcade {
     return this.view.zoomed;
   }
 
+  /** At the PC: pick a game (with online blackjack to pick from), then play it. */
   play() {
+    if (this.modal || this.online?.active) return;
+    if (!this.online) return this.minesweeper();
+    pickGame((game) => (game === 'blackjack' ? this.online!.open(this.view, () => this.draw()) : this.minesweeper()));
+  }
+
+  private minesweeper() {
     if (this.modal) return;
     const game = this.game;
     // A finished game stays up on the monitor until the next player sits down to a fresh one.
@@ -184,17 +198,20 @@ export class Arcade {
 
   /** Moves the camera toward the monitor while you play, and back after. Call it once the player has placed the camera. */
   update(camera: THREE.PerspectiveCamera, dt: number) {
-    this.view.update(camera, dt, !!this.modal);
+    this.view.update(camera, dt, !!this.modal || !!this.online?.active);
   }
 
   /** Draws the game on the board while you play, and on the monitor otherwise (the board covers it while you play). */
   private draw() {
-    if (this.board) {
+    if (this.online?.active) this.online.paintBoard();
+    else if (this.board) {
       const g = this.board.getContext('2d')!;
       g.setTransform(this.board.width / W, 0, 0, this.board.height / H, 0, 0);
       this.game.paint(g, false);
     } else {
-      this.game.paint(this.picture.getContext('2d')!, true);
+      const g = this.picture.getContext('2d')!;
+      // Someone on the floor at the online table: the monitor shows it.
+      if (!this.online?.paint(g)) this.game.paint(g, true);
       this.texture.needsUpdate = true;
     }
   }
