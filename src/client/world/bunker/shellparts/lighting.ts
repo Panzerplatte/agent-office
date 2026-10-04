@@ -58,3 +58,51 @@ export function lightBunker(lights: { sun: THREE.DirectionalLight; hemi: THREE.H
   if (scene.background instanceof THREE.Color) scene.background.copy(HAZE.color);
   return lamplight;
 }
+
+/** The office's lamps' glow at night (OfficeLook.glows), as the sky draws it. */
+interface Glows {
+  halos: { at: THREE.Vector3; size: number }[];
+  lamps: { power: number }[];
+}
+
+/**
+ * Puts out the glow the sky gives the office's own lamps at night while the bunker's on, and back as
+ * it was when it's off: their halos (the sky's points round the bulbs, made black, which adds nothing)
+ * and the light they cast (the sky reads each lamp's power every frame). Their fittings are hidden,
+ * and the bunker's own lamps light the room the same at any hour.
+ */
+export function officeGlows(glows: Glows, scene: THREE.Scene): (on: boolean) => void {
+  const was: { color: THREE.BufferAttribute; i: number; rgb: [number, number, number] }[] = [];
+  const power = new Map<{ power: number }, number>();
+  return (on) => {
+    if (!on) {
+      for (const { color, i, rgb } of was) {
+        color.setXYZ(i, ...rgb);
+        color.needsUpdate = true;
+      }
+      was.length = 0;
+      for (const [l, p] of power) l.power = p;
+      power.clear();
+      return;
+    }
+    if (was.length || power.size) return;
+    // The sky adds its halos to the scene itself, one set of points per size, at the bulbs' places.
+    for (const o of scene.children) {
+      const points = o as THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+      const color = points.isPoints ? (points.geometry.getAttribute('color') as THREE.BufferAttribute | undefined) : undefined;
+      if (!color) continue;
+      const pos = points.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const ours = glows.halos.some((h) => h.size === points.material.size && Math.abs(h.at.x - pos.getX(i)) < 1e-3 && Math.abs(h.at.y - pos.getY(i)) < 1e-3 && Math.abs(h.at.z - pos.getZ(i)) < 1e-3);
+        if (!ours) continue;
+        was.push({ color, i, rgb: [color.getX(i), color.getY(i), color.getZ(i)] });
+        color.setXYZ(i, 0, 0, 0);
+        color.needsUpdate = true;
+      }
+    }
+    for (const l of glows.lamps) {
+      power.set(l, l.power);
+      l.power = 0;
+    }
+  };
+}

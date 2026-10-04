@@ -68,6 +68,8 @@ export interface PoolTableView {
   cues: THREE.Object3D[];
   /** The triangle, hanging on its peg by the cues. */
   triangle: THREE.Object3D;
+  /** The billiard lamp over the table: its shade, rods and glow. */
+  lamp: THREE.Object3D;
 }
 
 /**
@@ -367,19 +369,20 @@ export function buildPoolTable(night: NightParts): PoolTableView {
   // The billiard lamp: a long green shade with brass ends, a meter over the cloth, hung on two rods
   // from the ceiling and lit underneath.
   const lampY = 1.0;
+  const lamp = new THREE.Group();
   const shadeL = 1.5;
   const shadeProfile = new THREE.Shape([new THREE.Vector2(-0.19, 0), new THREE.Vector2(0.19, 0), new THREE.Vector2(0.11, 0.16), new THREE.Vector2(-0.11, 0.16)]);
   const shadeGeo = new THREE.ExtrudeGeometry(shadeProfile, { depth: shadeL, bevelEnabled: false }).translate(0, 0, -shadeL / 2).rotateY(Math.PI / 2);
-  parts.add(mesh(shadeGeo, toon(SHADE), 0, lampY, 0, false));
+  lamp.add(mesh(shadeGeo, toon(SHADE), 0, lampY, 0, false));
   for (const sx of [-1, 1]) {
     const end = new THREE.ExtrudeGeometry(shadeProfile, { depth: 0.03, bevelEnabled: false }).scale(1.06, 1.06, 1).translate(0, -0.005, -0.015).rotateY(Math.PI / 2);
-    parts.add(mesh(end, brass, sx * (shadeL / 2), lampY, 0, false));
+    lamp.add(mesh(end, brass, sx * (shadeL / 2), lampY, 0, false));
     const rodH = WALL_HEIGHT - POOL_TABLE.y - lampY - 0.16;
-    parts.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, rodH, 6), brass, sx * 0.55, lampY + 0.16 + rodH / 2, 0, false));
-    parts.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 12), brass, sx * 0.55, WALL_HEIGHT - POOL_TABLE.y - 0.01, 0, false));
+    lamp.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, rodH, 6), brass, sx * 0.55, lampY + 0.16 + rodH / 2, 0, false));
+    lamp.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.02, 12), brass, sx * 0.55, WALL_HEIGHT - POOL_TABLE.y - 0.01, 0, false));
   }
   const glow = bulb(night, '#fff1c1', 0.2);
-  parts.add(mesh(new THREE.BoxGeometry(shadeL - 0.06, 0.01, 0.34), glow, 0, lampY - 0.004, 0, false));
+  lamp.add(mesh(new THREE.BoxGeometry(shadeL - 0.06, 0.01, 0.34), glow, 0, lampY - 0.004, 0, false));
   table.updateWorldMatrix(true, false);
   for (const x of [-0.5, 0, 0.5]) {
     const at = table.localToWorld(new THREE.Vector3(x, lampY - 0.02, 0));
@@ -388,6 +391,8 @@ export function buildPoolTable(night: NightParts): PoolTableView {
   night.lamps.push({ x: POOL_TABLE.x, y: POOL_TABLE.y + 0.3, z: POOL_TABLE.z, reach: 2.2, color: '#ffe3a3', power: 1.4 });
 
   table.add(mergeByMaterial(parts));
+  const lampMeshes = mergeByMaterial(lamp);
+  table.add(lampMeshes);
 
   // The cue rack on the south wall: a backboard, a rail at the bottom the butts stand in and a clip
   // rail near the top, four cues in it and a slot spare, the triangle on a peg and two cubes of chalk.
@@ -468,6 +473,7 @@ export function buildPoolTable(night: NightParts): PoolTableView {
     colliders,
     cues,
     triangle,
+    lamp: lampMeshes,
     toWorld(x, y, h = TABLE.ballR, target = new THREE.Vector3()) {
       table.updateWorldMatrix(true, false);
       return table.localToWorld(target.set(x, h, -y));

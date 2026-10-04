@@ -1,6 +1,6 @@
 import type { BunkerContext, BunkerPart } from './index';
 import { buildShellParts } from './shellparts/build';
-import { lightBunker } from './shellparts/lighting';
+import { lightBunker, officeGlows } from './shellparts/lighting';
 
 // The bunker's shell: everything the room itself is made of, and its light.
 //  - Walls: rough concrete over the outer walls (hide look.walls and build your own, or reskin
@@ -27,18 +27,25 @@ import { lightBunker } from './shellparts/lighting';
  * door over the balcony doors and a steel exit door, both moving with the office's own (hidden) doors;
  * the balcony walled in and a dark stairwell out of the exit, so nothing outside shows; a concrete
  * floor and a vaulted concrete ceiling on steel ribs, with pipes, a cable tray, a vent duct and fans;
- * cage lamps and fluorescent tubes. The light is the bunker's own, the same at any hour.
+ * cage lamps and fluorescent tubes, and bunker lamps where the office's other fittings were (over the
+ * pool table, in the meeting room, over the dartboard), whose glow at night goes out with them. The
+ * light is the bunker's own, the same at any hour.
  */
 export function buildShell(ctx: BunkerContext): BunkerPart {
   const shell = buildShellParts(ctx.office);
   ctx.group.add(shell.group);
+  const glows = officeGlows(ctx.look.glows, ctx.deps.scene);
   return {
     hideOffice: shell.hideOffice,
     reskin: shell.reskin,
+    set(on) {
+      glows(on);
+    },
     update(dt, t) {
       shell.update(t, dt, lightBunker(ctx.deps.lights, ctx.deps.scene));
     },
     dispose() {
+      glows(false);
       shell.dispose();
     },
   };

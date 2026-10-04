@@ -33,6 +33,8 @@ export interface DartboardView {
   group: THREE.Group;
   /** The cabinet, its open doors and the lamp over it, to walk into. */
   colliders: Collider[];
+  /** The picture lamp over the cabinet: its arm, shade and bulb. */
+  lamp: THREE.Object3D;
   /**
    * The world point at board-local (x, y) meters from the middle of the face (x to the right as you
    * face it, y up), `out` meters in front of it (negative: into the board, where a dart's tip goes).
@@ -323,20 +325,21 @@ export function buildDartboard(night: NightParts): DartboardView {
 
   // A little brass picture lamp over the cabinet: an arm out from the wall, and a half-round shade
   // along the top, open underneath and toward the board, with a bulb tube in it.
+  const lamp = new THREE.Group();
   const brass = toon('#c9a24a');
   const lampY = hh + 0.15;
   const lampZ = wall + 0.2;
-  parts.add(mesh(roundedBox(0.12, 0.08, 0.02, 0.02), brass, 0, hh + 0.07, wall + 0.01, false));
+  lamp.add(mesh(roundedBox(0.12, 0.08, 0.02, 0.02), brass, 0, hh + 0.07, wall + 0.01, false));
   const reach = Math.hypot(lampZ - wall, lampY - hh - 0.07);
   const arm = mesh(new THREE.CylinderGeometry(0.01, 0.01, reach, 6), brass, 0, (hh + 0.07 + lampY) / 2, (wall + lampZ) / 2, false);
   arm.rotation.x = Math.atan2(lampZ - wall, lampY - hh - 0.07);
-  parts.add(arm);
+  lamp.add(arm);
   const shadeMat = toonUnique('#c9a24a');
   shadeMat.side = THREE.DoubleSide;
-  parts.add(mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.34, 16, 1, true, -0.4, 2.7).rotateZ(Math.PI / 2), shadeMat, 0, lampY, lampZ, false));
-  for (const sx of [-1, 1]) parts.add(mesh(new THREE.CircleGeometry(0.045, 16, -0.4, 2.7).rotateY(-Math.PI / 2), shadeMat, sx * 0.17, lampY, lampZ, false));
+  lamp.add(mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.34, 16, 1, true, -0.4, 2.7).rotateZ(Math.PI / 2), shadeMat, 0, lampY, lampZ, false));
+  for (const sx of [-1, 1]) lamp.add(mesh(new THREE.CircleGeometry(0.045, 16, -0.4, 2.7).rotateY(-Math.PI / 2), shadeMat, sx * 0.17, lampY, lampZ, false));
   const glow = bulb(night, '#fff1c1', 0.15);
-  parts.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 8).rotateZ(Math.PI / 2), glow, 0, lampY - 0.01, lampZ - 0.005, false));
+  lamp.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.3, 8).rotateZ(Math.PI / 2), glow, 0, lampY - 0.01, lampZ - 0.005, false));
   night.halos.push({ at: new THREE.Vector3(DARTBOARD.x - 0.25, DARTBOARD.y + lampY - 0.03, DARTBOARD.z), size: 0.45, color: '#ffe08a' });
   night.lamps.push({ x: DARTBOARD.x - 0.6, y: DARTBOARD.y + 0.2, z: DARTBOARD.z, reach: 1.8, color: '#ffe3a3', power: 1.4 });
 
@@ -351,6 +354,8 @@ export function buildDartboard(night: NightParts): DartboardView {
   for (const s of [-1, 1]) parts.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 8), toon(INK), s * (oche.width / 2 - 0.03), floorY + 0.011, out + 0.025, false));
 
   group.add(mergeByMaterial(parts));
+  const lampMeshes = mergeByMaterial(lamp);
+  group.add(lampMeshes);
 
   // The cabinet with its doors open, and the lamp over it, in the room's own axes (it's on the east wall).
   const span = hw + cab.door + 0.01;
@@ -371,6 +376,7 @@ export function buildDartboard(night: NightParts): DartboardView {
   return {
     group,
     colliders,
+    lamp: lampMeshes,
     normal,
     chalk(d, turn) {
       last.d = d;
