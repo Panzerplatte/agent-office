@@ -703,6 +703,8 @@ export interface FloorView {
   services: ServicesState;
   /** What the lounge TV's browser shows (a worker's website, see server/tvbrowser.ts); null when it's off. */
   tvBrowser: TvBrowserState | null;
+  /** The floor's Demo-Galerie: the public (Render) address its finished websites go live under; null when none is set. */
+  demoGallery: string | null;
   /** The floor's dog; null in a building with no floors yet. */
   dog: DogState | null;
   /** The floor's cat; null in a building with no floors yet. */
@@ -1117,6 +1119,10 @@ export type ClientMsg =
   /** You opened the TV full screen (or closed it): frames come faster while anyone watches that way. */
   | { t: 'tvbrowser.watch'; on: boolean }
   | ({ t: 'tvbrowser.input' } & TvBrowserInput)
+  /** 🚀 Live gehen: prompts the Claude worker whose service this port is to publish its website in the Demo-Galerie. */
+  | { t: 'service.golive'; port: number }
+  /** Set the floor's Demo-Galerie address (an https URL); '' removes it. */
+  | { t: 'demoGallery.set'; url: string }
   | { t: 'rtc'; to: string; data: unknown }
   | { t: 'chat'; text: string }
   | { t: 'team.get' }
@@ -1414,6 +1420,8 @@ export type ServerMsg =
   | { t: 'tvbrowser'; state: TvBrowserState | null }
   /** What the TV's page looks like now: a base64 JPEG, w×h pixels; only while someone's on the floor. */
   | { t: 'tvbrowser.frame'; data: string; w: number; h: number }
+  /** The floor's Demo-Galerie address changed (to everyone on the floor). */
+  | { t: 'demoGallery'; floor: string; url: string | null }
   | { t: 'decor'; items: Decoration[] }
   /** What the dog on your floor is up to now: sent at the start of each leg of its day. */
   | { t: 'dog'; dog: DogState }

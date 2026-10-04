@@ -628,6 +628,7 @@ export async function startServer(cfg: Config) {
     decor: floor?.decor.list() ?? [],
     services: servicesState(floor),
     tvBrowser: floor?.tv.state() ?? null,
+    demoGallery: floor?.gallery.url ?? null,
     dog: floor?.dog.view() ?? null,
     cat: floor?.cat.view() ?? null,
     ball: floor?.court.state() ?? {},
@@ -1538,6 +1539,25 @@ export async function startServer(cfg: Config) {
       case 'tvbrowser.input':
         floorOf(c)?.tv.input(c.id, msg);
         break;
+      // 🚀 Live gehen: the worker whose service it is publishes its website in the floor's Demo-Galerie.
+      case 'service.golive': {
+        const floor = floorOf(c);
+        if (!floor) return warn(c, notice('floor.pickOne'));
+        const r = floor.goLive.go(msg.port, who);
+        if ('error' in r) return warn(c, r.error);
+        toastFloor(floor, notice('golive.started', { name: r.worker.name, service: r.service }));
+        break;
+      }
+      case 'demoGallery.set': {
+        const floor = floorOf(c);
+        if (!floor) return warn(c, notice('floor.pickOne'));
+        const r = floor.gallery.set(msg.url, who);
+        if ('error' in r) return warn(c, r.error);
+        if (!r.changed) break;
+        toFloor(floor, { t: 'demoGallery', floor: floor.id, url: r.url });
+        toastFloor(floor, r.url ? notice('gallery.set', { who, url: r.url }) : notice('gallery.off', { who }));
+        break;
+      }
       case 'rtc': {
         const target = clients.get(str(msg.to, 32));
         if (target) sendTo(target, { t: 'rtc', from: c.id, data: msg.data });
