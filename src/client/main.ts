@@ -110,8 +110,10 @@ import { TvBrowser } from './tvbrowser';
 import { TvViewer } from './ui/tvbrowser';
 import { OnlineBlackjack } from './ui/onlineblackjack';
 import { Cabinet } from './ui/cabinet';
+import { SnakeMachine } from './ui/snake';
 import { trackTitle } from '../shared/jukebox';
 import { GAME, scoreText } from '../shared/cabinet';
+import { SNAKE_GAME } from '../shared/snake';
 import { EMOTES, EMOTE_BY_ID, EMOTE_EASE_OUT, EmoteBucket, type EmoteId } from '../shared/emotes';
 import { EmoteWheel } from './ui/emotes';
 import { WHISTLE_MAX_SECS, WhistleGate } from '../shared/whistle';
@@ -435,6 +437,8 @@ store.on('jukebox', () => {
 });
 // The arcade cabinet next to it: BLOCKFALL up close, and on its screen for everyone else on the floor.
 const cabinet = new Cabinet(office.cabinet.screen, net, { openTerminal: (id) => openWorkerTerminal(id), sound: (kind, lines) => sound.arcade(kind, lines) });
+// The Snake machine between the TV and the jukebox: Snake up close, and on its screen for everyone else on the floor.
+const snakeMachine = new SnakeMachine(office.snakeCabinet.screen, net, { sound: (kind) => sound.snake(kind) });
 const notifier = new DesktopNotifier(() => settings.notify, (id) => openWorkerTerminal(id));
 
 // ---- Golf off the balcony --------------------------------------------------------------------------
@@ -2255,6 +2259,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'gong') hitGong();
   else if (target.kind === 'whiteboard') openWhiteboard(net);
   else if (target.kind === 'cabinet') cabinet.play();
+  else if (target.kind === 'snake') snakeMachine.play();
   else if (target.kind === 'ladder') grabLadder();
   else if (target.kind === 'pole' && target.pole !== undefined) usePole(target.pole);
   else if (target.kind === 'meeting') showMeeting();
@@ -3115,8 +3120,17 @@ function hintFor(it: Interactable): Hint {
       const about = left !== null ? t('main.gamePaused', { score: scoreText(left) }) : best ? `🏆 ${clip(best.name, 24)} · ${scoreText(best.score)}` : t('main.noHighScore');
       return { k: `${left}|${best?.name}|${best?.score}`, parts: [title(`🕹️ ${GAME}`), aside(about), key('E', t(left !== null ? 'main.carryOn' : 'main.play'))] };
     }
-    case 'snake':
-      return { k: '', parts: [title('🐍 SNAKE')] };
+    case 'snake': {
+      const s = store.snake;
+      const f = store.snakeFrame;
+      if (s.player && s.player.id !== store.you) {
+        const who = s.player.name;
+        return { k: `${who}|${f?.score}`, parts: [title(`🐍 ${SNAKE_GAME}`), aside(`${t('main.playing', { name: clip(who, 24) })}${f ? ` · ${scoreText(f.score)}` : ''}`), key('E', t('main.watch'))] };
+      }
+      const best = s.scores[0];
+      const about = best ? `🏆 ${clip(best.name, 24)} · ${scoreText(best.score)}` : t('main.noHighScore');
+      return { k: `${best?.name}|${best?.score}`, parts: [title(`🐍 ${SNAKE_GAME}`), aside(about), key('E', t('main.play'))] };
+    }
     case 'bookshelf': {
       const names = [...store.peers.values()].filter((p) => p.reading && p.id !== store.you && store.onMyFloor(p)).map((p) => p.name).join(', ');
       return { k: names, parts: [title(t('main.bookshelf')), aside(names ? t('main.reading', { names: clip(names, 40) }) : t('main.projectDocs')), key('E', t('main.readDocs'))] };
@@ -4140,6 +4154,7 @@ function frame(ts?: number) {
   arcade.update(camera, dt);
   tvViewer.update(camera, dt);
   cabinet.update(camera, dt);
+  snakeMachine.update(camera, dt);
   // Pulled away from the tee (sat down, off up the ladder, into the elevator): the club goes back.
   if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) golf.stop();
   golf.update(dt);
@@ -4342,7 +4357,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !tvViewer.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
+  if (firstPerson && !arcade.zoomed && !tvViewer.zoomed && !cabinet.zoomed && !snakeMachine.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
@@ -4396,7 +4411,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

@@ -136,15 +136,15 @@ export class SnakeArcade {
   }
 
   /**
-   * Game `id` is over, at `result` (checked with checkResult): if it adds up, on the table it goes.
-   * Says what the office made of it and, when it added up, what went on the table.
+   * Game `id` is over, at `result` (checked with checkResult): if it adds up, on the table it goes,
+   * under `name` if the player typed one in (checked with cleanName). Says what the office made of it and, when it added up, what went on the table.
    */
-  over(id: string | undefined, result: SnakeResult): { verdict: SnakeVerdict; score?: Omit<SnakeScore, 'at'>; changed?: boolean; first?: boolean } {
+  over(id: string | undefined, result: SnakeResult, name?: string | null): { verdict: SnakeVerdict; score?: Omit<SnakeScore, 'at'>; changed?: boolean; first?: boolean } {
     const g = id === undefined ? undefined : this.games.get(id);
     if (!g) return { verdict: 'none' };
     this.games.delete(g.id);
     if (!this.follows(g, result)) return { verdict: 'void' };
-    const score = { game: g.id, name: g.name, color: g.color, score: result.score, length: START_LENGTH + result.eaten };
+    const score = { game: g.id, name: name || g.name, color: g.color, score: result.score, length: START_LENGTH + result.eaten };
     return { verdict: 'ok', score, ...this.table.record(score) };
   }
 
