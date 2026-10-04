@@ -32,6 +32,8 @@ import { allowed } from '../shared/blackjack';
 import { BACKSWING_TIME, IMPACT, Person, Worker, type Stage } from './world/character';
 import { GolfBalls, PIN_DISTANCE, TEE_BALL, fly, lieText, pinText, roundText, type Flight, type Hit, type Shot } from './world/golf';
 import { Golfer } from './golf';
+import { Putter } from './minigolf';
+import { CUP, PUTT_TEE, PuttBalls, putt, puttRoundText } from './world/minigolf';
 import { Darter, dartsKey } from './darts';
 import { BoardDarts } from './world/darts';
 import { MAX_PLAYERS, type DartsState } from '../shared/darts';
@@ -409,7 +411,11 @@ store.on('cat', () => cat.sync(store.cat, store.catStart));
 // The floor's other look, the bunker (world/bunker): the same floor dressed up underground, for everyone on it.
 const bunker = createBunker(office, { scene, camera, lights: { sun, hemi, ambient }, sky, sound });
 noOutline(bunker.group);
-store.on('style', () => bunker.set(store.style === 'bunker'));
+store.on('style', () => {
+  // Golf off the balcony and putting in the bunker are played at the same tee: put the club back first.
+  if (golf.active && bunker.on !== (store.style === 'bunker')) golf.stop();
+  bunker.set(store.style === 'bunker');
+});
 sound.setMusicVolume(settings.music, settings.musicMuted);
 sound.onMusicError = (text) => toast(text, 'warn');
 // The jukebox on your floor: everyone there hears it from the same bar, and its lights say what's on.
@@ -466,6 +472,7 @@ const golf = new Golfer(player, me, camera, {
     // Not '': that reads as "no hint shown", and the golf hint would stay up.
     hintKey = 'stale';
   },
+  putter: () => (bunker.on ? putter : null),
 });
 balls.onHit = (hit: Hit, mine: boolean) => {
   // Your own ball's heard wherever it lands (the camera's following it); anyone else's from where it is.
@@ -516,19 +523,56 @@ function teeOff() {
   golf.start();
 }
 
-/** Someone else on the floor hit one: their swing, then their ball, off the same tee. */
-function theirShot(id: string, shot: Shot) {
+/** Someone else on the floor hit one: their swing, then their ball, off the same tee (or their putt, in the bunker, from where their ball lies). */
+function theirShot(id: string, shot: Shot, from?: [number, number]) {
   const p = store.peers.get(id);
   if (!p || !store.onMyFloor(p) || upTop) return;
-  remotes.get(id)?.person.golfSwing(shot.power);
+  remotes.get(id)?.person.golfSwing(bunker.on ? shot.power * 0.35 : shot.power);
   const floor = store.floor;
   setTimeout(() => {
     if (store.floor !== floor || upTop) return;
+    if (bunker.on) return putts.launch(putt({ yaw: shot.yaw, power: shot.power, from: from ? { x: from[0], z: from[1] } : PUTT_TEE }), p.name, false);
     balls.launch(shotHere(shot), p.name, false);
     teeEmptyUntil = performance.now() + 1800;
     sound.golf('hit', TEE_BALL);
   }, (BACKSWING_TIME + IMPACT) * 1000);
 }
+// ---- Mini golf in the bunker -----------------------------------------------------------------------
+// On a bunker floor the balcony's a smokers' room (world/bunker/balcony.ts), and E at the tee putts on
+// its mini golf hole instead (the Golfer hands over to the Putter, see minigolf.ts). Everyone's balls
+// roll in the bunker's group, so they show only with it.
+const putts = new PuttBalls();
+bunker.group.add(putts.group);
+const putter = new Putter(player, me, camera, {
+  holding: (on) => net.send({ t: 'act', golf: on }),
+  hit: (p) => {
+    net.send({ t: 'golf', yaw: p.yaw, loft: 0, power: p.power, from: [p.from.x, p.from.z] });
+    putts.launch(putt(p), store.profile.name, true);
+    sound.golf('hit');
+  },
+  ball: () => putts.mine,
+  done: () => {
+    hintKey = 'stale';
+  },
+});
+putts.onHit = (hit, mine) => sound.golf(hit.kind === 'cup' ? 'cup' : 'rail', mine ? undefined : hit.at, hit.speed);
+putts.onRest = (roll, who, mine) => {
+  // A hole in one: a putt from the tee that drops.
+  const ace = roll.holed && Math.hypot(roll.putt.from.x - PUTT_TEE.x, roll.putt.from.z - PUTT_TEE.z) < 0.01;
+  if (ace) {
+    confetti.burst(CUP.x, 0.9, CUP.z, 140, 0.7);
+    sound.golf('cheer');
+  }
+  if (!mine) {
+    if (ace) toast(t('notices.golfHoleInOneBy', { who }));
+    return;
+  }
+  putter.landed(roll);
+  // Chips, as off the balcony: a hole in one pays golfHole, holing out in two golfClose.
+  const strokes = putter.card.strokes;
+  net.send({ t: 'golf.landed', holed: ace, fromPin: roll.holed && strokes === 2 ? 0 : -1 });
+  if (ace) toast(t('notices.golfHoleInOne'));
+};
 // ---- Darts ------------------------------------------------------------------------------------------
 // The darts in the board, as the office says they were thrown, for everyone on the floor.
 const boardDarts = new BoardDarts(office.dartboard);
@@ -1182,7 +1226,7 @@ net.onMessage((msg) => {
       remotes.get(msg.id)?.person.stopEmote();
       break;
     case 'golf':
-      theirShot(msg.id, { yaw: msg.yaw, loft: msg.loft, power: msg.power });
+      theirShot(msg.id, { yaw: msg.yaw, loft: msg.loft, power: msg.power }, msg.from);
       break;
     case 'chips':
       chips.set(msg.chips, msg.change);
@@ -1436,6 +1480,7 @@ function usable(): Interactable[][] {
 function arrive() {
   // The balls lying about were this floor's.
   balls.clear();
+  putts.clear();
   setPlace();
   paintFloor();
   renderProject();
@@ -3002,7 +3047,13 @@ function hintFor(it: Interactable): Hint {
       return { k: '', parts: [title(t('main.gong')), aside(t('main.gongNote')), key('E', t('main.bangIt'))] };
     case 'golf': {
       const other = teeTaken();
-      if (other) return { k: `taken|${other}`, parts: [title(t('main.golfTee')), aside(t('main.teeingOff', { name: clip(other, 24) }))] };
+      if (other) return { k: `taken|${other}`, parts: [title(t(bunker.on ? 'main.minigolfTee' : 'main.golfTee')), aside(t('main.teeingOff', { name: clip(other, 24) }))] };
+      if (bunker.on) {
+        // Mini golf in the bunker: your round so far, or your best.
+        const r = putter.card;
+        const about = r.strokes && !r.holed ? puttRoundText(r) : r.best ? t('main.minigolfBest', { n: r.best }) : '';
+        return { k: `putt|${about}`, parts: [title(t('main.minigolfTee')), ...(about ? [aside(about)] : []), key('E', t(r.strokes && !r.holed ? 'main.golfCarryOn' : 'main.minigolfPutt'))] };
+      }
       // A round you stepped away from: back up, and you carry on with it.
       const round = golf.card;
       if (round.shots && !round.last?.holed) {
@@ -3266,10 +3317,10 @@ function renderGolfHint(el: HTMLElement) {
   hintKey = k;
   const parts =
     stage === 'watch'
-      ? [title(t('main.fore')), key(t('main.keySpace'), t('main.backToTee')), key(t('main.keyEsc'), t('main.golfLeave'))]
+      ? [title(t('main.fore')), key(t('main.keySpace'), t(putter.active ? 'main.minigolfBackToBall' : 'main.backToTee')), key(t('main.keyEsc'), t('main.golfLeave'))]
       : stage === 'charge' || stage === 'swing'
         ? [title(t('main.letGoToHit')), aside(t('main.meterNote'))]
-        : [key(t('main.keySpace'), t('main.holdToSwing')), key('A D', t('main.aim')), key('W S', t('main.loft')), key(t('main.keyEsc'), t('main.golfLeave'))];
+        : [key(t('main.keySpace'), t('main.holdToSwing')), key('A D', t('main.aim')), ...(putter.active ? [] : [key('W S', t('main.loft'))]), key(t('main.keyEsc'), t('main.golfLeave'))];
   el.replaceChildren(...parts);
   el.classList.remove('hidden');
 }
@@ -4082,6 +4133,7 @@ function frame(ts?: number) {
   // A dance that keeps going doesn't go with a club in your hands or up the ladder: it stops for everyone.
   if ((golf.active || climber.active || darter.active || cueist.active) && me.emoteLooping) stopEmote();
   balls.update(dt);
+  putts.update(dt, putter.lie);
   office.tee.ball.visible = golf.doing !== 'watch' && now > teeEmptyUntil;
   me.root.position.copy(player.pos);
   me.root.position.y += player.stepOffset;

@@ -3,6 +3,7 @@ import { BALCONY, GOLF_HOLE } from '../shared/layout';
 import { isTyping, type PlayerController } from './player';
 import { t } from './i18n';
 import { $, h, modalOpen } from './ui/dom';
+import type { Putter } from './minigolf';
 import { IMPACT, type Person } from './world/character';
 import {
   AIM_MAX,
@@ -71,6 +72,8 @@ export interface GolfHooks {
   street(): number;
   /** The club's back in the bag. */
   done(): void;
+  /** On a bunker floor, the tee's a mini golf hole indoors: the putter that plays it instead (see minigolf.ts). */
+  putter?(): Putter | null;
 }
 
 const lookAt = new THREE.Matrix4();
@@ -112,6 +115,8 @@ export class Golfer {
   private scored = '';
   /** Your round so far: kept while you're away from the tee, and in localStorage. */
   private round: GolfRound;
+  /** Putting in the bunker instead, while it's at it (see GolfHooks.putter). */
+  private putting: Putter | null = null;
 
   constructor(
     private readonly player: PlayerController,
@@ -163,12 +168,12 @@ export class Golfer {
   }
 
   get active(): boolean {
-    return this.stage !== null;
+    return this.stage !== null || !!this.putting?.active;
   }
 
   /** What you're doing at the tee, or null when you're not at it. */
   get doing(): GolfStage | null {
-    return this.stage;
+    return this.putting?.active ? this.putting.doing : this.stage;
   }
 
   /** How far the power meter is up right now (0–1), while Space is held. */
@@ -185,7 +190,9 @@ export class Golfer {
 
   /** Up to the tee with a club, over the ball, aimed the way you left it (at the pin, the first time). */
   start(): void {
-    if (this.stage) return;
+    if (this.active) return;
+    this.putting = this.hooks.putter?.() ?? null;
+    if (this.putting) return this.putting.start();
     this.stage = 'aim';
     const p = this.player;
     p.rig = () => this.stand();
@@ -202,6 +209,7 @@ export class Golfer {
 
   /** The club back in the bag, and you back on your feet beside the tee. */
   stop(): void {
+    if (this.putting?.active) return this.putting.stop();
     if (!this.stage) return;
     this.stage = null;
     this.shot = null;
@@ -219,6 +227,7 @@ export class Golfer {
 
   /** Every frame, once the player has moved: aiming, the swing, and the camera. */
   update(dt: number): void {
+    if (this.putting?.active) return this.putting.update(dt);
     if (!this.stage) return;
     const p = this.player;
     if (this.stage === 'aim' || this.stage === 'charge') {

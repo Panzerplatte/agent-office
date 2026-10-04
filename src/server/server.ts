@@ -1425,10 +1425,12 @@ export async function startServer(cfg: Config) {
       case 'golf': {
         const now = Date.now();
         const [yaw, loft, power] = [num(msg.yaw), num(msg.loft), num(msg.power)];
-        if (!c.peer.golfing || now - c.lastGolfAt < 800 || Math.abs(yaw) > 2 || loft < 0 || loft > 1.6 || power < 0 || power > 1) break;
+        // A putt on a bunker floor's mini golf hole: from where the ball lies, any way round.
+        const from = Array.isArray(msg.from) && msg.from.length === 2 && msg.from.every((v) => typeof v === 'number' && Math.abs(v) < 100) ? ([msg.from[0], msg.from[1]] as [number, number]) : undefined;
+        if (!c.peer.golfing || now - c.lastGolfAt < 800 || Math.abs(yaw) > (from ? Math.PI : 2) || loft < 0 || loft > 1.6 || power < 0 || power > 1) break;
         c.lastGolfAt = now;
         c.golfShotAt = now;
-        toNeighbors(c, { t: 'golf', id: c.id, yaw, loft, power });
+        toNeighbors(c, { t: 'golf', id: c.id, yaw, loft, power, ...(from && { from }) });
         break;
       }
       case 'golf.landed': {
