@@ -321,6 +321,7 @@ export class Floor {
       repo: this.def.repo,
       dir: this.dir,
       palette: this.def.palette,
+      style: this.style.style,
       addedBy: this.def.addedBy,
       addedAt: this.def.addedAt,
       workers: ws.filter((w) => !DESK_BY_ID.get(w.deskId)?.station).length,
