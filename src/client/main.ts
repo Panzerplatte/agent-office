@@ -13,6 +13,7 @@ import { EYE_HEIGHT, PlayerController, groundAt, isTyping } from './player';
 import { Climber, gripOf, type Arrival, type Grip, type Way } from './climb';
 import { Caffeine } from './caffeine';
 import { buildOffice, type DeskView, type InteractKind, type Interactable } from './world/office';
+import { createBunker } from './world/bunker';
 import { buildRooftop, type Rooftop } from './world/rooftop';
 import { buildCasino, type Casino } from './world/casino';
 import { addCasinoAshtray, type CasinoAshtray } from './world/casinoashtray';
@@ -404,6 +405,10 @@ const cat = new Cat(sound);
 scene.add(cat.root);
 noOutline(cat.root);
 store.on('cat', () => cat.sync(store.cat, store.catStart));
+// The floor's other look, the bunker (world/bunker): the same floor dressed up underground, for everyone on it.
+const bunker = createBunker(office, { scene, camera, lights: { sun, hemi, ambient }, sky, sound });
+noOutline(bunker.group);
+store.on('style', () => bunker.set(store.style === 'bunker'));
 sound.setMusicVolume(settings.music, settings.musicMuted);
 sound.onMusicError = (text) => toast(text, 'warn');
 // The jukebox on your floor: everyone there hears it from the same bar, and its lights say what's on.
@@ -1379,7 +1384,7 @@ function paintFloor() {
   const p = store.currentFloor()?.palette ?? 0;
   if (p === painted) return;
   painted = p;
-  office.setLook(floorPalette(p));
+  bunker.repaint(() => office.setLook(floorPalette(p)));
 }
 // A brand-new floor can arrive before the elevator's list says what color it is.
 store.on('floors', paintFloor);
@@ -3873,7 +3878,7 @@ $('hud').addEventListener('click', (e) => {
 // The project in the corner is the floor you're on; click it for the list of floors to go to.
 $('project').addEventListener('click', () => {
   if (!store.floor) return showElevator();
-  toggleFloorMenu($('project'), { go: switchFloor, elevator: showElevator, roof: () => ride(ROOF), casino: () => ride(CASINO) });
+  toggleFloorMenu($('project'), { go: switchFloor, elevator: showElevator, roof: () => ride(ROOF), casino: () => ride(CASINO), style: (style) => net.send({ t: 'floorStyle.set', style }) });
 });
 
 // ---- The HUD: a few buttons on the top bar, everything else in the ☰ menu ----------------------------
@@ -4191,6 +4196,7 @@ function frame(ts?: number) {
   hanger.update();
   sky.update(dt, t, camera);
   if (!upTop && !downstairs) holiday.update(t, sky.lampsOn, camera);
+  if (!upTop && !downstairs) bunker.update(dt);
   sound.setWeather(sky.rain, 1 - sky.daylight);
   if (upTop && roof) {
     // Everything up there moves to the DJ's set; strobes flash the whole roof as a drop lands.
@@ -4304,7 +4310,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

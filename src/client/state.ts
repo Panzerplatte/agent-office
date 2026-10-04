@@ -6,6 +6,7 @@ import { newer, type WbElement } from '../shared/whiteboard';
 import type { CatState } from '../shared/cat';
 import type { DogState } from '../shared/dog';
 import { JUKEBOX_DEFAULT, type JukeboxState } from '../shared/jukebox';
+import type { FloorStyle } from '../shared/floorstyle';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
@@ -15,7 +16,7 @@ import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } fro
 import { emptyRoulette, type RouletteState } from '../shared/roulette';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -156,6 +157,8 @@ class Store {
   jukebox: JukeboxState & { since: number } = { on: false, track: JUKEBOX_DEFAULT, startedAt: 0, elapsed: 0, since: 0 };
   /** The office's clock minus performance.now(), from the quickest ping (see 'pong'); for the jukebox. */
   private clock?: { offset: number; rtt: number };
+  /** The look of the floor you're on: the office, or the bunker (see shared/floorstyle.ts). */
+  style: FloorStyle = 'office';
   /** The floor's whiteboard: the newest copy of every element anyone drew, deleted ones too. */
   whiteboard = new Map<string, WbElement>();
   /** Who has the whiteboard open (client ids). */
@@ -281,6 +284,7 @@ class Store {
     this.setDog(v.dog);
     this.setCat(v.cat);
     this.setJukebox(v.jukebox);
+    this.style = v.style ?? 'office';
     this.ball = v.ball ?? {};
     this.darts = v.darts ?? emptyDarts();
     this.pool = v.pool ?? emptyPool();
@@ -288,7 +292,7 @@ class Store {
     this.poolShot = undefined;
     this.roulette = v.roulette ?? emptyRoulette();
     this.rouletteAt = performance.now();
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette'] as Topic[]) this.emit(t);
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -419,6 +423,11 @@ class Store {
       case 'jukebox':
         this.setJukebox(msg.state);
         this.emit('jukebox');
+        break;
+      case 'floorStyle':
+        if (msg.floor !== this.floor) break;
+        this.style = msg.style;
+        this.emit('style');
         break;
       case 'cabinet':
         // Nobody at it any more: the last game's screen goes with them.

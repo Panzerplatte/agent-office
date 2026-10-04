@@ -129,6 +129,56 @@ export interface Office {
   plants: THREE.Group[];
   /** Animates the office; doors open for anyone in `people` who comes up to them. */
   update(t: number, dt: number, people: Iterable<{ x: number; y: number; z: number }>): void;
+  /** Handles to the office's own look, for the bunker look to hide or reskin (see world/bunker). */
+  look: OfficeLook;
+}
+
+/**
+ * The parts of the office's appearance another look (world/bunker) may hide or reskin: meshes as they
+ * were built (snapshots, so a worker or laptop put on a desk later is never among them), and the
+ * shared materials. Hide meshes by swapping their material, not with `visible`: the office sets
+ * `visible` itself on some of them (bean bags, the wall plug), and an invisible mesh still counts for
+ * aiming at what it's part of. None of the screens and boards (boardMeshes, tvScreen, bossScreen,
+ * machineScreen, meetingBoard, meetingSign) are in here. Colliders, seats and interactables aren't either.
+ */
+export interface OfficeLook {
+  /** The inside paint of the outer walls (and the loft's), and their trim; setLook repaints their colors. */
+  wallMat: THREE.MeshToonMaterial;
+  trimMat: THREE.MeshToonMaterial;
+  /** The floor's planks (its map is repainted by setLook). The floor's meshes are rebuilt by stack.set: reskin this, don't hide them. */
+  floorMat: THREE.MeshToonMaterial;
+  /** The ceiling's tiles (map and emissiveMap); rebuilt like the floor, so reskin it the same way. */
+  ceilingMat: THREE.MeshToonMaterial;
+  /** The outer walls' pieces round their windows and doors, their baseboards, and the plug where the exit door is on upper floors. */
+  walls: THREE.Mesh[];
+  /** The windows' frames and glass, and the rain on them. */
+  windows: THREE.Mesh[];
+  /** The sliding glass doors out to the balcony. */
+  balconyDoor: THREE.Mesh[];
+  /** The balcony out front (floor, railing, string lights, plants); not the golf tee. */
+  balcony: THREE.Mesh[];
+  /** Down at the street and round the office: the exit door and its stairs, the garage, the street, the city and the hole (ground, moved by setLevel), and the rest of the building above and below (tower). */
+  ground: THREE.Group;
+  tower: THREE.Group;
+  /** The rugs under the desk clusters and the lounge's. */
+  rugs: THREE.Mesh[];
+  /** The pendant lamps over the desks and the lounge. */
+  lamps: THREE.Mesh[];
+  /** The potted plants (Office.plants), as meshes. */
+  plants: THREE.Mesh[];
+  /**
+   * Every seat in Office.desks (desks, bean bags, kiosks, meeting chairs), by id: its furniture
+   * (desk top, legs, panel, mug/plant/books; the bean bag; the kiosk) and its chair's meshes. Not the
+   * anchors or the vacancy marker. main.ts turns DeskView.chair as people sit down: a stand-in chair
+   * added under DeskView.chair turns with it.
+   */
+  seats: Map<string, { furniture: THREE.Mesh[]; chair: THREE.Mesh[] }>;
+  /** The lounge: the couch, the coffee table, its two bean bags, the TV's frame (not its screen), the kitchen counter with the coffee machine and fridge. */
+  lounge: { couch: THREE.Mesh[]; table: THREE.Mesh[]; beanbags: THREE.Mesh[]; tv: THREE.Mesh[]; kitchen: THREE.Mesh[] };
+  /** The meeting room under the loft: its glass walls and door, the sign over the door, the lights; and its table (the chairs are in seats). Not its board or door sign. */
+  meeting: { room: THREE.Mesh[]; table: THREE.Mesh[] };
+  /** The loft upstairs: its floor, posts, glass, stairs and the boss's desk (not the boss's screen). */
+  loft: THREE.Mesh[];
 }
 
 /** A door that opens by itself when someone comes up to it, and closes behind them. */
@@ -931,6 +981,7 @@ export function buildOffice(): Office {
   fixture('west', LADDER.z + 0.6, WALL_HEIGHT / 2, LADDER.width + 2.4, WALL_HEIGHT);
 
   // Rugs under each desk cluster
+  const rugs: THREE.Mesh[] = [];
   [
     [-10.5, -4],
     [-1.5, -4],
@@ -939,6 +990,7 @@ export function buildOffice(): Office {
   ].forEach(([x, z], i) => {
     const rug = mesh(roundedBox(6.2, 0.02, 4.6, 0.6), toon(PALETTE.rugs[i]), x, 0.011, z, false);
     group.add(rug);
+    rugs.push(rug);
   });
 
   const night: NightParts = {
@@ -954,7 +1006,12 @@ export function buildOffice(): Office {
   // Outside walls, with real windows you see out of and a door out.
   const trimMat = looks.trim;
   const openings = [...WINDOWS, EXIT_DOOR, BALCONY_DOOR];
+  // What a build step just added to the group, for the look's handles (see OfficeLook).
+  const since = (n: number) => group.children.slice(n);
+  let mark = group.children.length;
   buildWalls(group, colliders, openings, looks);
+  const wallParts = since(mark);
+  mark = group.children.length;
   const glazing = new THREE.Group();
   for (const o of WINDOWS) {
     glazing.add(windowIn(o));
@@ -962,13 +1019,16 @@ export function buildOffice(): Office {
     group.add(wetPane(o, night.wetGlass));
   }
   group.add(mergeByMaterial(glazing));
+  const windowParts = since(mark);
   const doors: Door[] = [];
   // Out the glass doors on the south wall: the balcony.
   const slider = balconyDoor();
   group.add(slider.group);
   doors.push(slider.door);
   fixture(BALCONY_DOOR.wall, BALCONY_DOOR.u, (BALCONY_DOOR.y1 + 0.1) / 2, BALCONY_DOOR.width + 0.2, BALCONY_DOOR.y1 + 0.1);
+  mark = group.children.length;
   buildBalcony(group, colliders, interactables, night);
+  const balconyParts = since(mark);
   const tee = buildTee(group, colliders, interactables);
 
   // Down to the street, which is the bottom floor's: its exit door and the steps down from it, the
@@ -1141,6 +1201,8 @@ export function buildOffice(): Office {
   colliders.push({ minX: 12.2, maxX: 13.8, minZ: -0.8, maxZ: 0.8, top: 0.46 });
   const lounge = mesh(roundedBox(7, 0.02, 7, 1.2), toon('#ffc6ff'), 13.4, 0.011, 0, false);
   group.add(lounge);
+  rugs.push(lounge);
+  const loungeBeans: THREE.Mesh[] = [];
 
   [
     ['#06d6a0', 12.5, 3.5],
@@ -1149,6 +1211,7 @@ export function buildOffice(): Office {
     const bean = mesh(new THREE.SphereGeometry(0.6, 16, 12), toon(c as string), x as number, 0.35, z as number);
     bean.scale.y = 0.6;
     group.add(bean);
+    loungeBeans.push(bean);
     colliders.push({ minX: (x as number) - 0.5, maxX: (x as number) + 0.5, minZ: (z as number) - 0.5, maxZ: (z as number) + 0.5, top: 0.6 });
     seatable(bean, `lounge-beanbag-${i + 1}`, 1.4, interactables);
   });
@@ -1207,6 +1270,7 @@ export function buildOffice(): Office {
 
   // Ceiling lamps (cartoon pendants), hung on long cords down from the high ceiling.
   const lampY = 4.05;
+  const lamps: THREE.Group[] = [];
   for (const [x, z] of [
     [-10.5, -4],
     [-1.5, -4],
@@ -1217,12 +1281,17 @@ export function buildOffice(): Office {
     const lamp = pendant(WALL_HEIGHT - lampY);
     lamp.position.set(x, lampY, z);
     group.add(lamp);
+    lamps.push(lamp);
     night.halos.push({ at: new THREE.Vector3(x, lampY - 0.12, z), size: 1.3, color: '#ffe08a' });
   }
 
+  mark = group.children.length;
   const bossScreen = buildLoft(group, colliders, interactables, looks);
+  const loftParts = since(mark);
   // Under the loft: the meeting room.
+  mark = group.children.length;
   const meeting = buildMeetingRoom(group, colliders, interactables, desks, doors, night);
+  const meetingParts = since(mark);
   fixture('south', MEETING_BOARD.x, MEETING_BOARD.y, MEETING_BOARD.width + 0.4, MEETING_BOARD.height + 0.4);
 
   // The elevator to the other floors, against the north wall between the PR board and the gong.
@@ -1331,7 +1400,43 @@ export function buildOffice(): Office {
     hoop.update(dt);
   };
 
-  return { group, colliders, interactables, desks, setBeanbags, boardMeshes, tvScreen, bossScreen, machineScreen, meetingBoard: meeting.board, meetingSign: meeting.sign, fixtures: () => fixtures, elevator, gong, jukebox, cabinet, whiteboard, tee, green, hoop, dartboard, poolTable, stack, setProjectName, setLook, setLevel, night, plants, update };
+  // The look's handles: every mesh as built, leaving out the screens and boards that show things.
+  const screens = new Set<THREE.Object3D>([...Object.values(boardMeshes), tvScreen, bossScreen, machineScreen, meeting.board, meeting.sign]);
+  const meshesOf = (...objs: THREE.Object3D[]): THREE.Mesh[] => {
+    const out: THREE.Mesh[] = [];
+    for (const o of objs) o.traverse((m) => (m as THREE.Mesh).isMesh && !screens.has(m) && out.push(m as THREE.Mesh));
+    return out;
+  };
+  const seats = new Map<string, { furniture: THREE.Mesh[]; chair: THREE.Mesh[] }>();
+  for (const [id, d] of desks) {
+    const skip = new Set<THREE.Object3D>([d.laptopAnchor, d.seatAnchor, d.stage, d.chair, d.vacancy]);
+    seats.set(id, { furniture: meshesOf(...d.group.children.filter((c) => !skip.has(c))), chair: meshesOf(d.chair) });
+  }
+  const look: OfficeLook = {
+    wallMat: looks.wall,
+    trimMat: looks.trim,
+    floorMat: stack.floor,
+    ceilingMat: stack.ceiling,
+    walls: meshesOf(...wallParts, plug.group),
+    windows: meshesOf(...windowParts),
+    balconyDoor: meshesOf(slider.group),
+    balcony: meshesOf(...balconyParts),
+    ground,
+    tower: tower.group,
+    rugs,
+    lamps: meshesOf(...lamps),
+    plants: meshesOf(...plants),
+    seats,
+    lounge: { couch: meshesOf(couch), table: meshesOf(table), beanbags: loungeBeans, tv: meshesOf(tvGroup.children[0]), kitchen: meshesOf(kitchen) },
+    meeting: {
+      // Everything but what you use there: the seats, the table, the board and the sign by the door.
+      room: meshesOf(...meetingParts.filter((o) => !o.userData.interact)),
+      table: meshesOf(meeting.table),
+    },
+    loft: meshesOf(...loftParts),
+  };
+
+  return { group, colliders, interactables, desks, setBeanbags, boardMeshes, tvScreen, bossScreen, machineScreen, meetingBoard: meeting.board, meetingSign: meeting.sign, fixtures: () => fixtures, elevator, gong, jukebox, cabinet, whiteboard, tee, green, hoop, dartboard, poolTable, stack, setProjectName, setLook, setLevel, night, plants, update, look };
 }
 
 /** A chair at the meeting table, with its laptop on the table in front of it. */
@@ -1366,7 +1471,7 @@ function buildMeetingSeat(def: DeskDef, index: number): DeskView {
  * sliding glass door facing the lounge, a long table with its chairs (MEETING_SEATS), a board on the
  * back wall for the meeting's output and a sign by the door for how it's going.
  */
-function buildMeetingRoom(group: THREE.Group, colliders: Collider[], interactables: Interactable[], desks: Map<string, DeskView>, doors: Door[], night: NightParts): { board: THREE.Mesh; sign: THREE.Mesh } {
+function buildMeetingRoom(group: THREE.Group, colliders: Collider[], interactables: Interactable[], desks: Map<string, DeskView>, doors: Door[], night: NightParts): { board: THREE.Mesh; sign: THREE.Mesh; table: THREE.Group } {
   const R = MEETING_ROOM;
   const H = R.height;
   const T = 0.1;
@@ -1492,7 +1597,7 @@ function buildMeetingRoom(group: THREE.Group, colliders: Collider[], interactabl
     group.add(mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 20), toon('#fff7d6', { emissive: '#ffe08a' }), top.x + dx, H - 0.02, top.z, false));
     night.halos.push({ at: new THREE.Vector3(top.x + dx, H - 0.08, top.z), size: 0.9, color: '#ffe08a' });
   }
-  return { board: face, sign };
+  return { board: face, sign, table };
 }
 
 /** The materials and textures a floor paints in its own colors. */

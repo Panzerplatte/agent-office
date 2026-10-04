@@ -3,6 +3,9 @@ import { store, type Settings, type ViewMode } from '../state';
 import { askNotifyPermission, notifyPermission, type DesktopNotifier } from '../notify';
 import type { ThemePick, WebhookKind } from '../../shared/protocol';
 import { THEME_PICKS } from '../../shared/theme';
+import { FLOOR_STYLES } from '../../shared/floorstyle';
+import { ROOF } from '../../shared/rooftop';
+import { CASINO } from '../../shared/casino';
 import { CAT_NAME_MAX, cleanCatName } from '../../shared/cat';
 import { DOG_NAME_MAX, cleanDogName } from '../../shared/dog';
 import { h, openModal, timeAgo } from './dom';
@@ -177,6 +180,33 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
     themeNote.textContent = `${now}${how} ${sameForAll(by, at)}`;
   };
   paintTheme();
+
+  // This floor's look, for everyone on it: the office or the bunker.
+  const styleRow = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.settings.floorStyle') });
+  const styleNote = h('p.setting-note');
+  const paintStyle = () => {
+    const onFloor = !!store.floor && store.floor !== ROOF && store.floor !== CASINO;
+    styleRow.replaceChildren(
+      ...FLOOR_STYLES.map((st) =>
+        h(
+          'button.btn',
+          {
+            type: 'button',
+            role: 'radio',
+            disabled: !onFloor,
+            'aria-checked': String(onFloor && store.style === st),
+            class: onFloor && store.style === st ? 'on' : '',
+            onclick: () => {
+              if (store.style !== st) net.send({ t: 'floorStyle.set', style: st });
+            },
+          },
+          t(st === 'bunker' ? 'windows.settings.styleBunker' : 'windows.settings.styleOffice'),
+        ),
+      ),
+    );
+    styleNote.textContent = onFloor ? t('windows.settings.floorStyleNote') : t('windows.settings.floorStyleNone');
+  };
+  paintStyle();
 
   // Desktop notifications: this browser's permission, then your own on/off.
   const notifyRow = h('div.seg');
@@ -507,6 +537,9 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
       h('label', { style: 'margin-top:18px' }, t('windows.settings.holidayTheme')),
       themeRow,
       themeNote,
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.floorStyle')),
+      styleRow,
+      styleNote,
       h('label', { style: 'margin-top:18px' }, t('windows.settings.desktopNotifications')),
       notifyRow,
       notifyNote,
@@ -545,6 +578,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   const offDog = store.on('dog', paintDog);
   const offCat = store.on('cat', paintCat);
   const offTheme = store.on('theme', paintTheme);
+  const offStyle = [store.on('style', paintStyle), store.on('floor', paintStyle)];
   const offLeave = store.on('leaveOnMerge', paintLeave);
   const offLimit = [store.on('machine', paintLimit), store.on('me', paintLimit)];
   const offDir = [store.on('projectsDir', paintDir), store.on('me', paintDir)];
@@ -556,6 +590,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
       offDog();
       offCat();
       offTheme();
+      offStyle.forEach((off) => off());
       offLeave();
       offLimit.forEach((off) => off());
       offDir.forEach((off) => off());
