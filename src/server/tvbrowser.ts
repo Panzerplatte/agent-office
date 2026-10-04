@@ -346,7 +346,9 @@ export class TvBrowser {
       }
       case 'key': {
         const key = typeof msg.key === 'string' ? msg.key.slice(0, 32) : '';
-        if (!key) return;
+        // A key with dx set is the viewer's keyup (client/ui/tvbrowser.ts): the whole press went on keydown.
+        // A modifier on its own does nothing; it comes along in mods with the key it goes with.
+        if (!key || msg.dx !== undefined || MODIFIERS.some(([, name]) => name === key)) return;
         // Down and up by hand rather than press(), which would read "+" as a chord.
         op = async () => {
           for (const m of mods) await page.keyboard.down(m);

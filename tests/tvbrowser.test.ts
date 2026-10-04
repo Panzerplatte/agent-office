@@ -207,6 +207,9 @@ test('mouse and keyboard land where they were aimed, in order', async () => {
   tv.input('a', { kind: 'wheel', dy: 1e9 });
   tv.input('a', { kind: 'key', key: 'a', mods: 2 | 8 });
   tv.input('a', { kind: 'key', key: '+' });
+  // The viewer's keyup echo, and a modifier on its own: nothing.
+  tv.input('a', { kind: 'key', key: '+', dx: 0 });
+  tv.input('a', { kind: 'key', key: 'Shift', mods: 8 });
   tv.input('a', { kind: 'text', text: 'Grüß Gott' });
   tv.input('a', { kind: 'key' });
   await until(() => fake.calls.includes('text Grüß Gott'));
