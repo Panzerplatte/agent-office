@@ -1,5 +1,6 @@
-import * as THREE from 'three';
 import type { BunkerContext, BunkerPart } from './index';
+import { buildShellParts } from './shellparts/build';
+import { lightBunker } from './shellparts/lighting';
 
 // The bunker's shell: everything the room itself is made of, and its light.
 //  - Walls: rough concrete over the outer walls (hide look.walls and build your own, or reskin
@@ -16,33 +17,29 @@ import type { BunkerContext, BunkerPart } from './index';
 //    ctx.deps.lights, so scale/tint them there; the bunker's own lamps' glow and halos are yours too.
 // Not here: desks, chairs, the meeting room and the lounge (furniture.ts), crates, drums, signs and
 // the like (props.ts), sound, the switching transition, flicker and dust (atmosphere.ts).
-
-const CONCRETE = new THREE.Color('#8f9196');
-const WARM = new THREE.Color('#ffcf8a');
+//
+// What it builds is in shellparts/: build.ts (the room), textures.ts (its canvas textures) and
+// lighting.ts (the same light day and night).
 
 /**
- * Builds the bunker's walls, floor, ceiling and lighting into `ctx.group`, and says which office
- * meshes and materials they replace. For now a placeholder: grey concrete walls, floor and ceiling,
- * no rugs, and dimmer, warmer light.
+ * Builds the bunker's walls, floor, ceiling and lamps into `ctx.group`: a concrete lining where the
+ * outer walls were, with a hazard stripe along the bottom; steel shutters over the windows; a blast
+ * door over the balcony doors and a steel exit door, both moving with the office's own (hidden) doors;
+ * the balcony walled in and a dark stairwell out of the exit, so nothing outside shows; a concrete
+ * floor and a vaulted concrete ceiling on steel ribs, with pipes, a cable tray, a vent duct and fans;
+ * cage lamps and fluorescent tubes. The light is the bunker's own, the same at any hour.
  */
 export function buildShell(ctx: BunkerContext): BunkerPart {
-  const { look } = ctx;
-  const { hemi, ambient, sun } = ctx.deps.lights;
+  const shell = buildShellParts(ctx.office);
+  ctx.group.add(shell.group);
   return {
-    hideOffice: [...look.rugs],
-    reskin: [
-      { material: look.wallMat, props: { color: CONCRETE } },
-      { material: look.trimMat, props: { color: new THREE.Color('#5c5f66') } },
-      { material: look.floorMat, props: { map: null, color: new THREE.Color('#7a7c80') } },
-      { material: look.ceilingMat, props: { map: null, emissiveMap: null, color: new THREE.Color('#6f7176'), emissive: new THREE.Color('#2a2622') } },
-    ],
-    update() {
-      hemi.intensity *= 0.55;
-      hemi.color.lerp(WARM, 0.5);
-      ambient.intensity *= 0.6;
-      ambient.color.lerp(WARM, 0.4);
-      sun.intensity *= 0.35;
+    hideOffice: shell.hideOffice,
+    reskin: shell.reskin,
+    update(dt, t) {
+      shell.update(t, dt, lightBunker(ctx.deps.lights, ctx.deps.scene));
     },
-    dispose() {},
+    dispose() {
+      shell.dispose();
+    },
   };
 }
