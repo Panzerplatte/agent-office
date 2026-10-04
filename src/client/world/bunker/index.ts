@@ -21,7 +21,7 @@ import { buildAtmosphere } from './atmosphere';
 //   balcony.ts     the balcony as a smokers' room, with its lounge and a mini golf hole
 //   furniture.ts   the desks, chairs and monitors, the meeting room and the lounge, in bunker style
 //   props.ts       crates, oil drums, sandbags, the workshop corner, signs, the vehicle bay…
-//   atmosphere.ts  ambient sound, the switching transition, flickering lights, dust
+//   atmosphere.ts  ambient sound, the switching transition, dust
 // While the bunker's on, the office meshes the parts name in `hideOffice` are hidden and the
 // materials in `reskin` changed; switching back puts every one of them exactly as it was.
 

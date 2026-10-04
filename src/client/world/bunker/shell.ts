@@ -16,7 +16,7 @@ import { lightBunker, officeGlows } from './shellparts/lighting';
 //  - Lighting: dimmer, warm light. A part's update runs every frame after the sky has set
 //    ctx.deps.lights, so scale/tint them there; the bunker's own lamps' glow and halos are yours too.
 // Not here: desks, chairs, the meeting room and the lounge (furniture.ts), crates, drums, signs and
-// the like (props.ts), sound, the switching transition, flicker and dust (atmosphere.ts).
+// the like (props.ts), sound, the switching transition and dust (atmosphere.ts).
 //
 // What it builds is in shellparts/: build.ts (the room), textures.ts (its canvas textures) and
 // lighting.ts (the same light day and night).
