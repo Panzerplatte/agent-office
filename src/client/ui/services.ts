@@ -14,6 +14,22 @@ function serviceUrl(port: number): string {
   return `${location.protocol}//localhost:${port}`;
 }
 
+/** Where the office page itself is: just the bits previewUrl looks at, so tests can pass their own. */
+type Here = Pick<Location, 'protocol' | 'hostname' | 'port'>;
+
+/**
+ * The page the 🖥 Preview window loads. With the office opened on localhost (on this computer or
+ * through its tunnel), `p<port>.localhost:<office port>` reaches the worker's server through that
+ * same port, so one tunnel serves every preview. Anywhere else it's the per-port tunnel's address.
+ */
+export function previewUrl(port: number, here: Here = location): string {
+  if (here.hostname === 'localhost') return `${here.protocol}//p${port}.localhost${here.port ? `:${here.port}` : ''}/`;
+  return `${here.protocol}//localhost:${port}`;
+}
+
+/** One window name for every service: each Preview loads into the same window, so sharing it in a meeting keeps going. */
+export const PREVIEW_WINDOW = 'ao-preview';
+
 /**
  * One command that tunnels localhost:<port> to the office, which relays it to the worker's
  * server, and opens it once the tunnel is up. It uses the same SSH access as the office itself.
@@ -75,6 +91,16 @@ export function openServices() {
       const on = picked === svc.port;
       const open = h('a.btn', { href: serviceUrl(svc.port), target: '_blank', rel: 'noopener', title: t('windows.services.openTitle', { url: serviceUrl(svc.port) }) }, t('windows.services.open'));
       open.addEventListener('click', (e) => e.stopPropagation());
+      const url = previewUrl(svc.port);
+      const preview = h(
+        'button.btn',
+        { type: 'button', title: t(url === serviceUrl(svc.port) ? 'windows.services.previewTunnelTitle' : 'windows.services.previewTitle', { url }) },
+        t('windows.services.preview'),
+      );
+      preview.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.open(url, PREVIEW_WINDOW, 'popup,width=1280,height=900');
+      });
       const li = h(
         'li',
         { class: on ? 'on' : '', tabindex: 0, role: 'button', title: t('windows.services.rowTitle') },
@@ -87,6 +113,7 @@ export function openServices() {
         ),
         h('span.svc-port', {}, `:${svc.port}`),
         open,
+        preview,
       );
       li.addEventListener('click', () => void pick(svc));
       li.addEventListener('keydown', (e) => {
