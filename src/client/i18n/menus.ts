@@ -399,6 +399,10 @@ export default strings(
     rouletteLeaveNote: 'Leave the table, with your chips while bets are still open (getting up keeps your place and your chips down)',
     rouletteYouWon: '🎉 You win {n} chips!',
     rouletteYouLost: 'No luck this time: {n} chips gone',
+    rouletteWheelView: 'The wheel from above',
+    rouletteWheelClose: 'Hide the view into the wheel (the button in its place brings it back)',
+    rouletteWheelOpen: '🎡 Show the wheel',
+    rouletteWheelOpenNote: 'Watch the ball from straight over the wheel again',
 
     // Controls (H)
     helpTitle: '🎮 Controls',
@@ -842,6 +846,10 @@ export default strings(
     rouletteLeaveNote: 'Den Tisch verlassen, mit deinen Chips, solange noch gesetzt werden kann (Aufstehen behält deinen Platz und deine Einsätze)',
     rouletteYouWon: '🎉 Du gewinnst {n} Chips!',
     rouletteYouLost: 'Diesmal kein Glück: {n} Chips weg',
+    rouletteWheelView: 'Der Kessel von oben',
+    rouletteWheelClose: 'Blick in den Kessel ausblenden (der Knopf an seiner Stelle holt ihn zurück)',
+    rouletteWheelOpen: '🎡 Kessel zeigen',
+    rouletteWheelOpenNote: 'Die Kugel wieder von direkt über dem Kessel verfolgen',
 
     // Steuerung (H)
     helpTitle: '🎮 Steuerung',

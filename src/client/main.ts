@@ -36,6 +36,7 @@ import { MAX_PLAYERS, type DartsState } from '../shared/darts';
 import { Cueist } from './pool';
 import { RoulettePlayer } from './roulette';
 import { RouletteWheelView } from './world/roulette';
+import { WheelWindow } from './wheelwindow';
 import { PokerPlayer } from './poker';
 import { PokerFelt } from './world/pokercards';
 import { PoolBalls, seatColor } from './world/pool';
@@ -765,6 +766,15 @@ const roulettePlayer = new RoulettePlayer(player, camera, () => casino?.roulette
     hintKey = 'stale';
   },
 });
+/** The window looking down into the wheel while the ball goes round, for anyone at the table or by it. */
+const wheelWindow = new WheelWindow(renderer, scene, camera, theRouletteWheel, () => casino?.roulette ?? null, () => reduceMotion.matches);
+/** Standing by the roulette table (not at it), close enough to watch the wheel. */
+function byRoulette(): boolean {
+  if (!downstairs || !casino || player.seat) return false;
+  const { toTable, table } = casino.roulette;
+  const at = toTable(player.pos);
+  return Math.abs(at.x) < table.size.length / 2 + 1.2 && Math.abs(at.y) < table.size.width / 2 + 1.2;
+}
 /** Which of the roulette table's stools you're sitting on (0-based), or null. */
 function atRoulette(): number | null {
   const seat = player.seat && SEATING_BY_ID.get(player.seat.seatId);
@@ -4250,6 +4260,7 @@ function frame(ts?: number) {
     sky.shading(true);
   }
   if (blurry) drunkVision.end(drunk, stoned, t, !reduceMotion.matches);
+  wheelWindow.frame(dt, downstairs && (roulettePlayer.active || byRoulette()));
   requestAnimationFrame(frame);
 }
 
