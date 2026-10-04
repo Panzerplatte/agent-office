@@ -24,6 +24,7 @@ import { FloorStyles } from './floorstyle.js';
 import { Whiteboard } from './whiteboard.js';
 import { MeetingRoom } from './meetings.js';
 import { TvBrowser, type TvBrowsers } from './tvbrowser.js';
+import { DemoGallery, GoLive } from './golive.js';
 import { Worktrees } from './worktrees.js';
 import { landedWorkers } from './leave-on-merge.js';
 import type { Ledger } from './usage.js';
@@ -128,6 +129,9 @@ export class Floor {
   readonly pool = new Pool();
   /** The lounge TV's browser: a worker's website, streamed to everyone on the floor (see tvbrowser.ts). */
   readonly tv: TvBrowser;
+  /** The Demo-Galerie its websites go live under, and the 🚀 Live gehen button that asks a worker to (see golive.ts). */
+  readonly gallery: DemoGallery;
+  readonly goLive: GoLive;
   private timer: NodeJS.Timeout;
   /** Pull requests merging, to ring the gong for. */
   private merges = new MergeWatch();
@@ -282,6 +286,12 @@ export class Floor {
       state: (state) => ctx.emit(this, { t: 'tvbrowser', state }),
       frame: (frame) => ctx.emit(this, { t: 'tvbrowser.frame', ...frame }, true),
       toast: (text) => ctx.toast(this, text),
+    });
+    this.gallery = new DemoGallery(dataDir);
+    this.goLive = new GoLive({
+      service: (port) => ctx.service(this, port),
+      worker: (id) => this.workers.get(id),
+      prompt: (id, text, by) => this.workers.prompt(id, text, by),
     });
     this.ready = this.workers.start();
 

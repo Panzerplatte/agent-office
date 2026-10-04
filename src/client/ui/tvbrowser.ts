@@ -5,6 +5,7 @@ import { store } from '../state';
 import { fitRect, modsOf, pagePoint, wheelPixels, type Rect, type TvBrowser } from '../tvbrowser';
 import { ScreenZoom } from './arcade';
 import { h, openModal, type Modal } from './dom';
+import { confirmGoLive } from './services';
 
 type Input = Extract<ClientMsg, { t: 'tvbrowser.input' }>;
 
@@ -59,9 +60,10 @@ export class TvViewer {
     const desktop = h('button.btn', { type: 'button' }, t('windows.tvbrowser.desktop'));
     const mobile = h('button.btn', { type: 'button' }, t('windows.tvbrowser.mobile'));
     const where = h('span.tvb-where');
+    const live = h('button.btn', { type: 'button', title: t('windows.services.goLiveTitle') }, t('windows.services.goLive'));
     const off = h('button.btn', { type: 'button' }, t('windows.tvbrowser.takeOff'));
     const leave = h('button.btn', { type: 'button', title: t('windows.tvbrowser.leaveTitle') }, t('windows.tvbrowser.leave'));
-    const bar = h('div.arcade-bar.tvb-bar', {}, back, fwd, reload, h('span.tvb-sep'), desktop, mobile, where, off, leave);
+    const bar = h('div.arcade-bar.tvb-bar', {}, back, fwd, reload, h('span.tvb-sep'), desktop, mobile, where, live, off, leave);
     const box = h('div.arcade.tvb', { role: 'dialog', 'aria-label': t('windows.tvbrowser.dialog') }, h('div.arcade-screen', {}, board), bar);
 
     const click = (b: HTMLButtonElement, fn: () => void) =>
@@ -75,6 +77,10 @@ export class TvViewer {
     click(reload, () => send({ t: 'tvbrowser.nav', action: 'reload' }));
     click(desktop, () => send({ t: 'tvbrowser.view', mode: 'desktop' }));
     click(mobile, () => send({ t: 'tvbrowser.view', mode: 'mobile' }));
+    live.addEventListener('click', () => {
+      const port = this.tv.state?.port;
+      if (port) confirmGoLive(send, port);
+    });
     click(off, () => send({ t: 'tvbrowser.close' }));
     click(leave, () => this.modal?.close());
 
@@ -167,6 +173,8 @@ export class TvViewer {
     // the emotes) are off anyway behind a window. Esc leaves; Ctrl/⌘+V pastes your clipboard in.
     const onKey = (e: KeyboardEvent) => {
       if (!this.modal || e.key === 'Escape' || e.isComposing) return;
+      // The 🚀 Live gehen question over the viewer keeps its keys (Enter says yes).
+      if (e.target instanceof Element && e.target.closest('[role=alertdialog]')) return;
       // Typing in the toolbar's own fields (none yet) or the chat stays there.
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const mods = modsOf(e);

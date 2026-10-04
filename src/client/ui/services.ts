@@ -2,6 +2,7 @@ import type { ClientMsg, ServiceInfo, ServicesState } from '../../shared/protoco
 import { store } from '../state';
 import { h, openModal, timeAgo } from './dom';
 import { copy, copyButton, guessOs, openCommand, OS_LABEL, type Os } from './team';
+import { confirmDialog } from './prompt';
 import { t } from '../i18n';
 
 /** A text with `{name}` placeholders filled by elements (code snippets) rather than strings. */
@@ -49,6 +50,14 @@ export function canPreview(here: Here = location): boolean {
   return here.hostname === 'localhost';
 }
 
+/**
+ * 🚀 Live gehen, after a yes: the worker whose service it is publishes the website in the floor's
+ * Demo-Galerie (the office prompts it, see server/golive.ts). Also on the TV's toolbar.
+ */
+export function confirmGoLive(send: (msg: ClientMsg) => void, port: number) {
+  confirmDialog(t('windows.services.goLive'), t('windows.services.goLiveAsk'), t('windows.services.goLive'), () => send({ t: 'service.golive', port }));
+}
+
 export function openServices(send: (msg: ClientMsg) => void) {
   let os = guessOs();
   let picked: number | null = null;
@@ -79,6 +88,12 @@ export function openServices(send: (msg: ClientMsg) => void) {
     body.replaceChildren(
       h('p.note', { style: 'margin:0 0 12px' }, t('windows.services.intro')),
     );
+    // The floor's Demo-Galerie on Render: public, so it opens straight from anywhere.
+    const gallery = store.demoGallery;
+    if (gallery)
+      body.append(
+        h('div', { style: 'margin:0 0 12px' }, h('a.btn', { href: gallery, target: '_blank', rel: 'noopener', title: t('windows.services.galleryTitle', { url: gallery }) }, t('windows.services.gallery'))),
+      );
     if (!s.items.length) {
       body.append(
         h(
@@ -107,6 +122,11 @@ export function openServices(send: (msg: ClientMsg) => void) {
         e.stopPropagation();
         send(onTv ? { t: 'tvbrowser.close' } : { t: 'tvbrowser.open', port: svc.port });
       });
+      const live = h('button.btn', { type: 'button', title: t('windows.services.goLiveTitle') }, t('windows.services.goLive'));
+      live.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmGoLive(send, svc.port);
+      });
       const url = previewUrl(svc.port);
       const preview =
         canPreview() &&
@@ -129,6 +149,7 @@ export function openServices(send: (msg: ClientMsg) => void) {
         h('span.svc-port', {}, `:${svc.port}`),
         open,
         tv,
+        live,
         preview,
       );
       li.addEventListener('click', () => void pick(svc));
@@ -161,7 +182,7 @@ export function openServices(send: (msg: ClientMsg) => void) {
     );
   };
 
-  const unsubs = [store.on('services', render), store.on('workers', render), store.on('tvBrowser', render)];
+  const unsubs = [store.on('services', render), store.on('workers', render), store.on('tvBrowser', render), store.on('demoGallery', render)];
   // Keeps "up 5m" fresh.
   const tick = setInterval(render, 30_000);
   const modal = openModal(el, {
