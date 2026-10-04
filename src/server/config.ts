@@ -173,8 +173,8 @@ function parseTurn(url: string): RTCIceServerLike {
 }
 
 /** Where the office lives when it isn't started in a project: ~/agent-office, or $AGENT_OFFICE_HOME. */
-export function officeHome(): string {
-  return path.resolve(process.env.AGENT_OFFICE_HOME || path.join(os.homedir(), 'agent-office'));
+export function officeHome(env: NodeJS.ProcessEnv = process.env): string {
+  return path.resolve(env.AGENT_OFFICE_HOME || path.join(os.homedir(), 'agent-office'));
 }
 
 /** Keep the office's own data out of git without touching the project's .gitignore. */

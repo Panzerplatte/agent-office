@@ -328,6 +328,72 @@ test('no Chromium: the TV says how to get one', async () => {
   assert.equal(browsers.running, false, 'the next open tries again');
 });
 
+/** A Playwright whose launch fails for the paths in `broken` (and for its own shell unless `shell`). */
+function fakePlaywright(broken: string[], shell = false) {
+  const launched: (string | undefined)[] = [];
+  const pw = {
+    chromium: {
+      executablePath: () => '/pw/chrome',
+      launch: async (o?: { executablePath?: string }) => {
+        const p = o?.executablePath;
+        launched.push(p);
+        if (!p && !shell) throw new Error("browserType.launch: Executable doesn't exist at /pw/headless_shell");
+        if (p && broken.includes(p)) throw new Error(`browserType.launch: Target page, context or browser has been closed\nBrowser logs:\n\n<launched> pid=7\n[pid=7][err] ${p}: error while loading shared libraries: libatk-1.0.so.0\nCall log:`);
+        return { path: p ?? 'shell' } as unknown as Browser;
+      },
+    },
+  } as unknown as Pick<typeof import('playwright-core'), 'chromium'>;
+  return { pw, launched };
+}
+
+const HOME_CHROMIUM = '/office/chromium/chromium';
+const SHARE_CHROMIUM = '/home/me/.local/share/agent-office/chromium/chromium';
+
+test('launchChromium looks in order: env, the office home, ~/.local/share, Playwright, the system', async () => {
+  const everything = new Set(['/own/chrome', HOME_CHROMIUM, SHARE_CHROMIUM, '/pw/chrome', '/usr/bin/chromium']);
+  const env = { AGENT_OFFICE_CHROMIUM: '/own/chrome', AGENT_OFFICE_HOME: '/office' };
+  const order: (string | undefined)[] = [];
+  // Each step down, the one before it is taken away.
+  for (const gone of ['/own/chrome', HOME_CHROMIUM, SHARE_CHROMIUM, 'shell', '/pw/chrome', '/usr/bin/chromium']) {
+    const { pw } = fakePlaywright([], !order.includes('shell'));
+    const there = (p: string) => everything.has(p) && !order.includes(p);
+    const b = (await launchChromium(env, { playwright: async () => pw, exists: there, homedir: '/home/me', platform: 'linux', log: () => {} }).catch(
+      () => undefined,
+    )) as unknown as { path: string } | undefined;
+    order.push(b?.path);
+    assert.equal(b?.path, gone);
+  }
+  const { pw } = fakePlaywright([]);
+  await assert.rejects(launchChromium({}, { playwright: async () => pw, exists: () => false, homedir: '/home/me', platform: 'linux', log: () => {} }), (err: Error) => {
+    assert.equal(err.message, NO_CHROMIUM);
+    assert.match(err.message, /~\/\.local\/share\/agent-office\/chromium/);
+    return true;
+  });
+});
+
+test("launchChromium tries the next one when a Chromium won't start, and says what it tried", async () => {
+  const { pw, launched } = fakePlaywright([HOME_CHROMIUM, SHARE_CHROMIUM]);
+  const logs: string[] = [];
+  const there = new Set([HOME_CHROMIUM, SHARE_CHROMIUM, '/usr/bin/google-chrome']);
+  const deps = { playwright: async () => pw, exists: (p: string) => there.has(p), homedir: '/home/me', platform: 'linux' as const, log: (l: string) => logs.push(l) };
+  const b = (await launchChromium({ AGENT_OFFICE_HOME: '/office' }, deps)) as unknown as { path: string };
+  assert.equal(b.path, '/usr/bin/google-chrome');
+  assert.deepEqual(launched, [HOME_CHROMIUM, SHARE_CHROMIUM, undefined, '/usr/bin/google-chrome']);
+  assert.equal(logs.length, 2);
+  assert.equal(logs[0], `the TV's Chromium ${HOME_CHROMIUM} didn't start: ${HOME_CHROMIUM}: error while loading shared libraries: libatk-1.0.so.0`);
+
+  // Nothing starts: the error lists each one and why.
+  there.delete('/usr/bin/google-chrome');
+  await assert.rejects(launchChromium({ AGENT_OFFICE_HOME: '/office', AGENT_OFFICE_CHROMIUM: '/nope' }, deps), (err: Error) => {
+    assert.ok(err.message.startsWith(`${NO_CHROMIUM}. Tried: `));
+    assert.match(err.message, /AGENT_OFFICE_CHROMIUM is set to \/nope, which doesn't exist/);
+    assert.ok(err.message.includes(`${HOME_CHROMIUM}: ${HOME_CHROMIUM}: error while loading shared libraries: libatk-1.0.so.0`));
+    assert.ok(err.message.includes(`${SHARE_CHROMIUM}: ${SHARE_CHROMIUM}: error while loading shared libraries`));
+    assert.doesNotMatch(err.message, /headless_shell/, "a missing Playwright shell isn't a failure");
+    return true;
+  });
+});
+
 test('a JPEG says its size', () => {
   // SOI, an APP0 segment, then SOF0 with height 240 and width 320.
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x4a, 0x46, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0xf0, 0x01, 0x40, 0x03, 0, 0, 0, 0, 0, 0]);
