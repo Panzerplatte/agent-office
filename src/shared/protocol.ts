@@ -701,6 +701,8 @@ export interface FloorView {
   /** Pictures on this floor's walls. */
   decor: Decoration[];
   services: ServicesState;
+  /** What the lounge TV's browser shows (a worker's website, see server/tvbrowser.ts); null when it's off. */
+  tvBrowser: TvBrowserState | null;
   /** The floor's dog; null in a building with no floors yet. */
   dog: DogState | null;
   /** The floor's cat; null in a building with no floors yet. */
@@ -811,6 +813,41 @@ export interface ServicesState {
   port: number;
   /** user@host teammates tunnel to (offices deployed with deploy/aws.sh), e.g. office@203.0.113.7 */
   ssh?: string;
+}
+
+/**
+ * The lounge TV's browser: a worker's website (a service on this floor), opened by the office in its
+ * own headless Chromium and streamed to everyone on the floor as `tvbrowser.frame`s.
+ */
+export interface TvBrowserState {
+  port: number;
+  /** Where the page is now (always on http://localhost:<port>). */
+  url: string;
+  title: string;
+  /** Who put it on the TV. */
+  by: string;
+  /** The page's viewport in CSS pixels: 1280×720 (desktop) or 390×844 (mobile). */
+  width: number;
+  height: number;
+  loading: boolean;
+  /** Why it isn't showing (no Chromium, the page didn't load, the browser stopped), in English. */
+  error?: string;
+}
+
+export type TvBrowserView = 'desktop' | 'mobile';
+
+/** Mouse and keyboard on the TV's page: x and y are 0..1 of the viewport, mods a bitmask (1 Alt, 2 Ctrl, 4 Meta, 8 Shift). */
+export interface TvBrowserInput {
+  kind: 'move' | 'down' | 'up' | 'click' | 'wheel' | 'key' | 'text';
+  x?: number;
+  y?: number;
+  button?: 0 | 1 | 2;
+  dx?: number;
+  dy?: number;
+  key?: string;
+  code?: string;
+  text?: string;
+  mods?: number;
 }
 
 export type ChangeStatus = 'M' | 'A' | 'D' | 'R' | 'T' | '?';
@@ -1072,6 +1109,14 @@ export type ClientMsg =
   /** Admins: the most workers the office runs at once, across every floor; null takes the limit off. */
   | { t: 'machine.limit'; limit: number | null }
   | { t: 'voice'; voice: boolean; muted: boolean; sharing: boolean }
+  /** Put a worker's website on the floor's lounge TV: only a port the services board lists for this floor. */
+  | { t: 'tvbrowser.open'; port: number }
+  | { t: 'tvbrowser.close' }
+  | { t: 'tvbrowser.nav'; action: 'back' | 'forward' | 'reload' }
+  | { t: 'tvbrowser.view'; mode: TvBrowserView }
+  /** You opened the TV full screen (or closed it): frames come faster while anyone watches that way. */
+  | { t: 'tvbrowser.watch'; on: boolean }
+  | ({ t: 'tvbrowser.input' } & TvBrowserInput)
   | { t: 'rtc'; to: string; data: unknown }
   | { t: 'chat'; text: string }
   | { t: 'team.get' }
@@ -1365,6 +1410,10 @@ export type ServerMsg =
   | { t: 'team'; state: TeamState }
   | { t: 'upgrade'; state: UpgradeState }
   | { t: 'services'; state: ServicesState }
+  /** The lounge TV's browser was opened, closed, navigated, retitled or failed (to everyone on the floor). */
+  | { t: 'tvbrowser'; state: TvBrowserState | null }
+  /** What the TV's page looks like now: a base64 JPEG, w×h pixels; only while someone's on the floor. */
+  | { t: 'tvbrowser.frame'; data: string; w: number; h: number }
   | { t: 'decor'; items: Decoration[] }
   /** What the dog on your floor is up to now: sent at the start of each leg of its day. */
   | { t: 'dog'; dog: DogState }
