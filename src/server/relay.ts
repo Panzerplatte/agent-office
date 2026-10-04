@@ -8,17 +8,25 @@ import { withoutOfficeCookies } from './auth.js';
 // browser's Host header (localhost:5173) says which worker server it's for. So teammates reach
 // every service through the one port their SSH key may already forward to, and only while
 // signed in to the office.
+//
+// Previews: `p5173.localhost:4600` is worker server 5173 through the office's own port, so one tunnel
+// to the office (or none, on the office's machine) reaches every service. Browsers resolve
+// `*.localhost` to loopback by themselves. A port the services board doesn't know falls through to
+// the office, as before.
 
 /** Set on everything the office relays, so a server that proxies back to the office can't loop. */
 const RELAYED = 'x-agent-office-relay';
 const LOOPBACK_HOST = /^(?:localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.localhost):(\d{1,5})$/i;
+/** `p<port>.localhost[:<any port>]`: the service port is in the subdomain. */
+const PREVIEW_HOST = /^p(\d{1,5})\.localhost(?::\d{1,5})?$/i;
 
 /** The service port a request came in for, when it came through a service tunnel. */
 export function tunneledPort(req: http.IncomingMessage, officePort: number): number | undefined {
   if (req.headers[RELAYED]) return undefined;
-  const m = LOOPBACK_HOST.exec(req.headers.host ?? '');
+  const host = req.headers.host ?? '';
+  const m = PREVIEW_HOST.exec(host) ?? LOOPBACK_HOST.exec(host);
   const port = m ? Number(m[1]) : 0;
-  return port && port !== officePort ? port : undefined;
+  return port && port <= 65535 && port !== officePort ? port : undefined;
 }
 
 function upstreamHeaders(req: http.IncomingMessage): http.OutgoingHttpHeaders {
