@@ -19,7 +19,6 @@ const DUST_COLUMNS: [number, number, number][] = [
   [-10.5, -4, 1.4],
   [-10.5, 4, 1.4],
   [-1.5, 4, 1.4],
-  [4.5, -7, 1.2],
   [14, -3, 1.5],
 ];
 const MOTES_PER_COLUMN = 70;
