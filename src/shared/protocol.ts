@@ -1182,8 +1182,8 @@ export type ClientMsg =
   | { t: 'snake.leave' }
   /** Your Snake game as it looks now, for everyone else on the floor to watch; the office follows the game by them. */
   | { t: 'snake.frame'; frame: SnakeFrame }
-  /** Your Snake game `game` is over at `result`: on the high-score table it goes if it adds up (and a good run pays chips). */
-  | { t: 'snake.over'; game: string; result: SnakeResult }
+  /** Your Snake game `game` is over at `result`: on the high-score table it goes if it adds up (and a good run pays chips), under `name` if you typed one in. */
+  | { t: 'snake.over'; game: string; result: SnakeResult; name?: string }
   /** You opened the whiteboard (or closed it): everyone on the floor sees who's drawing. */
   | { t: 'wb.open' }
   | { t: 'wb.close' }

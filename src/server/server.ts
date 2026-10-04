@@ -37,7 +37,7 @@ import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layou
 import { JUKEBOX_DEFAULT } from '../shared/jukebox.js';
 import { Jukebox } from './jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
-import { checkFrame as checkSnakeFrame, checkResult as checkSnakeResult, type SnakeFrame, type SnakeState } from '../shared/snake.js';
+import { checkFrame as checkSnakeFrame, checkResult as checkSnakeResult, cleanName as cleanSnakeName, type SnakeFrame, type SnakeState } from '../shared/snake.js';
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
 import { Chips, activeMsg, basketOf, chipsId, shotAtHoop, type ChipsTopEntry } from './chips.js';
@@ -2473,7 +2473,7 @@ export async function startServer(cfg: Config) {
         const result = checkSnakeResult(msg.result);
         if (!c.snaking || !floor || msg.game !== c.snakeGame) break;
         c.snakeGame = undefined;
-        const r = result ? snakeArcade.over(msg.game, result) : (snakeArcade.leave(msg.game), { verdict: 'void' as const });
+        const r = result ? snakeArcade.over(msg.game, result, cleanSnakeName(msg.name)) : (snakeArcade.leave(msg.game), { verdict: 'void' as const });
         if (r.verdict === 'void') warn(c, notice('snake.lost'));
         if (r.verdict !== 'ok' || !r.score) break;
         if (r.score.score >= GOOD_RUN) chips.earn(c.chips, 'snakeScore');

@@ -27,6 +27,8 @@ import {
   pause,
   resume,
   neighbor,
+  cleanName,
+  SNAKE_NAME_MAX,
   type Dir,
   type SnakeGame,
 } from '../src/shared/snake.js';
@@ -260,6 +262,22 @@ test('a game played at the pace of its steps goes on the table', (t) => {
   assert.equal(table.top()[0].length, g.snake.length);
   // Over is over: the same game can't be sent again.
   assert.equal(a.over(id, checkResult(g)!).verdict, 'none');
+});
+
+test('a name typed in at the end goes on the table instead of the player\'s own', (t) => {
+  const { a, table, clock } = arcade(t);
+  const id = a.start(ada);
+  clock.now += 10_000;
+  const r = a.over(id, { score: 20, eaten: 2, golds: 0, ticks: 30 }, cleanName('  ACE \n  of  snakes, the very best one  '));
+  assert.equal(r.verdict, 'ok');
+  assert.equal(table.top()[0].name, 'ACE of snakes, t');
+  // Nothing typed (or only spaces): the player's own name.
+  const id2 = a.start(ada);
+  clock.now += 10_000;
+  a.over(id2, { score: 10, eaten: 1, golds: 0, ticks: 30 }, cleanName('   '));
+  assert.equal(table.top()[1].name, ada.name);
+  assert.equal(cleanName(42), null);
+  assert.equal([...cleanName('🐍'.repeat(40))!].length, SNAKE_NAME_MAX);
 });
 
 test('a score faster than the snake can go, or going down, is thrown out', (t) => {

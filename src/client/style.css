@@ -1289,6 +1289,10 @@ a.when:hover { text-decoration: underline; }
 .arcade > .close.corner { top: 0; right: auto; left: calc(100% + 10px); }
 /* The arcade cabinet in the lounge (ui/cabinet.ts) plays on the keyboard, and says so over the game when a worker of yours needs input. */
 .arcade.cabinet canvas { cursor: default; }
+/* The Snake machine (ui/snake.ts): steered on the keyboard or by swiping, and a box for your name when you make the high-score table. */
+.arcade.snake canvas { cursor: default; }
+.snake-name { position: absolute; bottom: calc(100% + 10px); left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 10px; white-space: nowrap; padding: 6px 6px 6px 14px; background: var(--paper); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); font-weight: 900; font-size: 15px; animation: pop .18s ease-out; }
+.snake-name input { width: 12em; font: inherit; }
 /* The website on the lounge TV up close (ui/tvbrowser.ts): the page takes the mouse, the bar under it navigates. */
 .arcade.tvb canvas { cursor: default; outline: none; }
 .tvb-bar { gap: 6px; padding: 6px; max-width: min(calc(100vw - 24px), 1100px); }

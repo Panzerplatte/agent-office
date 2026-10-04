@@ -234,6 +234,16 @@ export interface SnakeResult {
   ticks: number;
 }
 
+/** The longest name a player can put on the table for a game (see 'snake.over'). */
+export const SNAKE_NAME_MAX = 16;
+
+/** A name typed in for the high-score table, tidied up (spaces squashed, cut to SNAKE_NAME_MAX); null if there's nothing left of it. */
+export function cleanName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const name = [...raw.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim()].slice(0, SNAKE_NAME_MAX).join('').trim();
+  return name || null;
+}
+
 const BODY_RE = new RegExp(`^[udlr]{${START_LENGTH - 1},${CELLS - 1}}$`);
 const GAME_RE = /^[a-z0-9]{8,32}$/;
 
