@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { BALCONY, BALCONY_DOOR, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, LOFT, WALL_HEIGHT, WALL_T, WINDOWS, type Opening, type Side } from '../../../../shared/layout';
+import { BALCONY, BALCONY_DOOR, DARTBOARD, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, LOFT, MEETING_ROOM, MEETING_TABLE, POOL_TABLE, WALL_HEIGHT, WALL_T, WINDOWS, type Opening, type Side } from '../../../../shared/layout';
 import type { Office } from '../../office';
 import { toon } from '../../toon';
 import type { Reskin } from '../index';
@@ -397,7 +397,9 @@ export function buildShellParts(office: Office): ShellParts {
   group.add(services.group);
 
   // ---- Lamps: cage lamps with warm bulbs (where the office's pendants hung), a couple of fluorescent tubes --
-  hideOffice.push(...look.lamps);
+  // The office's other fittings go too (the meeting room's lights, the billiard and dartboard lamps):
+  // the bunker hangs its own where they were (see buildLamps), and lighting.ts puts out their glow.
+  hideOffice.push(...look.lamps, ...look.fittings);
   const lamps = buildLamps(toonMat, basic, tex);
   group.add(lamps.group);
 
@@ -1018,9 +1020,18 @@ const LIGHTS: readonly { x: number; y: number; z: number; color: string; power: 
   { x: -1.5, y: 3.9, z: 4, color: '#ffc77d', power: 6, reach: 10 },
   { x: 13, y: 3.9, z: 0, color: '#ffb766', power: 5, reach: 9 },
   { x: 5.4, y: 4.2, z: -7.7, color: '#cfe6ff', power: 4, reach: 9 },
+  // Over the pool table, low: it lights the cloth the way the billiard lamp did, at any hour.
+  { x: POOL_TABLE.x, y: POOL_TABLE.y + 0.85, z: POOL_TABLE.z, color: '#ffd08a', power: 2.2, reach: 3.2 },
 ];
 /** The cage's middle: its bulb hangs where the office's pendants' bulbs were. */
 const LAMP_Y = 3.97;
+/** The trough lamp over the pool table: how high over the cloth (where the billiard lamp's shade was), and its bulbs along it. */
+const POOL_LAMP_Y = 1.0;
+const POOL_BULBS = [-0.45, 0, 0.45];
+/** The meeting room's bulkhead lights, either side of the table's middle (where its flat lights were). */
+const MEETING_LAMPS = [-0.95, 0.95];
+/** The little cage lamp out from the wall over the dartboard's cabinet: its bulb, where the picture lamp's was. */
+const DARTBOARD_LAMP = { x: FLOOR.maxX - 0.2, y: DARTBOARD.y + DARTBOARD.cabinet.height / 2 + 0.14, z: DARTBOARD.z };
 
 /** The cage lamps and tubes, their glow, and the few real lights that do the lighting. */
 function buildLamps(toonMat: ToonMat, basic: BasicMat, tex: <T extends THREE.Texture>(t: T) => T): { group: THREE.Group } {
@@ -1053,6 +1064,29 @@ function buildLamps(toonMat: ToonMat, basic: BasicMat, tex: <T extends THREE.Tex
       put(parts, new THREE.CylinderGeometry(0.008, 0.008, WALL_HEIGHT - t.y - 0.08, 4), cord, t.x + s * (t.len / 2 - 0.15), (WALL_HEIGHT + t.y + 0.08) / 2, t.z);
     }
   }
+  // Where the office's other fittings were: a steel trough lamp on chains over the pool table, a
+  // caged bulkhead light under the loft's floor over each end of the meeting table, and a little cage
+  // lamp on a bracket over the dartboard.
+  const steel = toonMat('#3a3f44');
+  const pool = POOL_TABLE.y + POOL_LAMP_Y;
+  put(parts, new THREE.BoxGeometry(1.5, 0.08, 0.34), steel, POOL_TABLE.x, pool + 0.1, POOL_TABLE.z);
+  put(parts, new THREE.BoxGeometry(1.5, 0.14, 0.03), steel, POOL_TABLE.x, pool + 0.03, POOL_TABLE.z - 0.17);
+  put(parts, new THREE.BoxGeometry(1.5, 0.14, 0.03), steel, POOL_TABLE.x, pool + 0.03, POOL_TABLE.z + 0.17);
+  for (const dx of [-0.55, 0.55]) put(parts, new THREE.CylinderGeometry(0.01, 0.01, WALL_HEIGHT - pool - 0.14, 4), cord, POOL_TABLE.x + dx, (WALL_HEIGHT + pool + 0.14) / 2, POOL_TABLE.z);
+  for (const dx of POOL_BULBS) put(parts, new THREE.SphereGeometry(0.07, 10, 8), warm, POOL_TABLE.x + dx, pool - 0.01, POOL_TABLE.z);
+  const bulkhead = (x: number, y: number, z: number, r: number) => {
+    // A round steel base flat on the ceiling, a frosted dome under it and a cage over that.
+    put(parts, new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.05, 16), cap, x, y - 0.025, z);
+    put(parts, new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), warm, x, y - 0.05, z);
+    put(parts, new THREE.TorusGeometry(r + 0.01, 0.01, 4, 16).rotateX(Math.PI / 2), cage, x, y - 0.05 - r * 0.45, z);
+    for (let i = 0; i < 2; i++) put(parts, new THREE.TorusGeometry(r + 0.015, 0.008, 4, 12, Math.PI).rotateX(Math.PI).rotateY((i * Math.PI) / 2), cage, x, y - 0.05, z);
+  };
+  for (const dx of MEETING_LAMPS) bulkhead(MEETING_TABLE.x + dx, MEETING_ROOM.height, MEETING_TABLE.z, 0.16);
+  const dart = DARTBOARD_LAMP;
+  put(parts, new THREE.BoxGeometry(FLOOR.maxX - dart.x, 0.03, 0.03), steel, (FLOOR.maxX + dart.x) / 2, dart.y + 0.1, dart.z);
+  put(parts, new THREE.ConeGeometry(0.1, 0.08, 12, 1, true), cap, dart.x, dart.y + 0.05, dart.z);
+  put(parts, new THREE.SphereGeometry(0.045, 8, 6), warm, dart.x, dart.y, dart.z);
+  for (let i = 0; i < 2; i++) put(parts, new THREE.TorusGeometry(0.07, 0.006, 4, 10, Math.PI).rotateX(Math.PI).rotateY((i * Math.PI) / 2), cage, dart.x, dart.y + 0.02, dart.z);
   g.add(bake(parts, false));
 
   // A soft glow round every bulb and tube, brighter in the dark.
@@ -1066,6 +1100,9 @@ function buildLamps(toonMat: ToonMat, basic: BasicMat, tex: <T extends THREE.Tex
   };
   for (const [x, z] of CAGE_LAMPS) halo('#ffc56e', 1.1, x, LAMP_Y - 0.04, z);
   for (const t of TUBES) halo('#cfe8ff', 0.9, t.x, t.y - 0.02, t.z, t.len / 0.9);
+  for (const dx of POOL_BULBS) halo('#ffc56e', 0.6, POOL_TABLE.x + dx, POOL_TABLE.y + POOL_LAMP_Y - 0.03, POOL_TABLE.z);
+  for (const dx of MEETING_LAMPS) halo('#ffc56e', 0.6, MEETING_TABLE.x + dx, MEETING_ROOM.height - 0.15, MEETING_TABLE.z);
+  halo('#ffc56e', 0.4, DARTBOARD_LAMP.x, DARTBOARD_LAMP.y, DARTBOARD_LAMP.z);
 
   for (const l of LIGHTS) {
     const light = new THREE.PointLight(l.color, l.power, l.reach, 1.4);

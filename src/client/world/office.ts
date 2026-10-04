@@ -164,6 +164,10 @@ export interface OfficeLook {
   rugs: THREE.Mesh[];
   /** The pendant lamps over the desks and the lounge. */
   lamps: THREE.Mesh[];
+  /** The office's other light fittings: the meeting room's lights, the billiard lamp over the pool table and the dartboard's picture lamp. */
+  fittings: THREE.Mesh[];
+  /** The glow the sky gives the pendants and those fittings at night: their halos and the light they cast (NightParts' own entries). */
+  glows: { halos: NightParts['halos']; lamps: NightParts['lamps'] };
   /** The potted plants (Office.plants), as meshes. */
   plants: THREE.Mesh[];
   /**
@@ -1008,6 +1012,15 @@ export function buildOffice(): Office {
   const openings = [...WINDOWS, EXIT_DOOR, BALCONY_DOOR];
   // What a build step just added to the group, for the look's handles (see OfficeLook).
   const since = (n: number) => group.children.slice(n);
+  // And the glow at night a build step just added for its lamps (OfficeLook.glows).
+  const glows: OfficeLook['glows'] = { halos: [], lamps: [] };
+  const lit = <T>(build: () => T): T => {
+    const [h, l] = [night.halos.length, night.lamps.length];
+    const out = build();
+    glows.halos.push(...night.halos.slice(h));
+    glows.lamps.push(...night.lamps.slice(l));
+    return out;
+  };
   let mark = group.children.length;
   buildWalls(group, colliders, openings, looks);
   const wallParts = since(mark);
@@ -1282,7 +1295,7 @@ export function buildOffice(): Office {
     lamp.position.set(x, lampY, z);
     group.add(lamp);
     lamps.push(lamp);
-    night.halos.push({ at: new THREE.Vector3(x, lampY - 0.12, z), size: 1.3, color: '#ffe08a' });
+    lit(() => night.halos.push({ at: new THREE.Vector3(x, lampY - 0.12, z), size: 1.3, color: '#ffe08a' }));
   }
 
   mark = group.children.length;
@@ -1290,7 +1303,7 @@ export function buildOffice(): Office {
   const loftParts = since(mark);
   // Under the loft: the meeting room.
   mark = group.children.length;
-  const meeting = buildMeetingRoom(group, colliders, interactables, desks, doors, night);
+  const meeting = lit(() => buildMeetingRoom(group, colliders, interactables, desks, doors, night));
   const meetingParts = since(mark);
   fixture('south', MEETING_BOARD.x, MEETING_BOARD.y, MEETING_BOARD.width + 0.4, MEETING_BOARD.height + 0.4);
 
@@ -1315,7 +1328,7 @@ export function buildOffice(): Office {
   fixture('west', HOOP.z, (HOOP.board.bottom - 0.6 + HOOP.board.top + 0.1) / 2, HOOP.board.width + 0.2, HOOP.board.top - HOOP.board.bottom + 0.7);
 
   // The dartboard, on the east wall between the Services board and the TV.
-  const dartboard = buildDartboard(night);
+  const dartboard = lit(() => buildDartboard(night));
   group.add(dartboard.group);
   colliders.push(...dartboard.colliders);
   // Step up to it at the oche, or looking at the board from near enough.
@@ -1326,7 +1339,7 @@ export function buildOffice(): Office {
   fixture('east', DARTBOARD.z, DARTBOARD.y + 0.05, dartCab.width + 2 * dartCab.door + 0.1, dartCab.height + 0.5);
 
   // The pool table, out in front of the balcony doors, and its cue rack on the south wall east of them.
-  const poolTable = buildPoolTable(night);
+  const poolTable = lit(() => buildPoolTable(night));
   group.add(poolTable.group);
   colliders.push(...poolTable.colliders);
   // Step up to it from anywhere round it, or looking at it from near enough.
@@ -1425,6 +1438,8 @@ export function buildOffice(): Office {
     tower: tower.group,
     rugs,
     lamps: meshesOf(...lamps),
+    fittings: [...meeting.lights, ...meshesOf(poolTable.lamp, dartboard.lamp)],
+    glows,
     plants: meshesOf(...plants),
     seats,
     lounge: { couch: meshesOf(couch), table: meshesOf(table), beanbags: loungeBeans, tv: meshesOf(tvGroup.children[0]), kitchen: meshesOf(kitchen) },
@@ -1471,7 +1486,7 @@ function buildMeetingSeat(def: DeskDef, index: number): DeskView {
  * sliding glass door facing the lounge, a long table with its chairs (MEETING_SEATS), a board on the
  * back wall for the meeting's output and a sign by the door for how it's going.
  */
-function buildMeetingRoom(group: THREE.Group, colliders: Collider[], interactables: Interactable[], desks: Map<string, DeskView>, doors: Door[], night: NightParts): { board: THREE.Mesh; sign: THREE.Mesh; table: THREE.Group } {
+function buildMeetingRoom(group: THREE.Group, colliders: Collider[], interactables: Interactable[], desks: Map<string, DeskView>, doors: Door[], night: NightParts): { board: THREE.Mesh; sign: THREE.Mesh; table: THREE.Group; lights: THREE.Mesh[] } {
   const R = MEETING_ROOM;
   const H = R.height;
   const T = 0.1;
@@ -1593,11 +1608,13 @@ function buildMeetingRoom(group: THREE.Group, colliders: Collider[], interactabl
   plate.userData.interact = door;
 
   // Flat lights set in the loft's floor over the table: a hanging lamp would be in front of the board.
+  const lights: THREE.Mesh[] = [];
   for (const dx of [-0.95, 0.95]) {
-    group.add(mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 20), toon('#fff7d6', { emissive: '#ffe08a' }), top.x + dx, H - 0.02, top.z, false));
+    lights.push(mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 20), toon('#fff7d6', { emissive: '#ffe08a' }), top.x + dx, H - 0.02, top.z, false));
+    group.add(lights[lights.length - 1]);
     night.halos.push({ at: new THREE.Vector3(top.x + dx, H - 0.08, top.z), size: 0.9, color: '#ffe08a' });
   }
-  return { board: face, sign, table };
+  return { board: face, sign, table, lights };
 }
 
 /** The materials and textures a floor paints in its own colors. */
