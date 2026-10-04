@@ -1664,6 +1664,104 @@ export class OfficeSound {
     n.stop(t0 + 0.02);
   }
 
+  // ---- The bunker (world/bunker/atmosphere.ts) ---------------------------------------------------
+
+  /** The bunker's hum: built the first time a floor's dressed as one, then faded in and out. */
+  private bunkerHum: GainNode | null = null;
+  private bunkerOn = false;
+
+  /** On a floor dressed as the bunker (true): the ventilation and a generator somewhere far off, fading in, or out again. */
+  setBunker(on: boolean) {
+    const ctx = this.ctx;
+    // Before audio's unlocked there's nothing to build: the bunker asks again every frame.
+    if (!ctx || (on === this.bunkerOn && (this.bunkerHum || !on))) return;
+    this.bunkerOn = on;
+    if (!this.bunkerHum) this.startBunkerHum();
+    this.bunkerHum!.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, on ? 0.9 : 0.35);
+  }
+
+  private startBunkerHum() {
+    const ctx = this.ctx!;
+    const hum = (this.bunkerHum = ctx.createGain());
+    hum.gain.value = 0;
+    // Through the office's own air, so it gives way to the wind up on the roof and goes quiet in a hidden tab.
+    hum.connect(this.indoors);
+    // The ducts: a hollow rush of air, breathing slowly…
+    const air = this.noise(this.buf.white, true);
+    const airG = ctx.createGain();
+    airG.gain.value = 0.014;
+    const swell = ctx.createOscillator();
+    swell.frequency.value = 0.045;
+    const swellDepth = ctx.createGain();
+    swellDepth.gain.value = 0.005;
+    swell.connect(swellDepth).connect(airG.gain);
+    air.connect(biquad(ctx, 'bandpass', 380, 0.6)).connect(airG).connect(hum);
+    const duct = this.noise(this.buf.brown, true);
+    const ductG = ctx.createGain();
+    ductG.gain.value = 0.06;
+    duct.connect(biquad(ctx, 'lowpass', 160, 0.8)).connect(ductG).connect(hum);
+    // …and a diesel generator down the tunnel, chugging away.
+    const gen = ctx.createOscillator();
+    gen.type = 'sawtooth';
+    gen.frequency.value = 49;
+    const genG = ctx.createGain();
+    genG.gain.value = 0.022;
+    const chug = ctx.createOscillator();
+    chug.frequency.value = 12.25;
+    const chugDepth = ctx.createGain();
+    chugDepth.gain.value = 0.008;
+    chug.connect(chugDepth).connect(genG.gain);
+    gen.connect(biquad(ctx, 'lowpass', 150, 1.1)).connect(genG).connect(hum);
+    air.start(0, rand(0, 4));
+    duct.start(0, rand(0, 5));
+    swell.start();
+    gen.start();
+    chug.start();
+    this.count('bunkerHum');
+  }
+
+  /** A big breaker thrown: the bunker's lights cut out (or come back), with a heavy clunk that echoes down the concrete. */
+  breaker() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count('breaker');
+    const t0 = ctx.currentTime + 0.01;
+    // The lever slamming home: a thump…
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(95, t0);
+    o.frequency.exponentialRampToValueAtTime(38, t0 + 0.3);
+    const g = ctx.createGain();
+    envelope(g.gain, t0, [[0.004, 0.55], [0.35, 0]]);
+    o.connect(g).connect(this.ambience);
+    o.start(t0);
+    o.stop(t0 + 0.4);
+    // …the clack of steel…
+    this.play(pick(this.buf.steps), { gain: 0.8, rate: 0.55, when: t0 });
+    this.blip(this.ambience, t0, 640, 0.92, 0.18, 0.06, 'square');
+    // …and its echo off the far wall.
+    this.play(pick(this.buf.steps), { gain: 0.22, rate: 0.5, when: t0 + 0.19 });
+    this.blip(this.ambience, t0 + 0.19, 90, 0.5, 0.25, 0.12);
+  }
+
+  /** A fluorescent tube at `at` flickering on: a little tick and a buzz. */
+  tubeTick(at: Pos) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count('tubeTick');
+    const out = this.panner(at, 2, 1.2);
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    const buzz = ctx.createOscillator();
+    buzz.type = 'sawtooth';
+    buzz.frequency.value = 100;
+    const g = ctx.createGain();
+    envelope(g.gain, t0, [[0.003, 0.05], [rand(0.04, 0.1), 0.02], [0.14, 0]]);
+    buzz.connect(biquad(ctx, 'bandpass', 1600, 1.4)).connect(g).connect(out);
+    buzz.start(t0);
+    buzz.stop(t0 + 0.16);
+    this.blip(out, t0, 3200, 0.8, 0.02, 0.05, 'square');
+  }
+
   // ---- The jukebox ------------------------------------------------------------------------------
 
   /** What the jukebox on your floor plays, or null for nothing. It starts once the browser allows audio. */
