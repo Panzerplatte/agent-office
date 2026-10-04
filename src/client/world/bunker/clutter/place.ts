@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BOOKSHELF, ELEVATOR, ELEVATOR_FRONT, FLOOR, MEETING_ROOM, POOL_TABLE } from '../../../../shared/layout';
 import { Kit, mesh } from './kit';
-import { ammoBoxes, camoNet, crates, drum, extinguisher, fireBarrel, jerrycan, neonSign, radio, sandbags, wallMap, warningSign, workshop, type Animated } from './parts';
+import { ammoBoxes, crates, drum, extinguisher, fireBarrel, jerrycan, neonSign, radio, sandbags, wallMap, warningSign, workshop, type Animated } from './parts';
 
 // Where the bunker's clutter goes. Everything stands against a wall or in a corner nothing else
 // uses (see shared/layout.ts and office.ts for what's where), clear of the desks, the walkways, the
@@ -190,21 +190,6 @@ export function buildBunkerProps(plants: readonly PlantSpot[] = []): BunkerProps
 
   // Where the office's potted plants stand.
   plants.forEach((p, i) => statics.add(at(plantStandIn(kit, i, p.scale), p.x, p.y, p.z, i * 1.3)));
-
-  // Camo netting slung under the ceiling in three corners (the fourth is the loft's).
-  const netY = 5.9;
-  const nets: [number, number, number, number, number, number][] = [
-    // x, z, sx, sz, w, d
-    [FLOOR.minX, FLOOR.minZ, 1, 1, 5, 4.2],
-    [FLOOR.maxX, FLOOR.minZ, -1, 1, 4.6, 3.8],
-    [FLOOR.minX, FLOOR.maxZ, 1, -1, 4.8, 4.2],
-  ];
-  nets.forEach(([x, z, sx, sz, w, d], i) => {
-    const net = camoNet(kit, w, d, 1.1, 40 + i);
-    net.position.set(x, netY, z);
-    net.scale.set(sx, 1, sz);
-    group.add(net);
-  });
 
   // The big map on the east wall over the jukebox and the arcade, between the TV and the loft.
   group.add(at(wallMap(kit, 2.6, 1.5), FLOOR.maxX, 3.3, 5.9, -Math.PI / 2));
