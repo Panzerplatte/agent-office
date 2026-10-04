@@ -111,10 +111,11 @@ export function openServices(send: (msg: ClientMsg) => void) {
       const preview =
         canPreview() &&
         h('button.btn', { type: 'button', title: t('windows.services.previewTitle', { url }) }, t('windows.services.preview'));
-      preview?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.open(url, PREVIEW_WINDOW, 'popup,width=1280,height=900');
-      });
+      if (preview)
+        preview.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.open(url, PREVIEW_WINDOW, 'popup,width=1280,height=900');
+        });
       const li = h(
         'li',
         { class: on ? 'on' : '', tabindex: 0, role: 'button', title: t('windows.services.rowTitle') },

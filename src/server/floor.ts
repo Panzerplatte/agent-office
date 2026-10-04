@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { ChangesState, FloorInfo, PeerInfo, ProjectInfo, ServerMsg, WorkerInfo } from '../shared/protocol.js';
+import type { ChangesState, FloorInfo, PeerInfo, ProjectInfo, ServerMsg, ServiceInfo, WorkerInfo } from '../shared/protocol.js';
 import { isBusy } from '../shared/status.js';
 import { notice, type Notice } from '../shared/notices.js';
 import { DESK_BY_ID } from '../shared/layout.js';
@@ -23,6 +23,7 @@ import { Jukebox } from './jukebox.js';
 import { FloorStyles } from './floorstyle.js';
 import { Whiteboard } from './whiteboard.js';
 import { MeetingRoom } from './meetings.js';
+import { TvBrowser, type TvBrowsers } from './tvbrowser.js';
 import { Worktrees } from './worktrees.js';
 import { landedWorkers } from './leave-on-merge.js';
 import type { Ledger } from './usage.js';
@@ -59,6 +60,12 @@ export interface FloorContext {
   leaveOnMerge(): boolean;
   /** Chips: pull request `n` merged on this floor (once, when the gong rings for it). */
   prMerged?(floor: Floor, n: number): void;
+  /** The office's one headless Chromium, which every floor's lounge TV opens its page in. */
+  tvBrowsers: TvBrowsers;
+  /** The worker service on this port, when it's one of this floor's (from the services board). */
+  service(floor: Floor, port: number): ServiceInfo | undefined;
+  /** Whether anyone on this floor has the TV open full screen. */
+  tvWatching(floor: Floor): boolean;
 }
 
 /** How long after a PR list or a worker's change the office looks for workers whose PR merged. */
@@ -119,6 +126,8 @@ export class Floor {
   readonly darts = new Darts();
   /** The pool table: who's at it, on which side, and their game of 8-ball (see pool.ts). */
   readonly pool = new Pool();
+  /** The lounge TV's browser: a worker's website, streamed to everyone on the floor (see tvbrowser.ts). */
+  readonly tv: TvBrowser;
   private timer: NodeJS.Timeout;
   /** Pull requests merging, to ring the gong for. */
   private merges = new MergeWatch();
@@ -266,6 +275,14 @@ export class Floor {
     this.jukebox = new Jukebox(dataDir);
     this.style = new FloorStyles(dataDir);
     this.whiteboard = new Whiteboard(dataDir);
+    this.tv = new TvBrowser(ctx.tvBrowsers, {
+      people: () => ctx.people(this),
+      watching: () => ctx.tvWatching(this),
+      service: (port) => ctx.service(this, port),
+      state: (state) => ctx.emit(this, { t: 'tvbrowser', state }),
+      frame: (frame) => ctx.emit(this, { t: 'tvbrowser.frame', ...frame }, true),
+      toast: (text) => ctx.toast(this, text),
+    });
     this.ready = this.workers.start();
 
     void this.github.refresh();
@@ -342,6 +359,7 @@ export class Floor {
     this.meetings.shutdown();
     this.changes.stop();
     this.whiteboard.flush();
+    this.tv.shutdown();
     this.workers.shutdown(keep);
   }
 }

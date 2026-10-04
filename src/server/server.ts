@@ -15,6 +15,7 @@ import { createOpenCodeModelCatalogue } from './models.js';
 import { Team } from './team.js';
 import { Upgrader } from './upgrade.js';
 import { Services } from './services.js';
+import { TvBrowsers } from './tvbrowser.js';
 import { ImageProxy } from './decor.js';
 import { Ledger } from './usage.js';
 import { PlanLimitsReader } from './limits.js';
@@ -111,6 +112,8 @@ interface Client {
   /** Has the floor's whiteboard open. */
   whiteboard: boolean;
   lastWbPointerAt: number;
+  /** Has the floor's lounge TV open full screen (frames come faster then, see tvbrowser.ts). */
+  tvWatch: boolean;
   /** At the arcade cabinet on their floor, playing `game` (see Arcade); `frame` is it as it looks now. */
   playing: boolean;
   game?: string;
@@ -502,6 +505,8 @@ export async function startServer(cfg: Config) {
     });
   };
 
+  // The lounge TVs' headless Chromium, shared by every floor and only running while one has a page on.
+  const tvBrowsers = new TvBrowsers();
   const floorContext: FloorContext = {
     agentCmd: cfg.agentCmd,
     agentArgs: cfg.agentArgs,
@@ -544,6 +549,12 @@ export async function startServer(cfg: Config) {
     peers: (floor) => [...clients.values()].filter((c) => c.peer.floor === floor.id).map((c) => c.peer),
     leaveOnMerge: () => leaveOnMerge.on,
     prMerged: (floor, n) => mergedChips(floor, n),
+    tvBrowsers,
+    service: (floor, port) => {
+      const svc = services.lookup(port);
+      return svc && svc !== 'gone' && floor.workers.get(svc.workerId) ? svc : undefined;
+    },
+    tvWatching: (floor) => [...clients.values()].some((c) => c.tvWatch && c.peer.floor === floor.id),
   };
   const openFloor = (def: FloorDef): Floor | undefined => {
     if (!existsSync(def.dir)) {
@@ -616,6 +627,7 @@ export async function startServer(cfg: Config) {
     queue: floor?.queue.state() ?? { tasks: [], maxWorkers: 0 },
     decor: floor?.decor.list() ?? [],
     services: servicesState(floor),
+    tvBrowser: floor?.tv.state() ?? null,
     dog: floor?.dog.view() ?? null,
     cat: floor?.cat.view() ?? null,
     ball: floor?.court.state() ?? {},
@@ -633,6 +645,13 @@ export async function startServer(cfg: Config) {
   const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
+    // And what's on the lounge TV, which only sends a frame when the page changes.
+    const tv = floor?.tv.frame();
+    if (tv) sendTo(c, { t: 'tvbrowser.frame', ...tv });
+  };
+  /** Someone came onto a floor or left one: a floor's TV streams only while someone's there. */
+  const tvPeopleChanged = () => {
+    for (const f of floors.values()) f.tv.peopleChanged();
   };
   /** Where someone arriving goes: the floor they asked for, else the first one there is. */
   const arrivalFloor = (wanted: string | null): Floor | undefined => (wanted && floors.get(wanted)) || floors.values().next().value;
@@ -1024,6 +1043,7 @@ export async function startServer(cfg: Config) {
       emoting: false,
       whiteboard: false,
       lastWbPointerAt: 0,
+      tvWatch: false,
       playing: false,
       lastFrameAt: 0,
       typingAt: new Map(),
@@ -1077,6 +1097,7 @@ export async function startServer(cfg: Config) {
       ...(onRoof ? roofView() : inCasino ? casinoView() : floorView(floor)),
     });
     screensOf(client, floor);
+    tvPeopleChanged();
     if (inCasino) pokerTo(client);
     broadcast({ t: 'peer.join', peer: client.peer }, id);
     if (account) accountsChanged(); // now online
@@ -1105,6 +1126,7 @@ export async function startServer(cfg: Config) {
       chips.topCheck(); // offline now, on the leaderboard
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
+      tvPeopleChanged();
       // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
       if (blackjack.away(id)) blackjackChanged();
       // At an online table, likewise: their seat waits for them a while.
@@ -1329,6 +1351,7 @@ export async function startServer(cfg: Config) {
     const wasDrawing = c.whiteboard;
     c.whiteboard = false;
     stopPlaying(c, was);
+    c.tvWatch = false;
     const spot = at ?? { ...elevatorSpot(), y: 0, rotY: 0 };
     Object.assign(c.peer, { x: spot.x, y: spot.y, z: spot.z, rotY: spot.rotY, moving: false });
     delete c.peer.seat;
@@ -1341,6 +1364,7 @@ export async function startServer(cfg: Config) {
 
   const arrived = (c: Client, left: ReturnType<typeof leave>) => {
     broadcast({ t: 'peer.update', peer: c.peer }, c.id);
+    tvPeopleChanged();
     if (left.wasDrawing) drawingChanged(left.was);
     if (left.ballLeft && left.was) ballChanged(left.was);
     if (left.dartsLeft && left.was) dartsChanged(left.was);
@@ -1489,6 +1513,30 @@ export async function startServer(cfg: Config) {
         c.peer.muted = !!msg.muted;
         c.peer.sharing = !!msg.sharing;
         broadcast({ t: 'peer.update', peer: c.peer });
+        break;
+      // The lounge TV: a worker's website from the services board, which anyone on the floor can put on and use.
+      case 'tvbrowser.open': {
+        const floor = floorOf(c);
+        if (!floor) return warn(c, notice('floor.pickOne'));
+        const err = floor.tv.open(num(msg.port), who);
+        if (err) warn(c, err);
+        break;
+      }
+      case 'tvbrowser.close':
+        floorOf(c)?.tv.close();
+        break;
+      case 'tvbrowser.nav':
+        if (msg.action === 'back' || msg.action === 'forward' || msg.action === 'reload') floorOf(c)?.tv.nav(msg.action);
+        break;
+      case 'tvbrowser.view':
+        if (msg.mode === 'desktop' || msg.mode === 'mobile') floorOf(c)?.tv.setView(msg.mode);
+        break;
+      case 'tvbrowser.watch':
+        c.tvWatch = !!msg.on;
+        floorOf(c)?.tv.watchChanged();
+        break;
+      case 'tvbrowser.input':
+        floorOf(c)?.tv.input(c.id, msg);
         break;
       case 'rtc': {
         const target = clients.get(str(msg.to, 32));
@@ -2458,6 +2506,7 @@ export async function startServer(cfg: Config) {
     arcade.flush();
     upgrader.stop();
     services.stop();
+    tvBrowsers.shutdown();
     webhook.stop();
     machine.stop();
     sky.stop();
