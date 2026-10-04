@@ -187,6 +187,9 @@ export const NOTICES = table(
     'arcade.tooMany': "🕹️ That's a lot of new games in a row, so this one won't go on the high-score table",
     'arcade.lost': "🕹️ The office couldn't follow this game, so its score won't go on the high-score table",
     'arcade.highScore': '🏆 {name} set a new arcade high score: {score}',
+    'snake.busy': '{name} is playing Snake — press E there to watch',
+    'snake.lost': "🐍 The office couldn't follow this game, so its score won't go on the high-score table",
+    'snake.highScore': '🐍 {name} set a new Snake high score: {score}',
   },
   {
     'floor.removed': '🛗 {who} hat {name} aus dem Gebäude genommen',
@@ -341,6 +344,9 @@ export const NOTICES = table(
     'arcade.tooMany': '🕹️ Das sind viele neue Spiele hintereinander, deshalb kommt dieses nicht in die Highscore-Liste',
     'arcade.lost': '🕹️ Das Büro konnte diesem Spiel nicht folgen, deshalb kommt der Punktestand nicht in die Highscore-Liste',
     'arcade.highScore': '🏆 {name} hat einen neuen Arcade-Highscore aufgestellt: {score}',
+    'snake.busy': '{name} spielt gerade Snake — drück dort E zum Zuschauen',
+    'snake.lost': '🐍 Das Büro konnte diesem Spiel nicht folgen, deshalb kommt der Punktestand nicht in die Highscore-Liste',
+    'snake.highScore': '🐍 {name} hat einen neuen Snake-Highscore aufgestellt: {score}',
   },
 );
 
