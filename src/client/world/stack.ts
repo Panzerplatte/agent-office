@@ -215,6 +215,9 @@ export interface StackState {
 
 export interface Stack {
   group: THREE.Group;
+  /** The floor's planks and the ceiling's tiles, which every rebuild (set) keeps using: to reskin them. */
+  floor: THREE.MeshToonMaterial;
+  ceiling: THREE.MeshToonMaterial;
   interactables: Interactable[];
   /** The floor you're on: the ladder, the hatches and the poles go where there are floors to go to. */
   set(s: StackState): void;
@@ -236,7 +239,7 @@ export interface Stack {
  * The floor you walk on (planks from `planks`), the slab under it, the ceiling over it, the ladder
  * and the fire poles. Their colliders go in `colliders` and change as floors come and go.
  */
-export function buildStack(colliders: Collider[], planks: THREE.Material): Stack {
+export function buildStack(colliders: Collider[], planks: THREE.MeshToonMaterial): Stack {
   const group = new THREE.Group();
   const B = { minX: FLOOR.minX - WALL_T, maxX: FLOOR.maxX + WALL_T, minZ: FLOOR.minZ - WALL_T, maxZ: FLOOR.maxZ + WALL_T };
   const concrete = toon('#d3d6dd');
@@ -534,6 +537,8 @@ export function buildStack(colliders: Collider[], planks: THREE.Material): Stack
 
   const stack: Stack = {
     group,
+    floor: planks,
+    ceiling: tiles,
     interactables,
     set,
     state,

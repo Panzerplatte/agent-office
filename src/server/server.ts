@@ -48,6 +48,7 @@ import { EMOTE_EVERY, EmoteBucket, isEmote } from '../shared/emotes.js';
 import { WHISTLE_SERVER_EVERY, WhistleGate, whistleHearers } from '../shared/whistle.js';
 import { type Notice, asNotice, notice } from '../shared/notices.js';
 import { isThemePick } from '../shared/theme.js';
+import { isFloorStyle } from '../shared/floorstyle.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, drinkAt } from '../shared/rooftop.js';
 import { CASINO, casinoSpotOf } from '../shared/casino.js';
@@ -621,6 +622,7 @@ export async function startServer(cfg: Config) {
     darts: floor?.darts.state() ?? emptyDarts(),
     pool: floor?.pool.state() ?? emptyPool(),
     jukebox: floor?.jukebox.state() ?? { on: false, track: JUKEBOX_DEFAULT, startedAt: Date.now(), elapsed: 0 },
+    style: floor?.style.style ?? 'office',
     whiteboard: { elements: floor?.whiteboard.scene() ?? [], people: floor ? drawing(floor) : [] },
     meeting: floor?.meetings.state() ?? { current: null, past: [] },
     cabinet: { ...cabinetState(floor), frame: (floor && cabinetPlayer(floor)?.frame) ?? null },
@@ -2082,6 +2084,16 @@ export async function startServer(cfg: Config) {
             { who },
           ),
         );
+        break;
+      }
+      case 'floorStyle.set': {
+        if (!isFloorStyle(msg.style)) return;
+        // Only on a floor: the roof and the casino keep their own look.
+        const floor = floorOf(c);
+        if (!floor) return warn(c, notice('floor.pickOne'));
+        if (!floor.style.set(msg.style, who)) break;
+        toFloor(floor, { t: 'floorStyle', floor: floor.id, style: msg.style });
+        toastFloor(floor, notice(msg.style === 'bunker' ? 'floorStyle.bunker' : 'floorStyle.office', { who }));
         break;
       }
       case 'prompts.set': {

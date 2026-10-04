@@ -20,6 +20,7 @@ import { Court } from './court.js';
 import { Darts } from './darts.js';
 import { Pool } from './pool.js';
 import { Jukebox } from './jukebox.js';
+import { FloorStyles } from './floorstyle.js';
 import { Whiteboard } from './whiteboard.js';
 import { MeetingRoom } from './meetings.js';
 import { Worktrees } from './worktrees.js';
@@ -100,6 +101,8 @@ export class Floor {
   readonly changes: Changes;
   readonly decor: Decor;
   readonly jukebox: Jukebox;
+  /** The floor's look: the office, or the bunker (see floorstyle.ts). */
+  readonly style: FloorStyles;
   /** The whiteboard everyone on the floor draws on together. */
   readonly whiteboard: Whiteboard;
   /** The meeting room, where workers work through a question together (see meetings.ts). */
@@ -261,6 +264,7 @@ export class Floor {
 
     this.decor = new Decor(dataDir);
     this.jukebox = new Jukebox(dataDir);
+    this.style = new FloorStyles(dataDir);
     this.whiteboard = new Whiteboard(dataDir);
     this.ready = this.workers.start();
 

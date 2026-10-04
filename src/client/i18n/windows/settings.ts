@@ -43,6 +43,11 @@ export default strings(
     'settings.themeByCalendar': 'By the calendar it’s Halloween through October and Christmas through December.',
     'settings.sameForAll': 'It’s the same for everyone in the building.',
     'settings.sameForAllBy': 'It’s the same for everyone in the building, set by {by}{when}.',
+    'settings.floorStyle': 'This floor’s look',
+    'settings.styleOffice': '🏢 Office',
+    'settings.styleBunker': '🛢️ Bunker',
+    'settings.floorStyleNote': 'The bunker is this same floor, underground: the same desks, seats and games, only the look changes. It’s the same for everyone on this floor.',
+    'settings.floorStyleNone': 'Only on a project’s floor, not on the roof or down in the casino.',
 
     'settings.desktopNotifications': 'Desktop notifications',
     'settings.notifyTurnOn': '🔔 Turn on notifications',
@@ -164,6 +169,11 @@ export default strings(
     'settings.themeByCalendar': 'Nach Kalender ist den ganzen Oktober Halloween und den ganzen Dezember Weihnachten.',
     'settings.sameForAll': 'Das gilt für alle im Gebäude.',
     'settings.sameForAllBy': 'Das gilt für alle im Gebäude, eingestellt von {by}{when}.',
+    'settings.floorStyle': 'Aussehen dieser Etage',
+    'settings.styleOffice': '🏢 Büro',
+    'settings.styleBunker': '🛢️ Bunker',
+    'settings.floorStyleNote': 'Der Bunker ist dieselbe Etage, nur unter der Erde: dieselben Schreibtische, Plätze und Spiele, nur das Aussehen ändert sich. Das gilt für alle auf dieser Etage.',
+    'settings.floorStyleNone': 'Nur auf der Etage eines Projekts, nicht auf dem Dach oder unten im Casino.',
 
     'settings.desktopNotifications': 'Desktop-Benachrichtigungen',
     'settings.notifyTurnOn': '🔔 Benachrichtigungen an',

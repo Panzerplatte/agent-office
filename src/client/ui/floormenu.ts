@@ -2,6 +2,7 @@ import { floorPalette } from '../../shared/floors';
 import { ROOF } from '../../shared/rooftop';
 import { CASINO } from '../../shared/casino';
 import type { FloorInfo } from '../../shared/protocol';
+import { FLOOR_STYLES, type FloorStyle } from '../../shared/floorstyle';
 import { store } from '../state';
 import { h } from './dom';
 import { t } from '../i18n';
@@ -19,6 +20,8 @@ export interface FloorMenuOptions {
   roof(): void;
   /** Down to the casino, by elevator. */
   casino(): void;
+  /** Switch the floor you're on to the office look or the bunker look, for everyone on it. */
+  style(style: FloorStyle): void;
 }
 
 let current: { el: HTMLElement; close(): void } | null = null;
@@ -103,7 +106,21 @@ export function toggleFloorMenu(anchor: HTMLElement, opts: FloorMenuOptions): vo
       close();
       opts.casino();
     });
-    el.replaceChildren(h('div.floor-menu-head', {}, `🏢 ${t('menus.floorCount', { n: floors.length })}`), ...(floors.length ? [roof] : []), ...items, ...(floors.length ? [casino] : []), add);
+    // The look of the floor you're on (not the roof's or the casino's): 🏢 office or 🛢️ bunker.
+    const styles = here < 0 ? [] : [
+      h(
+        'div.seg.floor-style',
+        { role: 'radiogroup', 'aria-label': t('menus.styleTitle'), title: t('menus.styleTitle') },
+        ...FLOOR_STYLES.map((st) =>
+          h(
+            'button.btn',
+            { type: 'button', role: 'radio', 'aria-checked': String(store.style === st), class: store.style === st ? 'on' : '', onclick: () => store.style !== st && opts.style(st) },
+            t(st === 'bunker' ? 'menus.styleBunker' : 'menus.styleOffice'),
+          ),
+        ),
+      ),
+    ];
+    el.replaceChildren(h('div.floor-menu-head', {}, `🏢 ${t('menus.floorCount', { n: floors.length })}`), ...styles, ...(floors.length ? [roof] : []), ...items, ...(floors.length ? [casino] : []), add);
   };
 
   const place = () => {
@@ -119,7 +136,7 @@ export function toggleFloorMenu(anchor: HTMLElement, opts: FloorMenuOptions): vo
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') close();
   };
-  const offs = [store.on('floors', render), store.on('floor', render)];
+  const offs = [store.on('floors', render), store.on('floor', render), store.on('style', render)];
   const close = () => {
     if (current?.el !== el) return;
     current = null;

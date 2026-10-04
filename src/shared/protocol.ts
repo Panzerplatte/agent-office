@@ -16,6 +16,7 @@ import type { DogState } from './dog.js';
 import type { EmoteId } from './emotes.js';
 import type { BallState } from './hoop.js';
 import type { JukeboxState } from './jukebox.js';
+import type { FloorStyle } from './floorstyle.js';
 import type { NoticeParams } from './notices.js';
 import type { PromptId } from './prompts.js';
 import type { DrinkId } from './rooftop.js';
@@ -704,6 +705,8 @@ export interface FloorView {
   cat: CatState | null;
   /** What the lounge jukebox is playing. */
   jukebox: JukeboxState;
+  /** The floor's look: the office, or the bunker (see shared/floorstyle.ts). Always 'office' on the roof and in the casino. */
+  style: FloorStyle;
   /** Who's at the arcade cabinet, what's on its screen, and the building's high scores. */
   cabinet: CabinetView;
   /** What's drawn on this floor's whiteboard, and who's drawing. */
@@ -1135,6 +1138,8 @@ export type ClientMsg =
   | { t: 'floor.remove'; floor: string }
   /** Dress the building up for a holiday, take the decorations down ('off'), or follow the calendar ('auto'). */
   | { t: 'theme.set'; pick: ThemePick }
+  /** Switch the floor you're on between the office look and the bunker look (not on the roof or in the casino). */
+  | { t: 'floorStyle.set'; style: FloorStyle }
   /** Workers whose pull request merged go home by themselves (true), or wait to be sent home. */
   | { t: 'leaveOnMerge.set'; on: boolean }
   /** Where new floors are cloned from now on (admins only); '' goes back to the default. */
@@ -1413,6 +1418,8 @@ export type ServerMsg =
   | { t: 'machine'; state: MachineState }
   | { t: 'sky'; state: SkyState }
   | { t: 'theme'; state: ThemeState }
+  /** The floor you're on changed its look (to everyone on it). */
+  | { t: 'floorStyle'; floor: string; style: FloorStyle }
   | { t: 'prompts'; state: PromptsState }
   | { t: 'leaveOnMerge'; state: LeaveOnMergeState }
   /** Sent to whoever watches that worker's changes, whenever they change. */
