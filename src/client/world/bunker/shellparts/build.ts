@@ -396,7 +396,7 @@ export function buildShellParts(office: Office): ShellParts {
   const services = ceilingServices(toonMat);
   group.add(services.group);
 
-  // ---- Lamps: cage lamps with warm bulbs (where the office's pendants hung), a couple of fluorescent tubes --
+  // ---- Lamps: cage lamps with warm bulbs (where the office's pendants hung, the boss's upstairs too), a couple of fluorescent tubes --
   // The office's other fittings go too (the meeting room's lights, the billiard and dartboard lamps):
   // the bunker hangs its own where they were (see buildLamps), and lighting.ts puts out their glow.
   hideOffice.push(...look.lamps, ...look.fittings);
@@ -1008,6 +1008,8 @@ const CAGE_LAMPS: readonly [number, number][] = [
   [-15.4, -8.5],
   [13.2, -6.6],
 ];
+/** The cage lamp upstairs, hung from the loft's ceiling over the boss's desk (where the office's pendant hangs). */
+const BOSS_LAMP = { x: (LOFT.minX + LOFT.maxX) / 2 + 0.5, y: LOFT.y + LOFT.height - 0.4, z: (LOFT.minZ + LOFT.maxZ) / 2 };
 const TUBES: readonly { x: number; z: number; y: number; len: number }[] = [
   { x: 5.4, z: -7.7, y: 4.5, len: 2.6 },
   { x: -14.6, z: 10.2, y: 4.3, len: 2.2 },
@@ -1022,6 +1024,8 @@ const LIGHTS: readonly { x: number; y: number; z: number; color: string; power: 
   { x: 5.4, y: 4.2, z: -7.7, color: '#cfe6ff', power: 4, reach: 9 },
   // Over the pool table, low: it lights the cloth the way the billiard lamp did, at any hour.
   { x: POOL_TABLE.x, y: POOL_TABLE.y + 0.85, z: POOL_TABLE.z, color: '#ffd08a', power: 2.2, reach: 3.2 },
+  // Upstairs, over the boss's desk.
+  { x: BOSS_LAMP.x, y: BOSS_LAMP.y - 0.2, z: BOSS_LAMP.z, color: '#ffc77d', power: 2.2, reach: 4.5 },
 ];
 /** The cage's middle: its bulb hangs where the office's pendants' bulbs were. */
 const LAMP_Y = 3.97;
@@ -1043,18 +1047,19 @@ function buildLamps(toonMat: ToonMat, basic: BasicMat, tex: <T extends THREE.Tex
   const warm = basic({ color: '#ffd58a' });
   const cool = basic({ color: '#eef8ff' });
   const housing = toonMat('#cfd3d6');
-  for (const [x, z] of CAGE_LAMPS) {
-    put(parts, new THREE.CylinderGeometry(0.012, 0.012, WALL_HEIGHT - LAMP_Y - 0.18, 4), cord, x, (WALL_HEIGHT + LAMP_Y + 0.18) / 2, z);
+  // Each on a cord from `top`, the ceiling it hangs from: the room's, or the loft's over the boss's desk.
+  for (const [x, z, y, top] of [...CAGE_LAMPS.map(([x, z]) => [x, z, LAMP_Y, WALL_HEIGHT]), [BOSS_LAMP.x, BOSS_LAMP.z, BOSS_LAMP.y, LOFT.y + LOFT.height]]) {
+    put(parts, new THREE.CylinderGeometry(0.012, 0.012, top - y - 0.18, 4), cord, x, (top + y + 0.18) / 2, z);
     // An enamel cap, the bulb under it, and a wire cage round the bulb.
-    put(parts, new THREE.ConeGeometry(0.26, 0.18, 14, 1, true), cap, x, LAMP_Y + 0.1, z);
-    put(parts, new THREE.CylinderGeometry(0.06, 0.06, 0.08, 8), cap, x, LAMP_Y + 0.2, z);
-    put(parts, new THREE.SphereGeometry(0.09, 10, 8), warm, x, LAMP_Y - 0.04, z);
+    put(parts, new THREE.ConeGeometry(0.26, 0.18, 14, 1, true), cap, x, y + 0.1, z);
+    put(parts, new THREE.CylinderGeometry(0.06, 0.06, 0.08, 8), cap, x, y + 0.2, z);
+    put(parts, new THREE.SphereGeometry(0.09, 10, 8), warm, x, y - 0.04, z);
     for (let i = 0; i < 4; i++) {
       const wire = new THREE.TorusGeometry(0.13, 0.008, 4, 12, Math.PI);
       wire.rotateY((i * Math.PI) / 4);
-      put(parts, wire, cage, x, LAMP_Y, z);
+      put(parts, wire, cage, x, y, z);
     }
-    put(parts, new THREE.TorusGeometry(0.13, 0.01, 4, 16).rotateX(Math.PI / 2), cage, x, LAMP_Y, z);
+    put(parts, new THREE.TorusGeometry(0.13, 0.01, 4, 16).rotateX(Math.PI / 2), cage, x, y, z);
   }
   for (const t of TUBES) {
     // A white housing on two chains, a pair of tubes under it.
@@ -1099,6 +1104,7 @@ function buildLamps(toonMat: ToonMat, basic: BasicMat, tex: <T extends THREE.Tex
     g.add(s);
   };
   for (const [x, z] of CAGE_LAMPS) halo('#ffc56e', 1.1, x, LAMP_Y - 0.04, z);
+  halo('#ffc56e', 0.8, BOSS_LAMP.x, BOSS_LAMP.y - 0.04, BOSS_LAMP.z);
   for (const t of TUBES) halo('#cfe8ff', 0.9, t.x, t.y - 0.02, t.z, t.len / 0.9);
   for (const dx of POOL_BULBS) halo('#ffc56e', 0.6, POOL_TABLE.x + dx, POOL_TABLE.y + POOL_LAMP_Y - 0.03, POOL_TABLE.z);
   for (const dx of MEETING_LAMPS) halo('#ffc56e', 0.6, MEETING_TABLE.x + dx, MEETING_ROOM.height - 0.15, MEETING_TABLE.z);
