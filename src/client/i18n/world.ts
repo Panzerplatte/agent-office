@@ -160,6 +160,7 @@ export default strings(
     noDescription: 'No description provided.',
     doingLook: '🪞 picking a new look',
     doingMinesweeper: '💣 playing Minesweeper',
+    doingTvBrowser: '📺 at the website on the TV',
     doingOnlineBlackjack: '🃏 playing online blackjack',
   },
   {
@@ -301,6 +302,7 @@ export default strings(
     noDescription: 'Keine Beschreibung angegeben.',
     doingLook: '🪞 sucht sich einen neuen Look aus',
     doingMinesweeper: '💣 spielt Minesweeper',
+    doingTvBrowser: '📺 an der Website auf dem TV',
     doingOnlineBlackjack: '🃏 spielt Online-Blackjack',
   },
 );

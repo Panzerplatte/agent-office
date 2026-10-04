@@ -1289,6 +1289,11 @@ a.when:hover { text-decoration: underline; }
 .arcade > .close.corner { top: 0; right: auto; left: calc(100% + 10px); }
 /* The arcade cabinet in the lounge (ui/cabinet.ts) plays on the keyboard, and says so over the game when a worker of yours needs input. */
 .arcade.cabinet canvas { cursor: default; }
+/* The website on the lounge TV up close (ui/tvbrowser.ts): the page takes the mouse, the bar under it navigates. */
+.arcade.tvb canvas { cursor: default; outline: none; }
+.tvb-bar { gap: 6px; padding: 6px; max-width: min(calc(100vw - 24px), 1100px); }
+.tvb-sep { width: 6px; }
+.tvb-where { flex: 1 1 auto; min-width: 80px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; padding: 0 6px; }
 .cabinet-call { position: absolute; bottom: calc(100% + 10px); left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 10px; white-space: nowrap; padding: 6px 6px 6px 14px; background: var(--warn); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); font-weight: 900; font-size: 15px; animation: pop .18s ease-out; }
 /* Online blackjack on the office PC (ui/onlineblackjack.ts): the bets and moves under the screen wrap rather than run off it, and the game picker before. */
 .arcade.obj canvas { cursor: default; }

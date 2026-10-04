@@ -20,6 +20,7 @@ import elevator from './windows/elevator';
 import decor from './windows/decor';
 import cabinet from './windows/cabinet';
 import arcade from './windows/arcade';
+import tvbrowser from './windows/tvbrowser';
 import onlineblackjack from './windows/onlineblackjack';
 import minesweeper from './windows/minesweeper';
 import blocks from './windows/blocks';
@@ -53,6 +54,7 @@ export default {
     ...decor.en,
     ...cabinet.en,
     ...arcade.en,
+    ...tvbrowser.en,
     ...onlineblackjack.en,
     ...minesweeper.en,
     ...blocks.en,
@@ -80,6 +82,7 @@ export default {
     ...decor.de,
     ...cabinet.de,
     ...arcade.de,
+    ...tvbrowser.de,
     ...onlineblackjack.de,
     ...minesweeper.de,
     ...blocks.de,

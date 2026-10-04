@@ -1,4 +1,4 @@
-import type { AccountsState, ChatLine, FloorInfo, FloorView, GhIssue, GhPull, GhState, LeaveOnMergeState, MachineState, MeetingState, NotifyState, PeerInfo, PlanLimits, Me, ProjectInfo, ProjectsDirState, PromptsState, QueueState, QueueTask, RepoChoice, ServerMsg, ServicesState, SkyState, TeamState, ThemeState, UpgradeState, Usage, UsageState, WorkerInfo } from '../shared/protocol';
+import type { AccountsState, ChatLine, FloorInfo, FloorView, GhIssue, GhPull, GhState, LeaveOnMergeState, MachineState, MeetingState, NotifyState, PeerInfo, PlanLimits, Me, ProjectInfo, ProjectsDirState, PromptsState, QueueState, QueueTask, RepoChoice, ServerMsg, ServicesState, SkyState, TvBrowserState, TeamState, ThemeState, UpgradeState, Usage, UsageState, WorkerInfo } from '../shared/protocol';
 import type { ScreenState } from './world/laptop';
 import { randomLook, sanitizeLook, type Look } from '../shared/avatar';
 import type { Decoration } from '../shared/decor';
@@ -16,7 +16,7 @@ import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } fro
 import { emptyRoulette, type RouletteState } from '../shared/roulette';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -151,6 +151,8 @@ class Store {
   team: TeamState | null = null;
   upgrade: UpgradeState = { available: false, phase: 'idle' };
   services: ServicesState = { items: [], port: 4600 };
+  /** A worker's site the office's own browser shows on the floor's TV (see tvbrowser.ts); null while it's off. */
+  tvBrowser: TvBrowserState | null = null;
   /** Pictures on the walls. */
   decor: Decoration[] = [];
   /** What the lounge jukebox is playing; `since` is when the track started, on performance.now()'s clock. */
@@ -277,6 +279,7 @@ class Store {
     this.meeting = v.meeting;
     this.decor = v.decor;
     this.services = v.services;
+    this.tvBrowser = v.tvBrowser ?? null;
     this.whiteboard = new Map(v.whiteboard.elements.map((e) => [e.id, e]));
     this.drawing = v.whiteboard.people;
     this.cabinet = { player: v.cabinet.player, scores: v.cabinet.scores };
@@ -292,7 +295,7 @@ class Store {
     this.poolShot = undefined;
     this.roulette = v.roulette ?? emptyRoulette();
     this.rouletteAt = performance.now();
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette'] as Topic[]) this.emit(t);
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -415,6 +418,10 @@ class Store {
       case 'services':
         this.services = msg.state;
         this.emit('services');
+        break;
+      case 'tvbrowser':
+        this.tvBrowser = msg.state;
+        this.emit('tvBrowser');
         break;
       case 'decor':
         this.decor = msg.items;
