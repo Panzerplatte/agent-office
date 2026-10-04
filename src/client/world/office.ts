@@ -162,7 +162,7 @@ export interface OfficeLook {
   tower: THREE.Group;
   /** The rugs under the desk clusters and the lounge's. */
   rugs: THREE.Mesh[];
-  /** The pendant lamps over the desks and the lounge. */
+  /** The pendant lamps over the desks and the lounge, and the one over the boss's desk upstairs (that one's in loft too). */
   lamps: THREE.Mesh[];
   /** The office's other light fittings: the meeting room's lights, the billiard lamp over the pool table and the dartboard's picture lamp. */
   fittings: THREE.Mesh[];
@@ -1299,7 +1299,7 @@ export function buildOffice(): Office {
   }
 
   mark = group.children.length;
-  const bossScreen = buildLoft(group, colliders, interactables, looks);
+  const bossScreen = buildLoft(group, colliders, interactables, looks, lamps);
   const loftParts = since(mark);
   // Under the loft: the meeting room.
   mark = group.children.length;
@@ -1626,9 +1626,9 @@ interface Looks {
 
 /**
  * The upstairs office: a loft on posts in the south-east corner, with glass on the two sides that
- * face the desks, reached by stairs along the south wall.
+ * face the desks, reached by stairs along the south wall. The lamp over the boss's desk goes into `lamps` (OfficeLook.lamps).
  */
-function buildLoft(group: THREE.Group, colliders: Collider[], interactables: Interactable[], looks: Looks): THREE.Mesh {
+function buildLoft(group: THREE.Group, colliders: Collider[], interactables: Interactable[], looks: Looks, lamps: THREE.Group[]): THREE.Mesh {
   const { minX, maxX, minZ, maxZ, y: floorY, height } = LOFT;
   const w = maxX - minX;
   const d = maxZ - minZ;
@@ -1806,6 +1806,7 @@ function buildLoft(group: THREE.Group, colliders: Collider[], interactables: Int
   const lamp = pendant();
   lamp.position.set(deskX, roofY - 0.4, cz);
   group.add(lamp);
+  lamps.push(lamp);
 
   // Signs: one on the back wall inside, one over the glass for everyone downstairs.
   const inside = textPlane(t('world.signBossOffice'), { bg: '#fffaf3', size: 64 });
