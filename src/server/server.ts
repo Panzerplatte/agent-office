@@ -2093,6 +2093,8 @@ export async function startServer(cfg: Config) {
         if (!floor) return warn(c, notice('floor.pickOne'));
         if (!floor.style.set(msg.style, who)) break;
         toFloor(floor, { t: 'floorStyle', floor: floor.id, style: msg.style });
+        // The other floors see it from outside (world/tower.ts): no windows on a bunker floor.
+        floorsChanged();
         toastFloor(floor, notice(msg.style === 'bunker' ? 'floorStyle.bunker' : 'floorStyle.office', { who }));
         break;
       }

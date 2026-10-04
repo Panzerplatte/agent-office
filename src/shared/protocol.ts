@@ -650,6 +650,8 @@ export interface FloorInfo {
   dir: string;
   /** Which of FLOOR_PALETTES it's painted in. */
   palette: number;
+  /** Its look (see shared/floorstyle.ts): a bunker floor has no windows from outside either. Missing while it's being cloned. */
+  style?: FloorStyle;
   /** Being cloned: on the elevator panel, but nobody can go there yet. */
   cloning?: boolean;
   /** The project the office was started in (`agent-office <dir>`): the office keeps its own data in its checkout. */

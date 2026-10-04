@@ -14,6 +14,18 @@ const B = { minX: FLOOR.minX - WALL_T, maxX: FLOOR.maxX + WALL_T, minZ: FLOOR.mi
 /** The outside's planes stand this far off the walls, so they never fight the floor you're on for a pixel. */
 const OFF = 0.01;
 
+/** Which floors, from the bottom one up, are in the bunker look (shared/floorstyle.ts): every tower draws those without windows. */
+let bunkerFloors: readonly boolean[] = [];
+/** Each tower's rebuild, for when that changes. */
+const rebuilds = new Set<() => void>();
+
+/** The floors in the bunker look, from the bottom one up (as Tower.set counts them): the towers that show any of them are rebuilt. */
+export function setBunkerFloors(bunker: readonly boolean[]): void {
+  if (bunker.length === bunkerFloors.length && bunker.every((b, i) => b === bunkerFloors[i])) return;
+  bunkerFloors = [...bunker];
+  for (const rebuild of rebuilds) rebuild();
+}
+
 export interface Tower {
   group: THREE.Group;
   /**
@@ -56,6 +68,12 @@ export function buildTower(colliders: Collider[], night: NightParts): Tower {
   const deck = toon('#e8a87c');
   const cornice = toon('#fffaf3');
   const behind = flat('#2b2d42');
+  // A bunker floor (see setBunkerFloors): poured concrete all round, no glass, nothing lit.
+  const concrete = flat('#9d9a93');
+  const concreteBand = flat('#7f7c76');
+  const bunkerSteel = toon('#5d646c');
+  const slit = toon('#1d1f24');
+  const stripe = toon('#e9b934');
   // Glass you can't see into; at night some of it glows, as though someone upstairs is still at it.
   const dark = toon('#a9d8f5');
   const lit = ['#ffd27a', '#ffe6b0', '#9ec9ff'].map((glow) => {
@@ -78,7 +96,7 @@ export function buildTower(colliders: Collider[], night: NightParts): Tower {
   };
 
   /** One floor's outside on `side`, `y0` up from the floor you're on: the band of its slab, then its wall round its windows and doors. */
-  const facade = (parts: THREE.Group, side: Side, y0: number, holes: Opening[]) => {
+  const facade = (parts: THREE.Group, side: Side, y0: number, holes: Opening[], wall: THREE.Material = paint, slab: THREE.Material = band) => {
     const f = FACES[side];
     const piece = (u0: number, u1: number, y1: number, y2: number, mat: THREE.Material) => {
       if (u1 - u0 < 0.001 || y2 - y1 < 0.001) return;
@@ -87,17 +105,42 @@ export function buildTower(colliders: Collider[], night: NightParts): Tower {
       m.rotation.y = f.rotY;
       parts.add(m);
     };
-    piece(f.u0, f.u1, y0 - SLAB, y0, band);
+    piece(f.u0, f.u1, y0 - SLAB, y0, slab);
     let u = f.u0;
     for (const o of [...holes].sort((a, b) => a.u - b.u)) {
       const h0 = o.u - o.width / 2;
       const h1 = o.u + o.width / 2;
-      piece(u, h0, y0, y0 + WALL_HEIGHT, paint);
-      piece(h0, h1, y0, y0 + o.y0, paint);
-      piece(h0, h1, y0 + o.y1, y0 + WALL_HEIGHT, paint);
+      piece(u, h0, y0, y0 + WALL_HEIGHT, wall);
+      piece(h0, h1, y0, y0 + o.y0, wall);
+      piece(h0, h1, y0 + o.y1, y0 + WALL_HEIGHT, wall);
       u = h1;
     }
-    piece(u, f.u1, y0, y0 + WALL_HEIGHT, paint);
+    piece(u, f.u1, y0, y0 + WALL_HEIGHT, wall);
+  };
+
+  /** Where a window was on a bunker floor `y0` up: a narrow dark slit under a concrete hood, and a vent grille in every other one. */
+  const slitIn = (parts: THREE.Group, o: Opening, y0: number, vent: boolean) => {
+    const g = new THREE.Group();
+    const top = y0 + o.y1 - 0.25;
+    g.add(mesh(new THREE.BoxGeometry(o.width * 0.6, 0.12, 0.04), slit, 0, top, 0.02, false));
+    g.add(mesh(new THREE.BoxGeometry(o.width * 0.6 + 0.2, 0.08, 0.16), concreteBand, 0, top + 0.12, 0.08, false));
+    if (vent) {
+      const v = y0 + o.y0 + 0.45;
+      g.add(mesh(new THREE.BoxGeometry(0.6, 0.45, 0.06), bunkerSteel, 0, v, 0.03, false));
+      for (let i = 0; i < 4; i++) g.add(mesh(new THREE.BoxGeometry(0.5, 0.04, 0.08), slit, 0, v - 0.15 + i * 0.1, 0.04, false));
+    }
+    parts.add(onFace(g, o.wall, o.u));
+  };
+
+  /** A bunker floor's balcony, walled in and roofed over in concrete (see bunker/shellparts/build.ts' airlock), with a hazard stripe along its foot. */
+  const bunkerBalcony = (parts: THREE.Group, y0: number) => {
+    const x0 = BALCONY.minX - 0.12;
+    const x1 = BALCONY.maxX + 0.12;
+    const z0 = BALCONY.minZ;
+    const z1 = BALCONY.maxZ + 0.12;
+    const h = 3.2 + SLAB;
+    parts.add(mesh(new THREE.BoxGeometry(x1 - x0, h, z1 - z0), concrete, (x0 + x1) / 2, y0 - SLAB + h / 2, (z0 + z1) / 2, false));
+    parts.add(mesh(new THREE.BoxGeometry(x1 - x0 + 0.02, 0.22, z1 - z0 + 0.02), stripe, (x0 + x1) / 2, y0 + 0.11, (z0 + z1) / 2 + 0.01, false));
   };
 
   /** Glass in a hole: set back a little, with a frame round it, a bar down the middle and a sill. */
@@ -242,7 +285,9 @@ export function buildTower(colliders: Collider[], night: NightParts): Tower {
     }
   };
 
+  let last = { index: 0, count: 0 };
   const set = (index: number, count: number) => {
+    last = { index, count };
     for (const o of built) {
       o.removeFromParent();
       o.traverse((m) => {
@@ -262,6 +307,19 @@ export function buildTower(colliders: Collider[], night: NightParts): Tower {
       const r = k - index;
       if (r === 0) continue;
       const y0 = r * STOREY;
+      if (bunkerFloors[k]) {
+        // A bunker floor: solid concrete where its windows and glass doors were, so nothing shows (or glows) through.
+        for (const side of Object.keys(FACES) as Side[]) facade(parts, side, y0, side === 'west' && k === 0 ? [EXIT_DOOR] : [], concrete, concreteBand);
+        WINDOWS.forEach((o, i) => slitIn(parts, o, y0, i % 2 === 0));
+        bunkerBalcony(parts, y0);
+        if (k === 0) {
+          // Its exit door, in steel.
+          const door = mesh(new THREE.PlaneGeometry(EXIT_DOOR.width, EXIT_DOOR.y1), bunkerSteel, FLOOR.minX - WALL_T - OFF + 0.03, y0 + EXIT_DOOR.y1 / 2, EXIT_DOOR.u, false);
+          door.rotation.y = -Math.PI / 2;
+          parts.add(door);
+        }
+        continue;
+      }
       for (const side of Object.keys(FACES) as Side[]) {
         const holes: Opening[] = WINDOWS.filter((o) => o.wall === side);
         if (side === 'south') holes.push(BALCONY_DOOR);
@@ -308,5 +366,6 @@ export function buildTower(colliders: Collider[], night: NightParts): Tower {
     }
   };
 
+  rebuilds.add(() => set(last.index, last.count));
   return { group, set };
 }

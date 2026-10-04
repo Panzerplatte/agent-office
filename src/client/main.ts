@@ -14,6 +14,7 @@ import { Climber, gripOf, type Arrival, type Grip, type Way } from './climb';
 import { Caffeine } from './caffeine';
 import { buildOffice, type DeskView, type InteractKind, type Interactable } from './world/office';
 import { createBunker } from './world/bunker';
+import { setBunkerFloors } from './world/tower';
 import { buildRooftop, type Rooftop } from './world/rooftop';
 import { buildCasino, type Casino } from './world/casino';
 import { addCasinoAshtray, type CasinoAshtray } from './world/casinoashtray';
@@ -972,6 +973,8 @@ function syncStack() {
   player.street = streetBelow(index);
 }
 store.on('floors', syncStack);
+// The floors in the bunker look have no windows from outside, wherever the building is drawn (world/tower.ts).
+store.on('floors', () => setBunkerFloors(builtFloors().map((f) => f.style === 'bunker')));
 
 function showMyProfile(p: Profile) {
   me.setColor(p.color);
