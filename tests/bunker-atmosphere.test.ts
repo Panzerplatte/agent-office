@@ -113,6 +113,32 @@ test('the lights are put back exactly, and the static ones are not dimmed twice'
   bunker.dispose();
 });
 
+test('with reduced motion the switch is a quick fade up, never dark and no flicker', async () => {
+  now = 0;
+  Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: () => ({ matches: true }) });
+  try {
+    const { bunker, played, frame, tick } = setup();
+    bunker.set(true);
+    await tick();
+    bunker.set(false);
+    bunker.set(true);
+    await tick();
+    assert.equal(played.at(-1), 'breaker', 'the clunk still plays');
+    let last = 0;
+    for (let i = 0; i < 12; i++) {
+      const { want, got } = frame();
+      const k = got / want;
+      assert.ok(k >= 0.29 && k >= last - 1e-9, `fading up steadily (${k})`);
+      last = k;
+    }
+    assert.equal(last, 1);
+    assert.ok(!played.includes('tick'));
+    bunker.dispose();
+  } finally {
+    delete (globalThis as { matchMedia?: unknown }).matchMedia;
+  }
+});
+
 test('switching back and forth leaks nothing, and dispose takes it all away', async () => {
   now = 0;
   const { scene, bunker, frame, tick } = setup();
