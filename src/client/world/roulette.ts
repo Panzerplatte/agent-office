@@ -144,6 +144,8 @@ export class RouletteWheelView {
   private spunAt = 0;
   private round = -1;
   private landed = false;
+  /** When the ball dropped into its pocket in the spin we're showing (performance.now()), or 0 if we didn't see it. */
+  private landedAt = 0;
   private shownChips = '';
   private readonly glowMat: THREE.MeshBasicMaterial;
   /** The ball has been sent round (`seconds` to go), it dropped into its pocket, or you won. */
@@ -177,6 +179,7 @@ export class RouletteWheelView {
       this.round = s.round;
       this.spunAt = at - (SPIN_TIME - s.left);
       this.landed = false;
+      this.landedAt = 0;
       const e = SPIN_TIME - s.left;
       if (e < SPIN_TIME * LAND) this.onSpin?.((SPIN_TIME * LAND - e) / 1000);
     } else if (s.phase === 'result' && fresh) {
@@ -184,6 +187,7 @@ export class RouletteWheelView {
       this.round = s.round;
       this.spunAt = at - SPIN_TIME * 2;
       this.landed = true;
+      this.landedAt = 0;
     } else if (s.phase === 'betting' || s.phase === 'idle') {
       if (fresh) this.round = s.round;
       this.spunAt = 0;
@@ -196,6 +200,16 @@ export class RouletteWheelView {
   get settled(): boolean {
     const s = this.state;
     return !!s && s.number !== null && (s.phase === 'result' || (s.phase === 'spinning' && this.landed));
+  }
+
+  /** Whether the ball's going round, or dropped into its pocket less than `hold` ms ago (and we saw it): while the window over the wheel is up. */
+  spinShowing(hold: number, now = performance.now()): boolean {
+    return !!this.spunAt && (!this.landed || (this.landedAt > 0 && now - this.landedAt < hold));
+  }
+
+  /** The number the ball's going to (or did) land on, this spin. */
+  get number(): number | null {
+    return this.state?.number ?? null;
   }
 
   update(dt: number, now = performance.now()) {
@@ -214,6 +228,7 @@ export class RouletteWheelView {
       w.ball.visible = true;
       if (this.spunAt && !this.landed && p.down >= 1) {
         this.landed = true;
+        this.landedAt = now;
         this.onDrop?.(n);
         this.drawChips();
       }
