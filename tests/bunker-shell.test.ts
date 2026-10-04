@@ -50,8 +50,8 @@ test('the shell stands in for the walls, windows, glass doors, lamps and everyth
   assert.ok(outside.length > 50);
   assert.equal(shown.length, 1, 'only the exit sign');
   assert.ok((shown[0].material as THREE.MeshBasicMaterial).map, 'it is a sign');
-  // The balcony stays (walled in), and so does the floor, reskinned in concrete with its holes.
-  assert.ok(look.balcony.every((m) => !hidden(m)));
+  // The balcony's ashtray stays (the rest of it is the smokers' room's, see bunker-balcony.test.ts), and so does the floor, reskinned in concrete with its holes.
+  assert.ok(look.balcony.some((m) => !hidden(m)));
   assert.ok(look.floorMat.map && look.floorMat.map !== office.look.ceilingMat.map);
   // Nothing moves: the same colliders.
   assert.deepEqual(office.colliders, colliders);

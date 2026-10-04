@@ -998,7 +998,7 @@ export type ClientMsg =
    * You hit a golf ball off the tee: its heading (0 is south, toward +x from there), loft (radians)
    * and power (0–1). Everyone on your floor works out where it goes the same way (world/golf.ts fly).
    */
-  | { t: 'golf'; yaw: number; loft: number; power: number }
+  | { t: 'golf'; yaw: number; loft: number; power: number; from?: [number, number] }
   /** Chips: where your last golf ball stopped (in the cup, or how far from the pin), for the office to pay for (see EARN). */
   | { t: 'golf.landed'; holed: boolean; fromPin: number }
   /** You sat down in a place on a couch, a beanbag, a chair or the bench (see seatAt in layout), or got up again (no seat). */
@@ -1323,7 +1323,7 @@ export type ServerMsg =
   | { t: 'peer.leave'; id: string }
   | { t: 'peer.act'; id: string; smoke?: Smokable | false; golf?: boolean; drink?: DrinkId | null }
   /** Someone on your floor hit a golf ball off the tee (see the client's 'golf'). */
-  | { t: 'golf'; id: string; yaw: number; loft: number; power: number }
+  | { t: 'golf'; id: string; yaw: number; loft: number; power: number; from?: [number, number] }
   | { t: 'peer.emote'; id: string; emote: EmoteId }
   | { t: 'peer.emote.stop'; id: string }
   | { t: 'worker.update'; worker: WorkerInfo }

@@ -5,6 +5,7 @@ import type { OfficeSound } from '../../sound';
 import * as layout from '../../../shared/layout';
 import { buildShell } from './shell';
 import { buildExterior } from './exterior';
+import { buildBalcony } from './balcony';
 import { buildFurniture } from './furniture';
 import { buildProps } from './props';
 import { buildAtmosphere } from './atmosphere';
@@ -17,6 +18,7 @@ import { buildAtmosphere } from './atmosphere';
 // Each area of the look is built by its own file, into the bunker's group, once at startup:
 //   shell.ts       walls, floor, ceiling, windows and what's outside them, the lighting
 //   exterior.ts    the floor from outside: a concrete facade with no windows (tower.ts draws the other floors)
+//   balcony.ts     the balcony as a smokers' room, with its lounge and a mini golf hole
 //   furniture.ts   the desks, chairs and monitors, the meeting room and the lounge, in bunker style
 //   props.ts       crates, oil drums, sandbags, the workshop corner, signs, the vehicle bay…
 //   atmosphere.ts  ambient sound, the switching transition, flickering lights, dust
@@ -108,7 +110,7 @@ export function createBunker(office: Office, deps: BunkerDeps): Bunker {
       }
     },
   };
-  const parts = [buildShell(ctx), buildExterior(ctx), buildFurniture(ctx), buildProps(ctx), buildAtmosphere(ctx)];
+  const parts = [buildShell(ctx), buildExterior(ctx), buildBalcony(ctx), buildFurniture(ctx), buildProps(ctx), buildAtmosphere(ctx)];
 
   /** What was hidden or changed, with how it was: to put back. */
   const hidden = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
