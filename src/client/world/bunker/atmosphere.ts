@@ -25,6 +25,8 @@ const DUST_COLUMNS: [number, number, number][] = [
   [14, -3, 1.5],
 ];
 const MOTES_PER_COLUMN = 70;
+/** How much of a mote shows: barely, a faint glint in the light rather than a dot. */
+const DUST_OPACITY = 0.3;
 /** How dark it gets while the breaker's out: the screens still glow. */
 const DARK = 0.04;
 /** The transition, in seconds: dark until HOLD, flickering until DONE. */
@@ -100,16 +102,30 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
   const positions = new Float32Array(home);
   dustGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const dustMap = moteTexture();
+  // Warm white, added on top of the light: no fog or tone mapping, which tint an added colour (the
+  // haze's blue at night, ACES pushing it orange) and made the motes read as coloured dots.
   const dustMat = new THREE.PointsMaterial({
-    color: '#ffe2b0',
+    color: '#fff6ea',
     map: dustMap,
-    size: 0.045,
+    size: 0.035,
     sizeAttenuation: true,
     transparent: true,
-    opacity: 0.55,
+    opacity: DUST_OPACITY,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
+    fog: false,
+    toneMapped: false,
   });
+  // Motes right in front of your face would swell into blobs, and far ones just add noise: fade both.
+  dustMat.onBeforeCompile = function (shader, renderer) {
+    THREE.Material.prototype.onBeforeCompile.call(this, shader, renderer);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vDustFade;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvDustFade = smoothstep( 0.9, 2.2, - mvPosition.z ) * ( 1.0 - smoothstep( 9.0, 14.0, - mvPosition.z ) );');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vDustFade;')
+      .replace('#include <alphatest_fragment>', 'diffuseColor.a *= vDustFade;\n#include <alphatest_fragment>');
+  };
   disposables.push(dustGeo, dustMat, dustMap);
   const dust = new THREE.Points(dustGeo, dustMat);
   dust.name = 'bunker-dust';
@@ -287,7 +303,7 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
         positions[i + 2] = home[i + 2] + Math.cos(t * sp * 0.9 + ph) * reach;
       }
       dustGeo.attributes.position.needsUpdate = true;
-      dustMat.opacity = 0.55 * Math.max(0.2, level);
+      dustMat.opacity = DUST_OPACITY * Math.max(0.2, level);
     },
     dispose() {
       sound.setBunker?.(false);
@@ -301,7 +317,7 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
   };
 }
 
-/** A soft round dot for the dust. */
+/** A soft round dot for the dust: no bright core or edge, it just fades out. */
 function moteTexture(): THREE.Texture {
   const size = 32;
   const canvas = document.createElement('canvas');
@@ -309,7 +325,8 @@ function moteTexture(): THREE.Texture {
   const g = canvas.getContext('2d')!;
   const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+  grad.addColorStop(0.25, 'rgba(255,255,255,0.6)');
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.15)');
   grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, size, size);
