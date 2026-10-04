@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BOOKSHELF, ELEVATOR, ELEVATOR_FRONT, FLOOR, MEETING_ROOM, POOL_TABLE } from '../../../../shared/layout';
 import { Kit, mesh } from './kit';
-import { camoNet, crates, drum, fireBarrel, jerrycan, neonSign, radio, sandbags, wallMap, warningSign, workshop, type Animated } from './parts';
+import { ammoBoxes, camoNet, crates, drum, extinguisher, fireBarrel, jerrycan, neonSign, radio, sandbags, wallMap, warningSign, workshop, type Animated } from './parts';
 
 // Where the bunker's clutter goes. Everything stands against a wall or in a corner nothing else
 // uses (see shared/layout.ts and office.ts for what's where), clear of the desks, the walkways, the
@@ -41,6 +41,44 @@ export const FOOTPRINTS: Record<string, readonly [number, number, number, number
   drums: [FLOOR.minX, FLOOR.minX + 0.7, DRUMS_Z[0], DRUMS_Z[1]],
   fireBarrel: [FLOOR.minX, FIRE_BARREL.x + 0.32, FIRE_BARREL.z - 0.32, FIRE_BARREL.z + 0.32],
 };
+
+/** Where one of the office's potted plants stands (in office.group), and how big it is: something else stands there in the bunker. */
+export interface PlantSpot {
+  x: number;
+  y: number;
+  z: number;
+  scale: number;
+}
+
+/**
+ * What stands where a plant stood, varied by spot: an oil drum, a stack of ammo-box tins, a fire point
+ * or two jerrycans. Each is within 0.3 of its middle, scaled down for a small plant (never up), so it
+ * stays inside the plant's collider and blocks nothing new.
+ */
+function plantStandIn(kit: Kit, i: number, scale: number): THREE.Group {
+  const g = new THREE.Group();
+  switch (i % 4) {
+    case 0:
+      g.add(drum(kit, i % 8 === 0 ? '#56643a' : '#2f6690', i % 8 === 0 ? '#d9d2b6' : '#e9c46a'));
+      break;
+    case 1:
+      g.add(ammoBoxes(kit, 7 + i));
+      break;
+    case 2:
+      g.add(extinguisher(kit));
+      break;
+    default: {
+      const a = jerrycan(kit, '#4f5d2f');
+      a.position.set(0, 0, -0.08);
+      const b = jerrycan(kit, '#c0392b');
+      b.position.set(0.04, 0, 0.11);
+      b.rotation.y = 0.25;
+      g.add(a, b);
+    }
+  }
+  g.scale.setScalar(Math.min(1, scale));
+  return g;
+}
 
 export interface BunkerProps {
   group: THREE.Group;
@@ -99,7 +137,7 @@ function at<T extends THREE.Object3D>(o: T, x: number, y: number, z: number, rot
   return o;
 }
 
-export function buildBunkerProps(): BunkerProps {
+export function buildBunkerProps(plants: readonly PlantSpot[] = []): BunkerProps {
   const kit = new Kit();
   const group = new THREE.Group();
   group.name = 'bunker-props';
@@ -149,6 +187,9 @@ export function buildBunkerProps(): BunkerProps {
   statics.add(at(drum(kit, '#56643a', '#d9d2b6'), FLOOR.minX + 0.38, 0, d0 + 0.94, 0.7));
   statics.add(at(jerrycan(kit, '#c0392b'), FLOOR.minX + 0.2, 0, d0 + 1.48, Math.PI / 2));
   live(fireBarrel(kit), FIRE_BARREL.x, 0, FIRE_BARREL.z);
+
+  // Where the office's potted plants stand.
+  plants.forEach((p, i) => statics.add(at(plantStandIn(kit, i, p.scale), p.x, p.y, p.z, i * 1.3)));
 
   // Camo netting slung under the ceiling in three corners (the fourth is the loft's).
   const netY = 5.9;

@@ -1,5 +1,6 @@
+import * as THREE from 'three';
 import type { BunkerContext, BunkerPart } from './index';
-import { buildBunkerProps } from './clutter/place';
+import { buildBunkerProps, type PlantSpot } from './clutter/place';
 
 // The bunker's props: what makes it a bunker beyond its walls and furniture.
 //  - Crates, oil drums, sandbags, camo netting, jerry cans, toolboxes, in corners and along walls,
@@ -7,7 +8,9 @@ import { buildBunkerProps } from './clutter/place';
 //  - A workshop corner (workbench with tools, a vice, a pegboard), a vehicle bay (a cartoony jeep or
 //    quad under a tarp), our own "BUNKER" signage, hazard stripes, stencilled numbers.
 //  - Cartoony and cosy, toon materials; no weapons on display, no GTA/Rockstar names or logos.
-//  - The office's plants (look.plants) can go, or get swapped for something that fits.
+//  - The office's potted plants (look.plants, and the two in the boss's office upstairs) are hidden,
+//    and a drum, ammo-box tins, a fire point or jerrycans stand in each one's place, inside its
+//    collider. The desks' little plants go with the desks (furniture.ts). The balcony's aren't ours.
 // Mind what's on the walls already (office.fixtures()) and the floor plan (ctx.layout).
 // Not here: walls, floor, ceiling, lights (shell.ts), desks, chairs, meeting room, lounge
 // (furniture.ts), sound, transition, flicker, dust (atmosphere.ts).
@@ -22,12 +25,30 @@ import { buildBunkerProps } from './clutter/place';
  * signs into `ctx.group`: built once, shown with the bunker, all disposed with it.
  */
 export function buildProps(ctx: BunkerContext): BunkerPart {
-  const props = buildBunkerProps();
+  const { office, look } = ctx;
+  // The loft's plants are among its meshes: a pot and three balls of leaves, the way office.ts builds one.
+  const loftPlants = [...new Set(look.loft.map((m) => m.parent!))].filter(isPlant);
+  const plants = [...office.plants, ...loftPlants];
+  office.group.updateMatrixWorld(true);
+  const spots: PlantSpot[] = plants.map((p) => {
+    const at = office.group.worldToLocal(p.getWorldPosition(new THREE.Vector3()));
+    return { x: at.x, y: at.y, z: at.z, scale: p.scale.x };
+  });
+  const props = buildBunkerProps(spots);
   ctx.group.add(props.group);
   // The keep-out sign is on the elevator's pillar, where aiming at it means the elevator.
   ctx.standIn(ctx.office.elevator.group, props.elevatorSign);
   return {
+    hideOffice: [...look.plants, ...loftPlants.flatMap((p) => p.children as THREE.Mesh[])],
     update: (dt) => props.update(dt),
     dispose: () => props.dispose(),
   };
+}
+
+/** One of office.ts's potted plants: a pot (0.28 at the top, 0.22 at the bottom) and three spheres. */
+function isPlant(g: THREE.Object3D): boolean {
+  if (g.children.length !== 4) return false;
+  const [pot, ...leaves] = g.children as THREE.Mesh[];
+  const p = pot.geometry instanceof THREE.CylinderGeometry && pot.geometry.parameters;
+  return !!p && p.radiusTop === 0.28 && p.radiusBottom === 0.22 && leaves.every((l) => l.geometry instanceof THREE.SphereGeometry);
 }

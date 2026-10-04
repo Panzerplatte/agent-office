@@ -255,6 +255,71 @@ export function jerrycan(kit: Kit, color: string): THREE.Group {
   return g;
 }
 
+/**
+ * A stack of ammo-box-style tins (empty: no weapons anywhere), olive steel with a latch and a carry
+ * handle on each lid, within 0.3 of its middle so it fits where a plant's pot stood.
+ */
+export function ammoBoxes(kit: Kit, seed: number): THREE.Group {
+  const g = new THREE.Group();
+  const rand = seeded(seed);
+  const paint = kit.toon(OLIVE);
+  const dark = kit.toon(new THREE.Color(OLIVE).multiplyScalar(0.7));
+  const latch = kit.toon(STEEL_DARK);
+  const band = kit.toon('#d9d2b6');
+  let y = 0;
+  const n = 2 + Math.floor(rand() * 2);
+  for (let i = 0; i < n; i++) {
+    const w = 0.5 - i * 0.05;
+    const h = 0.2 - i * 0.02;
+    const d = 0.26;
+    const box = new THREE.Group();
+    box.add(mesh(new THREE.BoxGeometry(w, h, d), paint, 0, h / 2, 0));
+    box.add(mesh(new THREE.BoxGeometry(w + 0.012, 0.03, d + 0.012), dark, 0, h - 0.015, 0, false));
+    box.add(mesh(new THREE.BoxGeometry(0.05, 0.08, 0.02), latch, 0, h - 0.04, d / 2 + 0.01, false));
+    box.add(mesh(new THREE.BoxGeometry(0.12, 0.03, 0.005), band, -w / 4, h / 2, d / 2 + 0.003, false));
+    const handle = mesh(new THREE.TorusGeometry(0.05, 0.008, 4, 10, Math.PI), latch, 0, h, 0, false);
+    handle.rotation.x = -Math.PI / 2 + 0.25;
+    box.add(handle);
+    box.position.y = y;
+    box.rotation.y = (rand() - 0.5) * 0.35;
+    g.add(box);
+    y += h;
+  }
+  return g;
+}
+
+/**
+ * A fire point: a red extinguisher with its hose and gauge on a steel foot plate, and a little red
+ * post with a white sign beside it, all within 0.3 of the middle.
+ */
+export function extinguisher(kit: Kit): THREE.Group {
+  const g = new THREE.Group();
+  const red = kit.toon('#c0392b');
+  const black = kit.toon('#2a2a2a');
+  g.add(mesh(new THREE.BoxGeometry(0.42, 0.03, 0.42), kit.toon(STEEL_DARK), 0, 0.015, 0));
+  // The bottle, its shoulder, the valve and handle, the hose down the side and the gauge.
+  g.add(mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 14), red, -0.05, 0.28, 0.02));
+  g.add(mesh(new THREE.SphereGeometry(0.09, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), red, -0.05, 0.53, 0.02, false));
+  g.add(mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.07, 8), black, -0.05, 0.64, 0.02, false));
+  g.add(mesh(new THREE.BoxGeometry(0.16, 0.02, 0.035), black, -0.03, 0.68, 0.02, false));
+  g.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 10).rotateX(Math.PI / 2), kit.toon('#f1f1f1'), -0.05, 0.6, 0.1, false));
+  g.add(tubeBetween(new THREE.Vector3(0.0, 0.64, 0.02), new THREE.Vector3(0.06, 0.2, 0.06), 0.014, black));
+  g.add(mesh(new THREE.BoxGeometry(0.07, 0.06, 0.005), kit.toon('#f1f1f1'), -0.05, 0.32, 0.112, false));
+  // The post, with its sign.
+  g.add(mesh(new THREE.BoxGeometry(0.04, 1.1, 0.04), red, 0.18, 0.55, -0.18));
+  g.add(mesh(new THREE.BoxGeometry(0.22, 0.22, 0.02), kit.toon('#f1f1f1'), 0.18, 1.0, -0.15, false));
+  g.add(mesh(new THREE.BoxGeometry(0.16, 0.16, 0.022), red, 0.18, 1.0, -0.15, false));
+  return g;
+}
+
+/** A thin tube from `a` to `b`. */
+function tubeBetween(a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material): THREE.Mesh {
+  const len = a.distanceTo(b);
+  const m = mesh(new THREE.CylinderGeometry(r, r, len, 6), mat, (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2, false);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+  return m;
+}
+
 // ---- Sandbags -----------------------------------------------------------------------------------
 
 /**
