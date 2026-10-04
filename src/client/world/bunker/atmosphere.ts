@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { BunkerContext, BunkerPart } from './index';
 import type { OfficeSound } from '../../sound';
-import { DESKS, WALL_HEIGHT } from '../../../shared/layout';
+import { DESKS } from '../../../shared/layout';
 
 // The bunker's atmosphere: what it sounds and feels like, and how it comes and goes.
 //  - Ambient sound: a low hum of ventilation and a generator far off (the bunker block in sound.ts),
@@ -9,15 +9,13 @@ import { DESKS, WALL_HEIGHT } from '../../../shared/layout';
 //  - The switching transition: a breaker clunks, the lights cut out for a moment and flicker back on
 //    in the new look, both ways (bunker → office too). With prefers-reduced-motion: no flicker, just a
 //    quick fade up. Not on arriving on a floor that's already a bunker (see `set` below).
-//  - Light flicker: now and then one fluorescent tube, hanging over a desk pod, stutters.
 //  - Dust: motes drifting in the lamp light (one Points cloud in ctx.group).
 // Not here: anything built to stay (shell.ts, furniture.ts, props.ts).
 
-/** The flickering tube: hung on chains over the middle of the north-east desk pod, well above heads. */
-const TUBE = { x: (DESKS[4].x + DESKS[5].x) / 2, y: 3.9, z: (DESKS[4].z + DESKS[6].z) / 2, length: 1.6 };
-/** Where the dust drifts: under the tube, over the desk pods and in the open by the stairs, [x, z, radius]. */
+/** Where the power catches with a tick as the lights come back: the cage lamp over the north-east desk pod. */
+const TICK_AT = { x: (DESKS[4].x + DESKS[5].x) / 2, y: 3.9, z: (DESKS[4].z + DESKS[6].z) / 2 };
+/** Where the dust drifts: over the desk pods and in the open by the stairs, [x, z, radius]. */
 const DUST_COLUMNS: [number, number, number][] = [
-  [TUBE.x, TUBE.z, 1.3],
   [-10.5, -4, 1.4],
   [-10.5, 4, 1.4],
   [-1.5, 4, 1.4],
@@ -35,9 +33,6 @@ const DONE = 1.35;
 /** With reduced motion: a plain fade up, this long. */
 const FADE = 0.45;
 
-const TUBE_ON = new THREE.Color('#f4f8ff');
-const TUBE_OFF = new THREE.Color('#2a2d33');
-
 const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -48,7 +43,7 @@ export interface Atmosphere extends BunkerPart {
 }
 
 /**
- * The bunker's sound, transition, flicker and dust.
+ * The bunker's sound, transition and dust.
  */
 export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
   const { group, office, deps } = ctx;
@@ -56,31 +51,6 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
   // Partial: tests build the bunker with a stand-in for the sound.
   const sound: Partial<OfficeSound> = deps.sound;
   const disposables: { dispose(): void }[] = [];
-
-  // ---- The tube ------------------------------------------------------------------------------------
-  const tube = new THREE.Group();
-  tube.name = 'bunker-tube';
-  tube.position.set(TUBE.x, TUBE.y, TUBE.z);
-  const glow = new THREE.MeshBasicMaterial({ color: TUBE_ON.clone() });
-  const metal = new THREE.MeshToonMaterial({ color: '#4d5158' });
-  disposables.push(glow, metal);
-  const lampGeo = new THREE.CylinderGeometry(0.045, 0.045, TUBE.length, 8);
-  lampGeo.rotateZ(Math.PI / 2);
-  const housingGeo = new THREE.BoxGeometry(TUBE.length + 0.12, 0.06, 0.2);
-  const chainGeo = new THREE.CylinderGeometry(0.012, 0.012, WALL_HEIGHT - TUBE.y, 4);
-  disposables.push(lampGeo, housingGeo, chainGeo);
-  const lamp = new THREE.Mesh(lampGeo, glow);
-  lamp.position.y = -0.04;
-  const housing = new THREE.Mesh(housingGeo, metal);
-  housing.position.y = 0.04;
-  tube.add(lamp, housing);
-  for (const dx of [-TUBE.length / 2 + 0.15, TUBE.length / 2 - 0.15]) {
-    const chain = new THREE.Mesh(chainGeo, metal);
-    chain.position.set(dx, (WALL_HEIGHT - TUBE.y) / 2, 0);
-    tube.add(chain);
-  }
-  group.add(tube);
-  const tubeAt = { x: TUBE.x, y: TUBE.y, z: TUBE.z };
 
   // ---- Dust ----------------------------------------------------------------------------------------
   const count = DUST_COLUMNS.length * MOTES_PER_COLUMN;
@@ -132,7 +102,7 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
   dust.frustumCulled = false;
   group.add(dust);
 
-  // ---- The lights, dimmed for the transition and the flicker ---------------------------------------
+  // ---- The lights, dimmed for the transition -------------------------------------------------------
   /** How bright the room is right now (1 = as the sky and the shell set it). */
   let level = 1;
   /** Lights we've dimmed: what they were, and what we wrote, to tell our own value from a new one. */
@@ -183,9 +153,6 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
   // ---- The transition ------------------------------------------------------------------------------
   /** The transition running: since when (performance.now), towards which look, and its flicker pattern. */
   let switching: { since: number; on: boolean; calm: boolean; blinks: [start: number, end: number][]; ticked: number } | null = null;
-  /** The tube's own stutter, now and then: when the next starts (in update's seconds), and its blinks. */
-  let nextStutter = rand(6, 14);
-  let stutter: { since: number; blinks: [number, number][] } | null = null;
   let clock = 0;
 
   /** A few off-blinks between `from` and `to`, getting shorter as the power settles. */
@@ -219,10 +186,10 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
     else {
       const out = inBlink(switching.blinks, s);
       level = out ? rand(DARK, 0.3) : 1;
-      // A tick from the tube each time the power catches.
+      // A tick each time the power catches.
       if (!out && switching.on && s - switching.ticked > 0.12) {
         switching.ticked = s;
-        sound.tubeTick?.(tubeAt);
+        sound.tubeTick?.(TICK_AT);
       }
     }
   };
@@ -259,11 +226,6 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
   return {
     set(on) {
       sound.setBunker?.(on);
-      if (!on) {
-        // Back to the office: its tube's glow stays put for the next time.
-        stutter = null;
-        glow.color.copy(TUBE_ON);
-      }
       isSwitch(on);
     },
     transition,
@@ -271,26 +233,6 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
       clock += dt;
       // Every frame, since audio only starts after a click or a key: the hum then fades in.
       sound.setBunker?.(true);
-      // The tube stutters now and then (not with reduced motion).
-      if (!stutter && !switching && clock >= nextStutter && !reduceMotion()) {
-        stutter = { since: clock, blinks: blinksBetween(0, rand(0.5, 1.4), Math.floor(rand(3, 7))) };
-      }
-      let tubeLit = !switching || level > 0.5;
-      if (stutter) {
-        const s = clock - stutter.since;
-        const end = stutter.blinks[stutter.blinks.length - 1]?.[1] ?? 0;
-        const out = inBlink(stutter.blinks, s);
-        if (s >= end) {
-          stutter = null;
-          nextStutter = clock + rand(18, 55);
-        } else {
-          if (!out && tubeLit && glow.color.equals(TUBE_OFF)) sound.tubeTick?.(tubeAt);
-          tubeLit = !out;
-          // The room dips a touch with it.
-          if (!switching) level = out ? 0.9 : 1;
-        }
-      } else if (!switching) level = 1;
-      glow.color.copy(tubeLit ? TUBE_ON : TUBE_OFF);
       // The dust drifts and turns slowly in the light.
       const t = clock;
       for (let n = 0; n < count; n++) {
@@ -311,7 +253,7 @@ export function buildAtmosphere(ctx: BunkerContext): Atmosphere {
       level = 1;
       undim();
       if (scene.onBeforeRender === hook) scene.onBeforeRender = before;
-      group.remove(tube, dust);
+      group.remove(dust);
       for (const d of disposables) d.dispose();
     },
   };

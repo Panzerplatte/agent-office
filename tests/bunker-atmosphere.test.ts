@@ -52,7 +52,8 @@ test('switching the style throws the breaker, the lights go out and come back; a
   await tick();
   assert.deepEqual(played, []);
   assert.equal(hum.at(-1), true);
-  assert.ok(bunker.group.getObjectByName('bunker-dust') && bunker.group.getObjectByName('bunker-tube'));
+  assert.ok(bunker.group.getObjectByName('bunker-dust'));
+  assert.equal(bunker.group.getObjectByName('bunker-tube'), undefined, 'no flickering tube in the cage lamp over the pod');
   const { want, got } = frame();
   assert.equal(got, want, 'no transition: the light is as the parts set it');
 
@@ -65,7 +66,7 @@ test('switching the style throws the breaker, the lights go out and come back; a
   for (let i = 0; i < 40; i++) frame();
   assert.equal(frame().got, 1, 'and back on');
 
-  // And to the bunker again: dark, flickering back on, with the tube ticking.
+  // And to the bunker again: dark, flickering back on, with the power ticking.
   bunker.set(true);
   await tick();
   assert.equal(played.at(-1), 'breaker');
