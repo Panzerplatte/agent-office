@@ -1011,17 +1011,15 @@ const CAGE_LAMPS: readonly [number, number][] = [
 /** The cage lamp upstairs, hung from the loft's ceiling over the boss's desk (where the office's pendant hangs). */
 const BOSS_LAMP = { x: (LOFT.minX + LOFT.maxX) / 2 + 0.5, y: LOFT.y + LOFT.height - 0.4, z: (LOFT.minZ + LOFT.maxZ) / 2 };
 const TUBES: readonly { x: number; z: number; y: number; len: number }[] = [
-  { x: 5.4, z: -7.7, y: 4.5, len: 2.6 },
   { x: -14.6, z: 10.2, y: 4.3, len: 2.2 },
 ];
-/** The real lights: warm over each pod and the lounge, cool under the tubes. Few, so it stays quick. */
+/** The real lights: warm over each pod and the lounge. Few, so it stays quick. */
 const LIGHTS: readonly { x: number; y: number; z: number; color: string; power: number; reach: number }[] = [
   { x: -10.5, y: 3.9, z: -4, color: '#ffc77d', power: 6, reach: 10 },
   { x: -1.5, y: 3.9, z: -4, color: '#ffc77d', power: 6, reach: 10 },
   { x: -10.5, y: 3.9, z: 4, color: '#ffc77d', power: 6, reach: 10 },
   { x: -1.5, y: 3.9, z: 4, color: '#ffc77d', power: 6, reach: 10 },
   { x: 13, y: 3.9, z: 0, color: '#ffb766', power: 5, reach: 9 },
-  { x: 5.4, y: 4.2, z: -7.7, color: '#cfe6ff', power: 4, reach: 9 },
   // Over the pool table, low: it lights the cloth the way the billiard lamp did, at any hour.
   { x: POOL_TABLE.x, y: POOL_TABLE.y + 0.85, z: POOL_TABLE.z, color: '#ffd08a', power: 2.2, reach: 3.2 },
   // Upstairs, over the boss's desk.
