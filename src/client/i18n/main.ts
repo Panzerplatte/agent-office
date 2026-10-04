@@ -16,6 +16,9 @@ export default strings(
     watchingScreen: "🖥️ watching {who}'s screen",
     watchingYourScreen: '🖥️ watching their own screen',
     watchFull: 'Watch full screen',
+    // A worker's site on the TV, from the office's own browser
+    tvLoading: '⏳ Loading…',
+    useWebsite: 'Use the website',
 
     // The board agents: the card over their heads, and what they do
     issuesOffer: 'Ask me about issues',
@@ -380,6 +383,9 @@ export default strings(
     watchingScreen: '🖥️ schaut den Bildschirm von {who}',
     watchingYourScreen: '🖥️ schaut den eigenen Bildschirm',
     watchFull: 'Im Vollbild ansehen',
+    // Die Seite eines Workers auf dem TV, aus dem eigenen Browser des Office
+    tvLoading: '⏳ Lädt …',
+    useWebsite: 'Website bedienen',
 
     issuesOffer: 'Frag mich zu Issues',
     issuesAbout: 'zu Issues',

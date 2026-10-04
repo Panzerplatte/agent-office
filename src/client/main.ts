@@ -106,6 +106,8 @@ import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
 import type { JukeboxView } from './world/jukebox';
 import { openBookshelf } from './ui/bookshelf';
 import { Arcade } from './ui/arcade';
+import { TvBrowser } from './tvbrowser';
+import { TvViewer } from './ui/tvbrowser';
 import { OnlineBlackjack } from './ui/onlineblackjack';
 import { Cabinet } from './ui/cabinet';
 import { trackTitle } from '../shared/jukebox';
@@ -291,6 +293,9 @@ const tvMat = office.tvScreen.material as THREE.MeshBasicMaterial;
 tvMat.color.set('#ffffff');
 tvMat.map = tvIdle;
 tvMat.toneMapped = false;
+// A worker's site from the office's own browser, on the TV while no screen is shared (see tvbrowser.ts), and up close with E.
+const tvBrowser = new TvBrowser();
+const tvViewer = new TvViewer(office.tvScreen, tvBrowser, (msg) => net.send(msg));
 // The boss's monitor upstairs: Minesweeper, from the boss's chair.
 // Online blackjack on it too, at a table with everyone else at a PC on any floor (net and sound come up below).
 const onlineBlackjack = new OnlineBlackjack(
@@ -2236,9 +2241,9 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   if (key !== 'E') return;
   if (target.kind === 'elevator') showElevator();
   else if (target.kind === 'issues' || target.kind === 'pulls') openBoard(target.kind, net, boardActions());
-  else if (target.kind === 'services') openServices();
+  else if (target.kind === 'services') openServices((msg) => net.send(msg));
   else if (target.kind === 'queue') showQueue();
-  else if (target.kind === 'tv') watchShare();
+  else if (target.kind === 'tv') watchTv();
   else if (target.kind === 'jukebox') showJukebox();
   else if (target.kind === 'bookshelf') showBookshelf();
   else if (target.kind === 'decor' && target.decorId) hanger.view(target.decorId);
@@ -2802,6 +2807,12 @@ function tvShowing(): boolean {
   return currentShares().some(([who]) => who !== 'You');
 }
 
+/** E at the TV (or on the couch facing it): a shared screen full screen, else the website on it up close, else share yours. */
+function watchTv() {
+  if (!currentShares().length && store.tvBrowser) tvViewer.show();
+  else watchShare();
+}
+
 /** E at a seat: sit down on it. Sitting there already, get up, or on the couch facing the TV, watch it. */
 function useSeat(seatId: string) {
   const seat = SEATING_BY_ID.get(seatId);
@@ -2809,7 +2820,7 @@ function useSeat(seatId: string) {
   if (player.seat?.seatId === seatId) {
     // On a slot machine's stool, E plays it (again): it never gets you up, Esc or walking off does.
     if (seat.play === 'slots' && seat.spot !== undefined) playSlots(seat.spot);
-    else if (seat.tv && tvShowing()) watchShare();
+    else if (seat.tv && (tvShowing() || store.tvBrowser)) watchTv();
     else if (seat.game) arcade.play();
     else if (seat.play === 'roulette') playRoulette();
     else if (seat.bar) showBar();
@@ -2827,8 +2838,8 @@ function useSeat(seatId: string) {
   me.sit(place.hips);
   net.send({ t: 'sit', seat: place.key });
   if (seat.play === 'roulette') playRoulette();
-  // The couch in front of the TV is where you watch whoever's sharing.
-  if (seat.tv && tvShowing()) watchShare();
+  // The couch in front of the TV is where you watch whoever's sharing, or the website on it.
+  if (seat.tv && (tvShowing() || store.tvBrowser)) watchTv();
   // Sitting down at a slot machine is to play it.
   if (seat.play === 'slots' && seat.spot !== undefined) playSlots(seat.spot);
 }
@@ -3033,6 +3044,8 @@ function hintFor(it: Interactable): Hint {
     }
     case 'tv': {
       const any = currentShares().length > 0;
+      const site = !any && store.tvBrowser;
+      if (site) return { k: `site|${site.title}`, parts: [title(t('main.officeTv')), aside(site.title || site.url), key('E', t('main.useWebsite'))] };
       return { k: String(any), parts: [title(t('main.officeTv')), key('E', t(any ? 'main.watchFull' : 'main.shareYourScreen'))] };
     }
     case 'coffee': {
@@ -3894,6 +3907,22 @@ function currentShares(): [string, MediaStream][] {
 }
 
 let tvStream: MediaStream | null = null;
+/** A shared screen wins the TV; without one it shows the TV browser's site, if one's on. */
+function showOnTv() {
+  const map = tvStream ? tvTexture : store.tvBrowser ? tvBrowser.texture : tvIdle;
+  if (tvMat.map === map) return;
+  tvMat.map = map;
+  tvMat.needsUpdate = true;
+}
+store.on('tvBrowser', () => {
+  tvBrowser.setState(store.tvBrowser);
+  if (!store.tvBrowser) tvViewer.close();
+  showOnTv();
+  hintKey = '';
+});
+net.onMessage((msg) => {
+  if (msg.t === 'tvbrowser.frame') tvBrowser.frame(msg.data);
+});
 function refreshShares() {
   const shares = currentShares();
   // Remote shares win the TV; your own share is what others see anyway.
@@ -3903,8 +3932,7 @@ function refreshShares() {
     tvStream = stream;
     tvVideo.srcObject = stream;
     if (stream) void tvVideo.play().catch(() => {});
-    tvMat.map = stream ? tvTexture : tvIdle;
-    tvMat.needsUpdate = true;
+    showOnTv();
   }
   const box = $('shares');
   box.replaceChildren(
@@ -3943,7 +3971,7 @@ const hud = mountHud(
     { id: 'issues', icon: '📌', label: t('menus.issues'), section: 'Open', count: () => store.issues.items.filter((i) => i.state === 'OPEN').length, run: () => openBoard('issues', net, boardActions()) },
     { id: 'pulls', icon: '🔀', label: t('menus.pulls'), section: 'Open', count: () => store.pulls.items.filter((p) => p.state === 'OPEN').length, run: () => openBoard('pulls', net, boardActions()) },
     { id: 'queue', icon: '📋', label: t('menus.queue'), section: 'Open', count: () => store.queue.tasks.filter((task) => task.status !== 'done').length, title: () => t('menus.queueTitle'), run: showQueue },
-    { id: 'services', icon: '🌐', label: t('menus.services'), section: 'Open', count: () => store.services.items.length, title: () => t('menus.servicesTitle'), run: () => openServices() },
+    { id: 'services', icon: '🌐', label: t('menus.services'), section: 'Open', count: () => store.services.items.length, title: () => t('menus.servicesTitle'), run: () => openServices((msg) => net.send(msg)) },
     { id: 'whiteboard', icon: '📝', label: t('menus.whiteboard'), section: 'Open', title: () => t('menus.whiteboardTitle'), run: () => openWhiteboard(net) },
     // Up on the top bar while a meeting is on: what's being worked through in the meeting room.
     {
@@ -4108,6 +4136,7 @@ function frame(ts?: number) {
   const hole = office.stack.polesGoDown() ? office.stack.poles().find((s) => Math.hypot(player.pos.x - s.x, player.pos.z - s.z) < POLE.hole - 0.15) : undefined;
   if (hole && !climber.active && !trip && !player.seat && player.enabled && player.pos.y > -1.35 && player.pos.y < 0.6) climber.slide(hole);
   arcade.update(camera, dt);
+  tvViewer.update(camera, dt);
   cabinet.update(camera, dt);
   // Pulled away from the tee (sat down, off up the ladder, into the elevator): the club goes back.
   if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) golf.stop();
@@ -4311,7 +4340,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
+  if (firstPerson && !arcade.zoomed && !tvViewer.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
