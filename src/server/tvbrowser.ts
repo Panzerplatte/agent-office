@@ -1,7 +1,10 @@
 import { existsSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { Browser, BrowserContext, CDPSession, Page, Request, Route } from 'playwright-core';
 import type { ServiceInfo, TvBrowserInput, TvBrowserState, TvBrowserView } from '../shared/protocol.js';
 import { notice, type Notice } from '../shared/notices.js';
+import { officeHome } from './config.js';
 
 // The lounge TV's browser: a worker's website, opened by the office in a headless Chromium on its
 // own machine (where http://localhost:<port> just works, the dev server's HMR included) and streamed
@@ -35,7 +38,7 @@ const MAX_TEXT = 1000;
 const MAX_WHEEL = 2000;
 
 export const NO_CHROMIUM =
-  "The office has no Chromium for the TV: run `npx playwright-core install chromium` on the office's machine, or set AGENT_OFFICE_CHROMIUM to a Chrome or Chromium binary";
+  "The office has no Chromium for the TV: put a self-contained one in ~/.local/share/agent-office/chromium/ (its binary as chromium/chromium), run `npx playwright-core install chromium` on the office's machine, or set AGENT_OFFICE_CHROMIUM to a Chrome or Chromium binary";
 export const BROWSER_STOPPED = "The TV's browser stopped. Put the page on the TV again";
 export const PAGE_CRASHED = 'The page crashed. Reload it';
 
@@ -48,29 +51,72 @@ const SYSTEM_CHROMIUM: Partial<Record<NodeJS.Platform, string[]>> = {
 
 const LAUNCH_ARGS = ['--disable-dev-shm-usage', '--no-first-run', '--no-default-browser-check', '--mute-audio', '--disable-extensions', '--disable-background-networking'];
 
-/** Starts the TV's Chromium: AGENT_OFFICE_CHROMIUM, else Playwright's own, else a system Chrome or Chromium. */
-export async function launchChromium(env: NodeJS.ProcessEnv = process.env): Promise<Browser> {
-  let pw: typeof import('playwright-core');
+/** A self-contained Chromium (with its libraries next to it) in this folder needs no system libraries. */
+const OWN_CHROMIUM = path.join('chromium', 'chromium');
+
+/** Why a launch failed, in a line: the browser's own first complaint (e.g. a missing library) when Playwright logged one. */
+function whyNot(err: unknown): string {
+  const msg = (err as Error).message ?? String(err);
+  const said = /\[pid=\d+\]\[err\] (.+)/.exec(msg)?.[1];
+  return (said ?? msg.split('\n').find((l) => l.trim()) ?? 'failed').trim().slice(0, 200);
+}
+
+/** What launchChromium needs from the machine; tests pass their own. */
+export interface ChromiumDeps {
+  playwright?: () => Promise<Pick<typeof import('playwright-core'), 'chromium'>>;
+  exists?: (path: string) => boolean;
+  homedir?: string;
+  platform?: NodeJS.Platform;
+  log?: (line: string) => void;
+}
+
+/**
+ * Starts the TV's Chromium, trying in turn: AGENT_OFFICE_CHROMIUM, the office's home/chromium/chromium,
+ * ~/.local/share/agent-office/chromium/chromium, Playwright's own, then a system Chrome or Chromium.
+ * One that's there but won't start (missing shared libraries, say) is logged and the next one tried.
+ */
+export async function launchChromium(env: NodeJS.ProcessEnv = process.env, deps: ChromiumDeps = {}): Promise<Browser> {
+  const exists = deps.exists ?? existsSync;
+  const log = deps.log ?? ((line: string) => console.error(`agent-office: ${line}`));
+  const home = deps.homedir ?? os.homedir();
+  let pw: Pick<typeof import('playwright-core'), 'chromium'>;
   try {
-    pw = await import('playwright-core');
+    pw = await (deps.playwright ?? (() => import('playwright-core')))();
   } catch {
     throw new Error("The office can't open web pages on the TV: the playwright-core package isn't installed");
   }
+  const tried: string[] = [];
+  /** Launches the Chromium at `executablePath` (Playwright's own without one); undefined when it won't start. */
+  const attempt = async (executablePath?: string): Promise<Browser | undefined> => {
+    try {
+      return await pw.chromium.launch({ executablePath, args: LAUNCH_ARGS });
+    } catch (err) {
+      // Playwright's headless shell just isn't installed: nothing to report.
+      if (!executablePath && /Executable doesn't exist|playwright.* install/i.test((err as Error).message)) return undefined;
+      const why = whyNot(err);
+      tried.push(`${executablePath ?? "Playwright's Chromium"}: ${why}`);
+      log(`the TV's Chromium ${executablePath ?? "(Playwright's)"} didn't start: ${why}`);
+      return undefined;
+    }
+  };
   const own = env.AGENT_OFFICE_CHROMIUM;
-  if (own) {
-    if (!existsSync(own)) throw new Error(`AGENT_OFFICE_CHROMIUM is set to ${own}, which doesn't exist`);
-    return pw.chromium.launch({ executablePath: own, args: LAUNCH_ARGS });
+  if (own && !exists(own)) {
+    tried.push(`AGENT_OFFICE_CHROMIUM is set to ${own}, which doesn't exist`);
+    log(tried.at(-1)!);
   }
-  try {
-    return await pw.chromium.launch({ args: LAUNCH_ARGS });
-  } catch (err) {
-    if (!/Executable doesn't exist|playwright.* install/i.test((err as Error).message)) throw err;
+  const ownFirst = [own, path.join(officeHome(env), OWN_CHROMIUM), path.join(home, '.local', 'share', 'agent-office', OWN_CHROMIUM)];
+  for (const p of new Set(ownFirst)) {
+    const b = p && exists(p) ? await attempt(p) : undefined;
+    if (b) return b;
   }
+  const shell = await attempt();
+  if (shell) return shell;
   // Playwright's full Chromium without its headless shell, or a system one.
-  for (const p of [pw.chromium.executablePath(), ...(SYSTEM_CHROMIUM[process.platform] ?? [])]) {
-    if (p && existsSync(p)) return pw.chromium.launch({ executablePath: p, args: LAUNCH_ARGS });
+  for (const p of new Set([pw.chromium.executablePath(), ...(SYSTEM_CHROMIUM[deps.platform ?? process.platform] ?? [])])) {
+    const b = p && exists(p) ? await attempt(p) : undefined;
+    if (b) return b;
   }
-  throw new Error(NO_CHROMIUM);
+  throw new Error(tried.length ? `${NO_CHROMIUM}. Tried: ${tried.join('; ')}` : NO_CHROMIUM);
 }
 
 /** The one Chromium every floor's TV shares: launched for the first user, closed after the last. */

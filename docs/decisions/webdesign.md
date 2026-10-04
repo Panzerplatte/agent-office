@@ -115,5 +115,5 @@ Zwei Abweichungen vom Meeting-Stand, beide im Ablauf oben schon eingearbeitet:
   - Bedienen darf jeder auf der Etage (Maus, Tastatur, zurück/vor/neu laden, Desktop 1280×720 oder Mobil 390×844). Es ist ein gemeinsamer Fernseher.
   - Nur Dienste, die die Dienste-Tafel als Worker-Dienst dieser Etage listet. Navigation nur innerhalb von `localhost:<port>`; Popups, Downloads und andere Ursprünge sind gesperrt.
   - Eine laufende Bildschirmfreigabe hat auf dem TV Vorrang.
-  - Chromium: `AGENT_OFFICE_CHROMIUM`, sonst das von Playwright (`npx playwright-core install chromium`), sonst ein System-Chrome/Chromium.
+  - Chromium: `AGENT_OFFICE_CHROMIUM`, sonst `<Office-Home>/chromium/chromium`, sonst `~/.local/share/agent-office/chromium/chromium` (ein eigenständiges Chromium, das keine Systembibliotheken braucht), sonst das von Playwright (`npx playwright-core install chromium`), sonst ein System-Chrome/Chromium. Eins, das nicht startet, wird übersprungen.
 - Das Popup aus Punkt 2 bleibt für den lokalen Fall. Ins Meeting-Tool teilen ist damit nicht mehr nötig: Wer auf der Etage ist, sieht die Seite auf dem TV.
