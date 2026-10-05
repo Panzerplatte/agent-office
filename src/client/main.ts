@@ -3155,7 +3155,7 @@ function hintFor(it: Interactable): Hint {
     }
     case 'decor': {
       const d = store.decor.find((x) => x.id === it.decorId);
-      return { k: `${d?.title}|${d?.by}`, parts: [title(`🖼️ ${d?.title || t('main.aPicture')}`), d ? aside(t('main.hungBy', { name: d.by })) : '', key('E', t('main.lookCloser'))] };
+      return { k: `${d?.title}|${d?.by}|${d?.on}`, parts: [title(`🖼️ ${d?.title || t('main.aPicture')}`), d ? aside(t(d.on === 'desk' ? 'main.placedBy' : 'main.hungBy', { name: d.by })) : '', key('E', t('main.lookCloser'))] };
     }
     case 'seat': {
       const seat = SEATING_BY_ID.get(it.seatId ?? '');
@@ -3465,11 +3465,18 @@ function renderBlackjackHint(el: HTMLElement) {
 
 function renderHangHint(el: HTMLElement) {
   const spot = hanger.spot;
-  const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}`;
+  const desk = spot?.on === 'desk';
+  const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}|${desk}`;
   if (k === hintKey) return;
   hintKey = k;
-  const title = t(!spot ? 'main.aimAtWall' : !spot.ok ? 'main.inTheWay' : hanger.moving ? 'main.movingPicture' : 'main.hangingPicture');
-  el.replaceChildren(h('span.title', {}, title), key(t('main.keyClick'), t('main.hang')), key(t('main.keyScroll'), t('main.size')), key(t('main.keyQR'), t('main.turn')), key('Esc', t('main.cancel')));
+  const title = t(!spot ? 'main.aimAtWall' : !spot.ok ? 'main.inTheWay' : hanger.moving ? 'main.movingPicture' : desk ? 'main.standingPicture' : 'main.hangingPicture');
+  el.replaceChildren(
+    h('span.title', {}, title),
+    key(t('main.keyClick'), t(desk ? 'main.standIt' : 'main.hang')),
+    key(t('main.keyScroll'), t('main.size')),
+    key(t('main.keyQR'), t(desk ? 'main.turnStanding' : 'main.turn')),
+    key('Esc', t('main.cancel')),
+  );
   el.classList.remove('hidden');
 }
 

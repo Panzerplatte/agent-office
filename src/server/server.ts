@@ -2335,7 +2335,8 @@ export async function startServer(cfg: Config) {
         const d = floor.decor.add(msg.decor, who);
         if (typeof d === 'string') return warn(c, d);
         decorChanged(floor);
-        toastFloor(floor, d.title ? notice('picture.hung', { who, title: d.title }) : notice('picture.hungUntitled', { who }));
+        if (d.on === 'desk') toastFloor(floor, d.title ? notice('picture.stood', { who, title: d.title }) : notice('picture.stoodUntitled', { who }));
+        else toastFloor(floor, d.title ? notice('picture.hung', { who, title: d.title }) : notice('picture.hungUntitled', { who }));
         break;
       }
       case 'decor.update': {

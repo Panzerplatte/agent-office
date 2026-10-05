@@ -36,6 +36,8 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
   let frame = init?.frame ?? lastFrame();
   const frames = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.decor.frameLabel') });
   let rot = normalizeRot(init?.rot);
+  // A desk frame turns around itself, not within the picture: its preview stays upright.
+  const standing = init?.on === 'desk';
   const rotValue = h('span.hang-rot-value', { 'aria-live': 'polite' });
   const turn = (dir: number) => () => ((rot = normalizeRot(rot + dir * ROT_STEP)), paintRot());
   const rotLeft = h('button.btn', { type: 'button', title: t('windows.decor.rotateLeft'), 'aria-label': t('windows.decor.rotateLeft'), onclick: turn(1) }, '↺');
@@ -59,7 +61,7 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
       titleIn,
       h('label', { style: 'margin-top:12px' }, t('windows.decor.frameLabel')),
       frames,
-      h('label', { style: 'margin-top:12px' }, t('windows.decor.rotateLabel')),
+      h('label', { style: 'margin-top:12px' }, t(standing ? 'windows.decor.rotateDeskLabel' : 'windows.decor.rotateLabel')),
       rotRow,
       preview,
       status,
@@ -93,7 +95,7 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
   const paintRot = () => {
     rotValue.textContent = `${rot}°`;
     const img = preview.querySelector('img');
-    if (!img) return;
+    if (!img || standing) return;
     const a = (rot * Math.PI) / 180;
     const c = Math.abs(Math.cos(a));
     const sn = Math.abs(Math.sin(a));
@@ -190,7 +192,7 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
   setTimeout(() => (init ? titleIn : urlIn).focus(), 30);
 }
 
-/** A closer look at a picture on the wall, with who hung it and ways to move, edit or take it down. */
+/** A closer look at a picture on a wall or a desk, with who put it there and ways to move, edit or take it down. */
 export function openPicture(d: Decoration, actions: { move(): void; edit(): void; remove(): void }) {
   const release = holdPicture(d.url);
   const stage = h('div.picture-stage', {}, h('span.spinner'));
@@ -207,7 +209,7 @@ export function openPicture(d: Decoration, actions: { move(): void; edit(): void
     'div.modal.picture',
     { role: 'dialog', 'aria-label': d.title || t('windows.decor.pictureAlt') },
     h('header', {}, h('h2', {}, `🖼️ ${d.title || t('windows.decor.aPicture')}`), close),
-    h('div.body', {}, stage, h('p.picture-meta', {}, t('windows.decor.hungBy', { name: d.by, ago: timeAgo(d.at) }), link)),
+    h('div.body', {}, stage, h('p.picture-meta', {}, t(d.on === 'desk' ? 'windows.decor.placedBy' : 'windows.decor.hungBy', { name: d.by, ago: timeAgo(d.at) }), link)),
     h('footer', {}, takeDown, h('span.grow'), edit, move),
   );
   // Someone else took it down while you were looking.
@@ -230,7 +232,7 @@ export function openPicture(d: Decoration, actions: { move(): void; edit(): void
     actions.edit();
   });
   takeDown.addEventListener('click', () =>
-    confirmDialog(t('windows.decor.takeDownConfirm'), t('windows.decor.takeDownBody'), t('windows.decor.takeDown'), () => {
+    confirmDialog(t('windows.decor.takeDownConfirm'), t(d.on === 'desk' ? 'windows.decor.takeDownBodyDesk' : 'windows.decor.takeDownBody'), t('windows.decor.takeDown'), () => {
       modal.close();
       actions.remove();
     }),

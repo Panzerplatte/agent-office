@@ -1151,9 +1151,9 @@ export type ClientMsg =
   | { t: 'upgrade.start' }
   /** Read the Claude plan limits again now, instead of at the next poll. */
   | { t: 'limits.refresh' }
-  /** Hang a picture on a wall. */
+  /** Hang a picture on a wall, or stand one in a frame on a desk (`on: 'desk'`). */
   | { t: 'decor.add'; decor: DecorPlacement }
-  /** Move, resize, re-frame or swap the image of a picture. */
+  /** Move (between walls and desks too: send `on` with the new spot), resize, re-frame or swap the image of a picture. */
   | { t: 'decor.update'; id: string; decor: Partial<DecorPlacement> }
   | { t: 'decor.remove'; id: string }
   /** Put a tune or a station on the jukebox (a JUKEBOX_TUNES or RADIO_STATIONS id), or a stream; with neither, turn it back on. */
