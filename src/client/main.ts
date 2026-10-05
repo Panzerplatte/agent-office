@@ -540,7 +540,7 @@ function theirShot(id: string, shot: Shot, from?: [number, number]) {
   const floor = store.floor;
   setTimeout(() => {
     if (store.floor !== floor || upTop) return;
-    if (bunker.on) return putts.launch(putt({ yaw: shot.yaw, power: shot.power, from: from ? { x: from[0], z: from[1] } : PUTT_TEE }), p.name, false);
+    if (bunker.on) return putts.launch(putt({ yaw: shot.yaw, power: shot.power, from: from ? { x: from[0], z: from[1] } : PUTT_TEE }), p.name, false, id);
     balls.launch(shotHere(shot), p.name, false);
     teeEmptyUntil = performance.now() + 1800;
     sound.golf('hit', TEE_BALL);
@@ -1215,6 +1215,8 @@ net.onMessage((msg) => {
           if (msg.golf) p.golfing = true;
           else delete p.golfing;
         }
+        // Off the tee: their ball doesn't stay lying on the carpet.
+        if (!msg.golf) putts.forget(msg.id);
         r?.person.setGolf(msg.golf);
         break;
       }
@@ -1582,6 +1584,7 @@ function syncPeers() {
   for (const [id, r] of remotes) {
     const peer = store.peers.get(id);
     if (!peer || !store.onMyFloor(peer)) {
+      putts.forget(id);
       scene.remove(r.person.root);
       remotes.delete(id);
     }

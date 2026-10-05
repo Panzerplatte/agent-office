@@ -306,13 +306,15 @@ interface Rolling {
   ball: THREE.Mesh;
   next: number;
   who: string;
+  /** Whose it is, to forget their ball by (see forget()). */
+  key: string;
   mine: boolean;
   /** Seconds since it stopped, or -1 while it's rolling. */
   still: number;
 }
 
-/** How long someone else's stopped ball stays lying there. */
-const LIE_SECONDS = 25;
+/** How long a stopped ball stays lying there, yours or someone else's (yours then lies where `lie` says). */
+export const LIE_SECONDS = 3;
 
 /**
  * The balls rolling (or lying where they stopped) on the carpet, everyone's, played back along their
@@ -333,14 +335,15 @@ export class PuttBalls {
     this.group.add(this.lie);
   }
 
-  launch(roll: Roll, who: string, mine: boolean): void {
+  /** `key`: whose it is, for forget() (their peer id); the name, if not given. */
+  launch(roll: Roll, who: string, mine: boolean, key = who): void {
     const ball = golfBall();
     ball.raycast = () => {};
     ball.position.set(roll.path[0], roll.path[1], roll.path[2]);
     this.group.add(ball);
     // Theirs, from where it was lying: that one's this one now.
-    for (const b of this.balls) if (b.who === who && b.mine === mine) this.drop(b);
-    this.balls.push({ roll, t: 0, ball, next: 0, who, mine, still: -1 });
+    for (const b of [...this.balls]) if (b.key === key && b.mine === mine) this.drop(b);
+    this.balls.push({ roll, t: 0, ball, next: 0, who, key, mine, still: -1 });
   }
 
   /** Your ball still rolling (or just stopped), for the camera to follow. */
@@ -374,12 +377,22 @@ export class PuttBalls {
         continue;
       }
       b.still += dt;
-      if (b.still > (b.mine ? 3 : LIE_SECONDS)) this.drop(b);
+      if (b.still > LIE_SECONDS) this.drop(b);
     }
     // Your ball lying there, unless it's the one rolling (or still lying where it stopped).
     const m = this.mine;
     this.lie.visible = !!lie && !m;
     if (lie) this.lie.position.set(lie.x, ON_CARPET, lie.z);
+  }
+
+  /** Someone else's balls lying there, gone: they've put the putter down or left the floor. One still rolling finishes its roll. */
+  forget(key: string): void {
+    for (const b of [...this.balls]) if (!b.mine && b.key === key && b.still >= 0) this.drop(b);
+  }
+
+  /** How many balls are out on the carpet (rolling or lying where they stopped), not counting your lie. */
+  get count(): number {
+    return this.balls.length;
   }
 
   clear(): void {
