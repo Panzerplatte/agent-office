@@ -1,4 +1,4 @@
-import { FRAMES, checkImageUrl, type Decoration } from '../../shared/decor';
+import { FRAMES, ROT_STEP, checkImageUrl, normalizeRot, type Decoration } from '../../shared/decor';
 import { t } from '../i18n';
 import { frameName, imageUrlIssueText } from '../i18n/labels';
 import { store } from '../state';
@@ -10,6 +10,8 @@ export interface HangChoice {
   picture: Picture;
   title: string;
   frame: number;
+  /** Degrees, counterclockwise (see DecorPlacement.rot). */
+  rot: number;
 }
 
 const FRAME_KEY = 'agent-office.frame';
@@ -24,7 +26,7 @@ function lastFrame(): number {
 
 const TIP = t('windows.decor.tip');
 
-/** Pick an image, a title and a frame. Editing a picture (`initial`) fills them in. */
+/** Pick an image, a title, a frame and how it's turned. Editing a picture (`initial`) fills them in. */
 export function openHangDialog(opts: { initial?: Decoration; onDone(choice: HangChoice): void }) {
   const init = opts.initial;
   const urlIn = h('input', { type: 'text', placeholder: 'https://…/picture.png', 'aria-label': t('windows.decor.urlLabel'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
@@ -33,6 +35,12 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
   titleIn.value = init?.title ?? '';
   let frame = init?.frame ?? lastFrame();
   const frames = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.decor.frameLabel') });
+  let rot = normalizeRot(init?.rot);
+  const rotValue = h('span.hang-rot-value', { 'aria-live': 'polite' });
+  const turn = (dir: number) => () => ((rot = normalizeRot(rot + dir * ROT_STEP)), paintRot());
+  const rotLeft = h('button.btn', { type: 'button', title: t('windows.decor.rotateLeft'), 'aria-label': t('windows.decor.rotateLeft'), onclick: turn(1) }, '↺');
+  const rotRight = h('button.btn', { type: 'button', title: t('windows.decor.rotateRight'), 'aria-label': t('windows.decor.rotateRight'), onclick: turn(-1) }, '↻');
+  const rotRow = h('div.seg.hang-rot', { role: 'group', 'aria-label': t('windows.decor.rotateLabel') }, rotLeft, rotValue, rotRight);
   const preview = h('div.hang-preview');
   const status = h('p.hang-status', {}, TIP);
   const submit = h('button.btn.primary', { type: 'submit', disabled: true }, init ? t('windows.decor.save') : t('windows.decor.pickSpot')) as HTMLButtonElement;
@@ -51,6 +59,8 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
       titleIn,
       h('label', { style: 'margin-top:12px' }, t('windows.decor.frameLabel')),
       frames,
+      h('label', { style: 'margin-top:12px' }, t('windows.decor.rotateLabel')),
+      rotRow,
       preview,
       status,
     ),
@@ -79,6 +89,21 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
   };
   paintFrames();
 
+  /** Shows the turn, and turns the preview with it, shrunk so it still fits where it stood upright. */
+  const paintRot = () => {
+    rotValue.textContent = `${rot}°`;
+    const img = preview.querySelector('img');
+    if (!img) return;
+    const a = (rot * Math.PI) / 180;
+    const c = Math.abs(Math.cos(a));
+    const sn = Math.abs(Math.sin(a));
+    const w = pic?.aspect ?? 1;
+    const k = Math.min(1, w / (w * c + sn), 1 / (w * sn + c));
+    // CSS turns clockwise; a picture's rot is counterclockwise.
+    img.style.transform = rot ? `rotate(${-rot}deg) scale(${k})` : '';
+  };
+  paintRot();
+
   const setStatus = (text: string, kind: '' | 'loading' | 'error' = '') => {
     status.className = `hang-status ${kind}`;
     status.replaceChildren(kind === 'loading' ? h('span.spinner') : '', text);
@@ -105,6 +130,7 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
       loading = false;
       pic = p;
       preview.replaceChildren(h('img', { src: p.src, alt: t('windows.decor.previewAlt') }));
+      paintRot();
       setStatus('');
       submit.disabled = false;
       if (submitWhenLoaded) finish();
@@ -152,7 +178,7 @@ export function openHangDialog(opts: { initial?: Decoration; onDone(choice: Hang
     } catch {
       // storage blocked
     }
-    const choice = { picture: pic, title: titleIn.value.trim(), frame };
+    const choice = { picture: pic, title: titleIn.value.trim(), frame, rot };
     modal.close();
     opts.onDone(choice);
   };

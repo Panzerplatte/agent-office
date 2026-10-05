@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FRAMES, FRAME_BORDER, WALLS, frameRect, wallPose, wallTop, type Decoration, type WallId, type WallRect } from '../../shared/decor';
+import { FRAMES, FRAME_BORDER, WALLS, frameRect, normalizeRot, wallPose, wallTop, type Decoration, type WallId, type WallRect } from '../../shared/decor';
 import { FLOOR, LOFT } from '../../shared/layout';
 import type { Interactable } from './office';
 import { toon } from './toon';
@@ -194,10 +194,12 @@ function disposeFrame(group: THREE.Group) {
   });
 }
 
-function placeOnWall(group: THREE.Object3D, wall: WallId, u: number, y: number, out = 0.005) {
+/** Puts a frame on its wall, turned `rot` degrees (counterclockwise as you face it) within the wall. */
+function placeOnWall(group: THREE.Object3D, wall: WallId, u: number, y: number, rot = 0, out = 0.005) {
   const p = wallPose(wall, u, y, out);
   group.position.set(p.x, p.y, p.z);
-  group.rotation.y = p.rotY;
+  // Turn about the frame's own z (out of the wall) first, then face the room.
+  group.rotation.set(0, p.rotY, (normalizeRot(rot) * Math.PI) / 180, 'YXZ');
 }
 
 interface FrameView {
@@ -232,7 +234,7 @@ export class Gallery {
         this.frames.set(d.id, v);
       }
       v.d = d;
-      placeOnWall(v.group, d.wall, d.u, d.y);
+      placeOnWall(v.group, d.wall, d.u, d.y, d.rot);
       const front = wallPose(d.wall, d.u, 0, 1.4);
       v.it.x = front.x;
       v.it.z = front.z;
@@ -269,7 +271,7 @@ export class Gallery {
 
   private build(d: Decoration, key: string): FrameView {
     const { group, picture } = buildFrame(d.w, d.h, d.frame);
-    const it: Interactable = { kind: 'decor', decorId: d.id, x: 0, z: 0, radius: Math.max(1.6, d.w / 2 + 0.8) };
+    const it: Interactable = { kind: 'decor', decorId: d.id, x: 0, z: 0, radius: Math.max(1.6, Math.max(d.w, d.h) / 2 + 0.8) };
     group.userData.interact = it;
     this.group.add(group);
     const current = () => this.frames.get(d.id)?.picture === picture;
@@ -302,7 +304,7 @@ export class Ghost {
     this.group.visible = false;
   }
 
-  show(at: { wall: WallId; u: number; y: number; w: number; h: number; ok: boolean }, frame: number, texture: THREE.Texture, aspect: number) {
+  show(at: { wall: WallId; u: number; y: number; w: number; h: number; rot: number; ok: boolean }, frame: number, texture: THREE.Texture, aspect: number) {
     const key = `${at.w}|${at.h}|${frame}|${texture.uuid}|${aspect}`;
     if (key !== this.key) {
       this.clearBody();
@@ -315,7 +317,7 @@ export class Ghost {
     this.halo.scale.set(at.w + 2 * FRAME_BORDER + 0.16, at.h + 2 * FRAME_BORDER + 0.16, 1);
     this.halo.material.color.set(at.ok ? '#06d6a0' : '#ef476f');
     // Where it can't hang it floats out in front, so a board or the TV doesn't hide it.
-    placeOnWall(this.group, at.wall, at.u, at.y, at.ok ? 0.005 : 0.32);
+    placeOnWall(this.group, at.wall, at.u, at.y, at.rot, at.ok ? 0.005 : 0.32);
     this.group.visible = true;
   }
 

@@ -20,9 +20,12 @@ export interface DecorPlacement {
   h: number;
   /** Index into FRAMES. */
   frame: number;
+  /** How far it's turned within the wall, counterclockwise as you face it, in degrees: a multiple of ROT_STEP. Missing means 0. */
+  rot?: number;
 }
 
 export interface Decoration extends DecorPlacement {
+  rot: number;
   id: string;
   /** Who hung it. */
   by: string;
@@ -44,6 +47,8 @@ export const FRAME_BORDER = 0.07;
 export const PICTURE_MIN = 0.3;
 export const PICTURE_MAX = 3.4;
 export const MAX_DECOR = 200;
+/** Pictures turn in steps of this many degrees. */
+export const ROT_STEP = 45;
 const FLOOR_GAP = 0.4;
 const CEILING_GAP = 0.05;
 /** Keeps a frame clear of the frames on the wall around the corner. */
@@ -126,10 +131,29 @@ export interface WallRect {
   y1: number;
 }
 
-/** The outline of a picture's frame on its wall. */
-export function frameRect(d: Pick<DecorPlacement, 'wall' | 'u' | 'y' | 'w' | 'h'>): WallRect {
-  const hw = d.w / 2 + FRAME_BORDER;
-  const hh = d.h / 2 + FRAME_BORDER;
+/** A turn in degrees, snapped to a ROT_STEP and put in [0, 360). Anything that isn't a number is 0. */
+export function normalizeRot(rot: unknown): number {
+  if (typeof rot !== 'number' || !Number.isFinite(rot)) return 0;
+  const r = (Math.round(rot / ROT_STEP) * ROT_STEP) % 360;
+  return r < 0 ? r + 360 : r || 0;
+}
+
+/** Half the width and height of the box around a w×h picture's frame, turned `rot` degrees. */
+export function frameHalf(w: number, h: number, rot = 0): { hw: number; hh: number } {
+  const r = normalizeRot(rot);
+  const fw = w / 2 + FRAME_BORDER;
+  const fh = h / 2 + FRAME_BORDER;
+  // Square turns exactly, without cos(90°) being a hair over 0.
+  if (r % 180 === 0) return { hw: fw, hh: fh };
+  if (r % 90 === 0) return { hw: fh, hh: fw };
+  const c = Math.abs(Math.cos((r * Math.PI) / 180));
+  const s = Math.abs(Math.sin((r * Math.PI) / 180));
+  return { hw: fw * c + fh * s, hh: fw * s + fh * c };
+}
+
+/** The outline of a picture's frame on its wall: the box around it, if it's turned. */
+export function frameRect(d: Pick<DecorPlacement, 'wall' | 'u' | 'y' | 'w' | 'h' | 'rot'>): WallRect {
+  const { hw, hh } = frameHalf(d.w, d.h, d.rot);
   return { wall: d.wall, u0: d.u - hw, u1: d.u + hw, y0: d.y - hh, y1: d.y + hh };
 }
 
@@ -140,12 +164,11 @@ export function overlaps(a: WallRect, b: WallRect, gap = 0.04): boolean {
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /**
- * Slides a w×h picture the least it takes for its whole frame to be on one stretch of wall, or
- * null if it's too big for any.
+ * Slides a w×h picture, turned `rot` degrees, the least it takes for its whole frame to be on one
+ * stretch of wall, or null if it's too big for any.
  */
-export function clampToWall(wall: WallId, u: number, y: number, w: number, h: number): { u: number; y: number } | null {
-  const hw = w / 2 + FRAME_BORDER;
-  const hh = h / 2 + FRAME_BORDER;
+export function clampToWall(wall: WallId, u: number, y: number, w: number, h: number, rot = 0): { u: number; y: number } | null {
+  const { hw, hh } = frameHalf(w, h, rot);
   let best: { u: number; y: number } | null = null;
   let bestD = Infinity;
   for (const z of ZONES[wall]) {
@@ -164,17 +187,24 @@ export function clampToWall(wall: WallId, u: number, y: number, w: number, h: nu
   return best;
 }
 
-/** A picture `size` meters on its longest side, shaped like an image of this aspect (width / height). */
-export function pictureSize(size: number, aspect: number): { w: number; h: number } {
+/**
+ * A picture `size` meters on its longest side, shaped like an image of this aspect (width / height).
+ * Shrunk if need be so that, turned `rot` degrees, it still fits between the floor gap and the ceiling.
+ */
+export function pictureSize(size: number, aspect: number, rot = 0): { w: number; h: number } {
   const a = Number.isFinite(aspect) && aspect > 0 ? clamp(aspect, 0.2, 5) : 1;
   const s = clamp(size, PICTURE_MIN, PICTURE_MAX);
   let w = a >= 1 ? s : s * a;
   let h = a >= 1 ? s / a : s;
-  // The tallest picture that still fits between the floor gap and the ceiling.
-  const maxH = WALL_HEIGHT - FLOOR_GAP - CEILING_GAP - 2 * FRAME_BORDER;
-  if (h > maxH) {
-    w *= maxH / h;
-    h = maxH;
+  // The tallest frame that still fits: turned, its box is (w + 2B)·|sin| + (h + 2B)·|cos| high.
+  const r = (normalizeRot(rot) * Math.PI) / 180;
+  const sin = Math.abs(Math.sin(r));
+  const cos = Math.abs(Math.cos(r));
+  const room = WALL_HEIGHT - FLOOR_GAP - CEILING_GAP - 2 * FRAME_BORDER * (sin + cos);
+  const tall = w * sin + h * cos;
+  if (tall > room) {
+    w *= room / tall;
+    h *= room / tall;
   }
   return { w, h };
 }
@@ -209,7 +239,7 @@ export function checkImageUrl(raw: unknown): { url: string } | { error: string; 
 const WALL_IDS = new Set<string>(Object.keys(WALLS));
 
 /** Checks and tidies a placement from a client: moves it onto its wall, or says why it can't hang. */
-export function sanitizePlacement(x: unknown): DecorPlacement | string {
+export function sanitizePlacement(x: unknown): (DecorPlacement & { rot: number }) | string {
   const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
   const url = checkImageUrl(o.url);
   if ('error' in url) return url.error;
@@ -221,11 +251,12 @@ export function sanitizePlacement(x: unknown): DecorPlacement | string {
   const u = n(o.u);
   const y = n(o.y);
   if ([w, h, u, y].some(Number.isNaN) || w <= 0 || h <= 0) return 'That picture has no size';
-  ({ w, h } = pictureSize(Math.max(w, h), w / h));
-  const at = clampToWall(wall, u, y, w, h);
+  const rot = normalizeRot(o.rot);
+  ({ w, h } = pictureSize(Math.max(w, h), w / h, rot));
+  const at = clampToWall(wall, u, y, w, h, rot);
   if (!at) return "That picture is too big for the wall";
   const title = typeof o.title === 'string' ? o.title.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80) : '';
   const frame = Number.isInteger(o.frame) && (o.frame as number) >= 0 && (o.frame as number) < FRAMES.length ? (o.frame as number) : 0;
   const round = (v: number) => Math.round(v * 1000) / 1000;
-  return { url: url.url, ...(title ? { title } : {}), wall, u: round(at.u), y: round(at.y), w: round(w), h: round(h), frame };
+  return { url: url.url, ...(title ? { title } : {}), wall, u: round(at.u), y: round(at.y), w: round(w), h: round(h), frame, rot };
 }

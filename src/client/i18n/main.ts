@@ -83,6 +83,7 @@ export default strings(
     keyEClick: 'E / Click',
     keySpace: 'Space',
     keyScroll: 'Scroll',
+    keyQR: 'Q / R',
     open: 'Open',
     done: 'Done',
 
@@ -370,6 +371,7 @@ export default strings(
     hangingPicture: '🖼️ Hanging a picture',
     hang: 'Hang',
     size: 'Size',
+    turn: 'Turn 45°',
     cancel: 'Cancel',
   },
   {
@@ -444,6 +446,7 @@ export default strings(
     keyEClick: 'E / Klick',
     keySpace: 'Leertaste',
     keyScroll: 'Scrollen',
+    keyQR: 'Q / R',
     open: 'Öffnen',
     done: 'Fertig',
 
@@ -723,6 +726,7 @@ export default strings(
     hangingPicture: '🖼️ Bild aufhängen',
     hang: 'Aufhängen',
     size: 'Größe',
+    turn: '45° drehen',
     cancel: 'Abbrechen',
   },
 );
