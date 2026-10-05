@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { FRAMES, FRAME_BORDER, WALLS, frameRect, normalizeRot, wallPose, wallTop, type Decoration, type WallId, type WallRect } from '../../shared/decor';
-import { FLOOR, LOFT } from '../../shared/layout';
+import { DESK_FRAME_BORDER, DESK_FRAME_LEAN, DESK_TOP, FRAMES, FRAME_BORDER, WALLS, deskById, deskFrames, deskPose, frameRect, normalizeRot, standDepth, toDesk, wallPose, wallTop, type Decoration, type DeskRect, type WallId, type WallRect } from '../../shared/decor';
+import { DESKS, DESK_SIZE, FLOOR, LOFT } from '../../shared/layout';
 import type { Interactable } from './office';
 import { toon } from './toon';
 import { t } from '../i18n';
@@ -143,25 +143,55 @@ function flat(params: THREE.MeshBasicMaterialParameters): THREE.MeshBasicMateria
   return m;
 }
 
-function frameGeometry(w: number, h: number): THREE.ExtrudeGeometry {
-  const ow = w / 2 + FRAME_BORDER;
-  const oh = h / 2 + FRAME_BORDER;
+function frameGeometry(w: number, h: number, border: number, depth: number): THREE.ExtrudeGeometry {
+  const ow = w / 2 + border;
+  const oh = h / 2 + border;
   const shape = new THREE.Shape().moveTo(-ow, -oh).lineTo(ow, -oh).lineTo(ow, oh).lineTo(-ow, oh).lineTo(-ow, -oh);
   const iw = w / 2;
   const ih = h / 2;
   shape.holes.push(new THREE.Path().moveTo(-iw, -ih).lineTo(-iw, ih).lineTo(iw, ih).lineTo(iw, -ih).lineTo(-iw, -ih));
-  return new THREE.ExtrudeGeometry(shape, { depth: FRAME_DEPTH, bevelEnabled: false });
+  return new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
 }
 
 /** A framed w×h picture facing +z, its back against z = 0. It shows "Loading…" until given a texture. */
-function buildFrame(w: number, h: number, frame: number): { group: THREE.Group; picture: PictureMesh } {
+function buildFrame(w: number, h: number, frame: number, border = FRAME_BORDER, depth = FRAME_DEPTH): { group: THREE.Group; picture: PictureMesh } {
   const group = new THREE.Group();
-  const border = new THREE.Mesh(frameGeometry(w, h), toon((FRAMES[frame] ?? FRAMES[0]).color));
-  border.receiveShadow = true;
-  group.add(border);
+  const rim = new THREE.Mesh(frameGeometry(w, h, border, depth), toon((FRAMES[frame] ?? FRAMES[0]).color));
+  rim.receiveShadow = true;
+  group.add(rim);
   const picture: PictureMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), flat({ map: loadingTexture() }));
-  picture.position.z = FRAME_DEPTH * 0.35;
+  picture.position.z = depth * 0.35;
   group.add(picture);
+  return { group, picture };
+}
+
+/** How thick a desk frame is. */
+const DESK_FRAME_DEPTH = 0.012;
+
+/**
+ * A w×h photo in a frame on a stand, for a desk top: its footprint (see deskFootprint) centered on
+ * the origin, standing on y = 0 and facing +z, leaning back a little onto a strut behind it.
+ */
+function buildStandingFrame(w: number, h: number, frame: number): { group: THREE.Group; picture: PictureMesh } {
+  const group = new THREE.Group();
+  const fh = h + 2 * DESK_FRAME_BORDER;
+  const fd = standDepth(h);
+  const { group: face, picture } = buildFrame(w, h, frame, DESK_FRAME_BORDER, DESK_FRAME_DEPTH);
+  face.position.y = fh / 2;
+  // Tipped back about its bottom edge, which sits at the front of the footprint.
+  const pivot = new THREE.Group();
+  pivot.position.set(0, 0.002, fd / 2 - DESK_FRAME_DEPTH);
+  pivot.rotation.x = -DESK_FRAME_LEAN;
+  pivot.add(face);
+  group.add(pivot);
+  // The strut, from high up the frame's back down to the back of the footprint.
+  const top = new THREE.Vector3(0, fh * 0.6, 0).applyEuler(pivot.rotation).add(pivot.position);
+  const foot = new THREE.Vector3(0, 0, -fd / 2 + 0.006);
+  const along = top.clone().sub(foot);
+  const strut = new THREE.Mesh(new THREE.BoxGeometry(Math.min(0.03, w * 0.25), along.length(), 0.006), toon((FRAMES[frame] ?? FRAMES[0]).color));
+  strut.position.copy(top).add(foot).multiplyScalar(0.5);
+  strut.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.normalize());
+  group.add(strut);
   return { group, picture };
 }
 
@@ -202,6 +232,16 @@ function placeOnWall(group: THREE.Object3D, wall: WallId, u: number, y: number, 
   group.rotation.set(0, p.rotY, (normalizeRot(rot) * Math.PI) / 180, 'YXZ');
 }
 
+/** Stands a desk frame on its desk, turned `rot` degrees around itself, `lift` meters up. */
+function placeOnDesk(group: THREE.Object3D, d: { desk: string; dx: number; dz: number; rot?: number }, lift = 0): boolean {
+  const desk = deskById(d.desk);
+  if (!desk) return false;
+  const p = deskPose(desk, d.dx, d.dz, d.rot);
+  group.position.set(p.x, p.y + lift, p.z);
+  group.rotation.set(0, p.rotY, 0);
+  return true;
+}
+
 interface FrameView {
   d: Decoration;
   /** What the frame was built for; a change means building it again. */
@@ -223,7 +263,7 @@ export class Gallery {
     const seen = new Set<string>();
     for (const d of items) {
       seen.add(d.id);
-      const key = `${d.url}|${d.w}|${d.h}|${d.frame}`;
+      const key = `${d.on ?? 'wall'}|${d.url}|${d.w}|${d.h}|${d.frame}`;
       let v = this.frames.get(d.id);
       if (v && v.key !== key) {
         this.drop(v);
@@ -234,10 +274,17 @@ export class Gallery {
         this.frames.set(d.id, v);
       }
       v.d = d;
-      placeOnWall(v.group, d.wall, d.u, d.y, d.rot);
-      const front = wallPose(d.wall, d.u, 0, 1.4);
-      v.it.x = front.x;
-      v.it.z = front.z;
+      if (d.on === 'desk') {
+        placeOnDesk(v.group, d);
+        // On the desk itself, and small, so it only wins over the desk when you're right by it.
+        v.it.x = v.group.position.x;
+        v.it.z = v.group.position.z;
+      } else {
+        placeOnWall(v.group, d.wall, d.u, d.y, d.rot);
+        const front = wallPose(d.wall, d.u, 0, 1.4);
+        v.it.x = front.x;
+        v.it.z = front.z;
+      }
     }
     for (const [id, v] of this.frames) {
       if (seen.has(id)) continue;
@@ -254,11 +301,16 @@ export class Gallery {
     this.refresh();
   }
 
-  /** The frames' outlines, except the one with id `except`. */
+  /** The wall frames' outlines, except the one with id `except`. */
   rects(except?: string): WallRect[] {
     const out: WallRect[] = [];
-    for (const v of this.frames.values()) if (v.d.id !== except) out.push(frameRect(v.d));
+    for (const v of this.frames.values()) if (v.d.on !== 'desk' && v.d.id !== except) out.push(frameRect(v.d));
     return out;
+  }
+
+  /** The footprints of the frames standing on `desk`, except the one with id `except`. */
+  deskRects(desk: string, except?: string): DeskRect[] {
+    return deskFrames([...this.frames.values()].map((v) => v.d), desk, except);
   }
 
   private refresh() {
@@ -270,8 +322,8 @@ export class Gallery {
   }
 
   private build(d: Decoration, key: string): FrameView {
-    const { group, picture } = buildFrame(d.w, d.h, d.frame);
-    const it: Interactable = { kind: 'decor', decorId: d.id, x: 0, z: 0, radius: Math.max(1.6, Math.max(d.w, d.h) / 2 + 0.8) };
+    const { group, picture } = d.on === 'desk' ? buildStandingFrame(d.w, d.h, d.frame) : buildFrame(d.w, d.h, d.frame);
+    const it: Interactable = { kind: 'decor', decorId: d.id, x: 0, z: 0, radius: d.on === 'desk' ? 0.8 : Math.max(1.6, Math.max(d.w, d.h) / 2 + 0.8) };
     group.userData.interact = it;
     this.group.add(group);
     const current = () => this.frames.get(d.id)?.picture === picture;
@@ -290,6 +342,9 @@ export class Gallery {
 
 // ---- Hanging one ------------------------------------------------------------------------------------
 
+/** Where a picture being hung would go: on a wall or a desk top, and whether it fits there. */
+export type GhostSpot = ({ on: 'wall'; wall: WallId; u: number; y: number } | { on: 'desk'; desk: string; dx: number; dz: number }) & { w: number; h: number; rot: number; ok: boolean };
+
 /** The picture you're about to hang, following your aim, with a green (fits) or red (blocked) glow. */
 export class Ghost {
   readonly group = new THREE.Group();
@@ -299,25 +354,34 @@ export class Ghost {
 
   constructor() {
     this.halo = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat({ color: '#06d6a0', transparent: true, opacity: 0.5, depthWrite: false }));
-    this.halo.position.z = -0.002;
     this.group.add(this.halo);
     this.group.visible = false;
   }
 
-  show(at: { wall: WallId; u: number; y: number; w: number; h: number; rot: number; ok: boolean }, frame: number, texture: THREE.Texture, aspect: number) {
-    const key = `${at.w}|${at.h}|${frame}|${texture.uuid}|${aspect}`;
+  show(at: GhostSpot, frame: number, texture: THREE.Texture, aspect: number) {
+    const key = `${at.on}|${at.w}|${at.h}|${frame}|${texture.uuid}|${aspect}`;
     if (key !== this.key) {
       this.clearBody();
-      const { group, picture } = buildFrame(at.w, at.h, frame);
+      const { group, picture } = at.on === 'desk' ? buildStandingFrame(at.w, at.h, frame) : buildFrame(at.w, at.h, frame);
       showTexture(picture, texture, aspect);
       this.body = group;
       this.group.add(group);
       this.key = key;
     }
-    this.halo.scale.set(at.w + 2 * FRAME_BORDER + 0.16, at.h + 2 * FRAME_BORDER + 0.16, 1);
     this.halo.material.color.set(at.ok ? '#06d6a0' : '#ef476f');
-    // Where it can't hang it floats out in front, so a board or the TV doesn't hide it.
-    placeOnWall(this.group, at.wall, at.u, at.y, at.rot, at.ok ? 0.005 : 0.32);
+    if (at.on === 'desk') {
+      // A glow on the desk top under its footprint. Where it can't stand it floats a little above the desk.
+      this.halo.scale.set(at.w + 2 * DESK_FRAME_BORDER + 0.06, standDepth(at.h) + 0.06, 1);
+      this.halo.position.set(0, 0.003, 0);
+      this.halo.rotation.set(-Math.PI / 2, 0, 0);
+      placeOnDesk(this.group, at, at.ok ? 0 : 0.06);
+    } else {
+      this.halo.scale.set(at.w + 2 * FRAME_BORDER + 0.16, at.h + 2 * FRAME_BORDER + 0.16, 1);
+      this.halo.position.set(0, 0, -0.002);
+      this.halo.rotation.set(0, 0, 0);
+      // Where it can't hang it floats out in front, so a board or the TV doesn't hide it.
+      placeOnWall(this.group, at.wall, at.u, at.y, at.rot, at.ok ? 0.005 : 0.32);
+    }
     this.group.visible = true;
   }
 
@@ -369,4 +433,23 @@ export function aimAtWall(ray: THREE.Ray, maxDist = 60): { wall: WallId; u: numb
     bestT = t;
   }
   return best;
+}
+
+
+/** Where a ray from above first meets a desk top, within `maxDist` meters: the desk, the point in its own frame, and how far. */
+export function aimAtDesk(ray: THREE.Ray, maxDist = 12): { desk: string; dx: number; dz: number; t: number } | null {
+  const o = ray.origin;
+  const d = ray.direction;
+  // From the office floor, looking down at the desk tops (not from the loft, through its floor).
+  if (o.x < FLOOR.minX || o.x > FLOOR.maxX || o.z < FLOOR.minZ || o.z > FLOOR.maxZ || o.y < 0 || o.y > LOFT.y) return null;
+  if (!(d.y < 0) || o.y <= DESK_SIZE.height) return null;
+  const t = (DESK_SIZE.height - o.y) / d.y;
+  if (t > maxDist) return null;
+  const x = o.x + d.x * t;
+  const z = o.z + d.z * t;
+  for (const desk of DESKS) {
+    const at = toDesk(desk, x, z);
+    if (at.dx >= DESK_TOP.x0 && at.dx <= DESK_TOP.x1 && at.dz >= DESK_TOP.z0 && at.dz <= DESK_TOP.z1) return { desk: desk.id, ...at, t };
+  }
+  return null;
 }

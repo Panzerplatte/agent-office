@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { MAX_DECOR, checkImageUrl, sanitizePlacement, type Decoration } from '../shared/decor.js';
+import { MAX_DECOR, checkImageUrl, deskFootprint, deskFrames, deskOverlaps, sanitizePlacement, type DecorPlacement, type Decoration } from '../shared/decor.js';
 
-/** The pictures on the office walls, saved in .agent-office/decor.json. */
+/** The pictures on the office walls and desks, saved in .agent-office/decor.json. */
 export class Decor {
   private items: Decoration[] = [];
   private file: string;
@@ -21,6 +21,7 @@ export class Decor {
     if (this.items.length >= MAX_DECOR) return `The walls are full (${MAX_DECOR} pictures). Take one down first.`;
     const p = sanitizePlacement(input);
     if (typeof p === 'string') return p;
+    if (this.crowded(p)) return 'Another picture already stands there on that desk';
     const d: Decoration = { ...p, id: randomBytes(5).toString('hex'), by, at: Date.now() };
     this.items.push(d);
     this.save();
@@ -34,9 +35,17 @@ export class Decor {
     const { id: _, by, at, ...placement } = this.items[i];
     const p = sanitizePlacement({ ...placement, ...(patch && typeof patch === 'object' ? patch : {}) });
     if (typeof p === 'string') return p;
+    if (this.crowded(p, id)) return 'Another picture already stands there on that desk';
     this.items[i] = { ...p, id, by, at };
     this.save();
     return this.items[i];
+  }
+
+  /** Whether a desk frame would stand in another one on its desk (except the one with id `except`). */
+  private crowded(p: DecorPlacement & { rot: number }, except?: string): boolean {
+    if (p.on !== 'desk') return false;
+    const fp = deskFootprint(p);
+    return deskFrames(this.items, p.desk, except).some((o) => deskOverlaps(fp, o));
   }
 
   remove(id: string): Decoration | undefined {
