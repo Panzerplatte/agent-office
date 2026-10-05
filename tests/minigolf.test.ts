@@ -9,7 +9,9 @@ import {
   CUP_DISTANCE,
   CUP_R,
   CUP_YAW,
+  LIE_SECONDS,
   PUTT_TEE,
+  PuttBalls,
   newPuttRound,
   onCarpet,
   putt,
@@ -148,4 +150,32 @@ test('a round counts strokes until the ball drops, then starts again from the te
   assert.equal(r.best, 1);
   inLang('en', () => assert.equal(puttRoundText(r), '🏆 Hole in one!'));
   inLang('de', () => assert.equal(puttRoundText(r), '🏆 Hole in One!'));
+});
+
+test("someone else's ball goes soon after it stops, like yours, and when they forget it", () => {
+  const roll = () => putt({ yaw: CUP_YAW + 0.4, power: 0.3, from: PUTT_TEE });
+  const balls = new PuttBalls();
+  balls.launch(roll(), 'Ada', false, 'peer-ada');
+  balls.launch(roll(), 'Me', true);
+  const lie = { x: 1, z: 1 };
+  // Rolling, then stopped: both still there.
+  balls.update(roll().seconds + 0.01, lie);
+  balls.update(LIE_SECONDS - 0.5, lie);
+  assert.equal(balls.count, 2);
+  // A few seconds after it stopped, theirs is gone as well as yours (it was 25 s).
+  balls.update(1, lie);
+  assert.equal(balls.count, 0);
+  assert.equal(balls.mine, null);
+
+  // They put the putter down (or leave the floor): their lying ball goes at once, a rolling one finishes.
+  balls.launch(roll(), 'Ada', false, 'peer-ada');
+  balls.forget('peer-ada');
+  assert.equal(balls.count, 1, 'still rolling');
+  balls.update(roll().seconds + 0.01, lie);
+  balls.launch(roll(), 'Me', true);
+  balls.forget('peer-ada');
+  assert.equal(balls.count, 1, 'only yours left');
+  assert.ok(balls.mine);
+  balls.forget('Me');
+  assert.equal(balls.count, 1, "forget() leaves your own ball alone");
 });
