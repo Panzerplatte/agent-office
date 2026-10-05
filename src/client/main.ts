@@ -3450,7 +3450,7 @@ function renderHangHint(el: HTMLElement) {
   if (k === hintKey) return;
   hintKey = k;
   const title = t(!spot ? 'main.aimAtWall' : !spot.ok ? 'main.inTheWay' : hanger.moving ? 'main.movingPicture' : 'main.hangingPicture');
-  el.replaceChildren(h('span.title', {}, title), key(t('main.keyClick'), t('main.hang')), key(t('main.keyScroll'), t('main.size')), key('Esc', t('main.cancel')));
+  el.replaceChildren(h('span.title', {}, title), key(t('main.keyClick'), t('main.hang')), key(t('main.keyScroll'), t('main.size')), key(t('main.keyQR'), t('main.turn')), key('Esc', t('main.cancel')));
   el.classList.remove('hidden');
 }
 
@@ -3710,6 +3710,12 @@ function hangingKey(code: string): boolean {
     case 'BracketRight':
     case 'Equal':
       hanger.resize(1);
+      return true;
+    case 'KeyQ':
+      hanger.rotate(1);
+      return true;
+    case 'KeyR':
+      hanger.rotate(-1);
       return true;
   }
   return false;

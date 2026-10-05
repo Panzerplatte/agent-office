@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PICTURE_MAX, PICTURE_MIN, clampToWall, frameRect, overlaps, pictureSize, type WallId } from '../shared/decor';
+import { PICTURE_MAX, PICTURE_MIN, ROT_STEP, clampToWall, frameRect, normalizeRot, overlaps, pictureSize, type WallId } from '../shared/decor';
 import type { Net } from './net';
 import type { PlayerController } from './player';
 import { store } from './state';
@@ -20,6 +20,8 @@ interface Hanging {
   shape: number;
   /** Longest side of the picture, in meters. */
   size: number;
+  /** How far it's turned within the wall, in degrees (see DecorPlacement.rot). */
+  rot: number;
   /** Set when moving a picture that's already up. */
   moving?: string;
   release(): void;
@@ -31,6 +33,7 @@ export interface Spot {
   y: number;
   w: number;
   h: number;
+  rot: number;
   /** False when something else is on the wall there. */
   ok: boolean;
 }
@@ -134,7 +137,7 @@ export class Hanger {
     const go = (texture: THREE.Texture, aspect: number) => {
       if (!store.decor.some((x) => x.id === id)) return release();
       this.stop();
-      this.cur = { url: d.url, title: d.title ?? '', frame: d.frame, texture, aspect, shape: d.w / d.h, size: Math.max(d.w, d.h), moving: id, release };
+      this.cur = { url: d.url, title: d.title ?? '', frame: d.frame, texture, aspect, shape: d.w / d.h, size: Math.max(d.w, d.h), rot: d.rot ?? 0, moving: id, release };
       this.gallery.hide(id);
       this.onChange();
     };
@@ -152,8 +155,8 @@ export class Hanger {
       initial: d,
       onDone: (c) => {
         // A new image keeps the picture's size along its longest side, in the new image's shape.
-        const { w, h } = c.picture.url === d.url ? d : pictureSize(Math.max(d.w, d.h), c.picture.aspect);
-        this.net.send({ t: 'decor.update', id, decor: { url: c.picture.url, title: c.title, frame: c.frame, w, h } });
+        const { w, h } = c.picture.url === d.url ? d : pictureSize(Math.max(d.w, d.h), c.picture.aspect, c.rot);
+        this.net.send({ t: 'decor.update', id, decor: { url: c.picture.url, title: c.title, frame: c.frame, w, h, rot: c.rot } });
       },
     });
   }
@@ -162,8 +165,14 @@ export class Hanger {
   resize(dir: number) {
     if (!this.cur) return;
     // A tall picture tops out below PICTURE_MAX; start shrinking from where it stopped growing.
-    const { w, h } = pictureSize(this.cur.size * (dir > 0 ? 1.1 : 1 / 1.1), this.cur.shape);
+    const { w, h } = pictureSize(this.cur.size * (dir > 0 ? 1.1 : 1 / 1.1), this.cur.shape, this.cur.rot);
     this.cur.size = Math.max(w, h);
+  }
+
+  /** Turns the picture one step: counterclockwise (+1) or clockwise (-1). */
+  rotate(dir: number) {
+    if (!this.cur) return;
+    this.cur.rot = normalizeRot(this.cur.rot + (dir > 0 ? ROT_STEP : -ROT_STEP));
   }
 
   /** Hangs the picture where you aim. `ndc` is where you clicked, in third person. */
@@ -175,7 +184,7 @@ export class Hanger {
     const at = this.at;
     if (!at) return toast(t('notices.hangAim'));
     if (!at.ok) return toast(t('notices.hangTaken'), 'warn');
-    const spot = { wall: at.wall, u: at.u, y: at.y, w: at.w, h: at.h };
+    const spot = { wall: at.wall, u: at.u, y: at.y, w: at.w, h: at.h, rot: at.rot };
     if (cur.moving) {
       this.net.send({ t: 'decor.update', id: cur.moving, decor: spot });
       // Reveal it when the office says where it went (or soon anyway, if it refused).
@@ -202,23 +211,24 @@ export class Hanger {
     if (!cur) return;
     this.raycaster.setFromCamera(this.player.view === 'first' ? new THREE.Vector2(0, 0) : this.mouse, this.camera);
     const hit = aimAtWall(this.raycaster.ray);
-    const { w, h } = pictureSize(cur.size, cur.shape);
-    const on = hit && clampToWall(hit.wall, hit.u, hit.y, w, h);
+    // Turned, a picture may have to hang smaller to fit under the ceiling; `size` stays as you set it.
+    const { w, h } = pictureSize(cur.size, cur.shape, cur.rot);
+    const on = hit && clampToWall(hit.wall, hit.u, hit.y, w, h, cur.rot);
     if (!hit || !on) {
       this.at = null;
       this.ghost.hide();
       return;
     }
-    const rect = frameRect({ wall: hit.wall, u: on.u, y: on.y, w, h });
+    const rect = frameRect({ wall: hit.wall, u: on.u, y: on.y, w, h, rot: cur.rot });
     const ok = ![...this.office.fixtures(), ...this.gallery.rects(cur.moving)].some((r) => overlaps(rect, r));
-    this.at = { wall: hit.wall, u: on.u, y: on.y, w, h, ok };
+    this.at = { wall: hit.wall, u: on.u, y: on.y, w, h, rot: cur.rot, ok };
     this.ghost.show(this.at, cur.frame, cur.texture, cur.aspect);
   }
 
   private begin(c: HangChoice, size: number) {
     this.stop();
     const aspect = c.picture.aspect;
-    this.cur = { url: c.picture.url, title: c.title, frame: c.frame, texture: c.picture.texture, aspect, shape: aspect, size, release: holdPicture(c.picture.url) };
+    this.cur = { url: c.picture.url, title: c.title, frame: c.frame, texture: c.picture.texture, aspect, shape: aspect, size, rot: c.rot, release: holdPicture(c.picture.url) };
     this.onChange();
   }
 
