@@ -359,6 +359,13 @@ export default strings(
     crashCrashed: 'Crashed at {m}',
     crashPlay: 'Bet and cash out',
     crashCashOut: 'Cash out!',
+    chipsWhy_plinko_bet: 'Plinko ball',
+    chipsWhy_plinko_win: 'Won at Plinko',
+    // At the Plinko machine in the casino's hall (the hint line)
+    plinko: '🔻 Plinko',
+    plinkoAbout: 'Drop balls through the pegs: up to 1000×',
+    plinkoFalling: (v) => `${v.n} ${s(v.n, 'ball', 'balls')} falling`,
+    plinkoPlay: 'Play Plinko',
     // At the roulette table (the hint line)
     roulette: '🎡 Roulette',
     rouletteBet: 'Put chips down (right-click picks them up)',
@@ -740,6 +747,13 @@ export default strings(
     crashCrashed: 'Gecrasht bei {m}',
     crashPlay: 'Setzen und auszahlen',
     crashCashOut: 'Auszahlen!',
+    chipsWhy_plinko_bet: 'Plinko-Ball',
+    chipsWhy_plinko_win: 'Bei Plinko gewonnen',
+    // Am Plinko-Automaten in der Casino-Halle (die Hinweiszeile)
+    plinko: '🔻 Plinko',
+    plinkoAbout: 'Bälle durch die Stifte fallen lassen: bis 1000×',
+    plinkoFalling: (v) => `${v.n} ${s(v.n, 'Ball fällt', 'Bälle fallen')}`,
+    plinkoPlay: 'Plinko spielen',
     // At the roulette table (the hint line)
     roulette: '🎡 Roulette',
     rouletteBet: 'Chips setzen (Rechtsklick nimmt sie weg)',

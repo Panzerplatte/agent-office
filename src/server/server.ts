@@ -64,6 +64,7 @@ import { Slots } from './slots.js';
 import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 import { Roulette } from './roulette.js';
 import { Crash } from './crash.js';
+import { Plinko } from './plinko.js';
 import { CrashStats, type CrashBoardEntry } from './crashstats.js';
 import type { CrashBoard, CrashBoardRow } from '../shared/crash.js';
 
@@ -338,6 +339,24 @@ export async function startServer(cfg: Config) {
     if (c.peer.floor !== CASINO) return;
     if ([...clients.values()].some((o) => o !== c && o.chips === c.chips && o.peer.floor === CASINO)) return;
     if (crash.stopAuto(c.chips, 'left')) crashChanged();
+  };
+  /** The Plinko machine in the casino's main hall, one for the building: drops and payouts go through the chips bank (see plinko.ts). */
+  const plinko = new Plinko(chips);
+  // Its clock: one timer for the next ball to land (it's paid then), only while balls are falling.
+  let plinkoClock: ReturnType<typeof setTimeout> | null = null;
+  let plinkoClockAt = Infinity;
+  const plinkoLoop = () => {
+    plinkoClock = null;
+    plinkoClockAt = Infinity;
+    plinko.tick();
+    plinkoWake();
+  };
+  const plinkoWake = () => {
+    const at = plinko.nextAt();
+    if (at >= plinkoClockAt) return;
+    if (plinkoClock) clearTimeout(plinkoClock);
+    plinkoClockAt = at;
+    plinkoClock = setTimeout(plinkoLoop, Math.max(0, at - Date.now()));
   };
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
@@ -716,7 +735,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), jukebox: casinoJukebox.state() });
+  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), plinko: plinko.state(), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
     // And what's on the lounge TV, which only sends a frame when the page changes.
@@ -1989,6 +2008,16 @@ export async function startServer(cfg: Config) {
         else sendTo(c, { t: 'crash', crash: crash.state() });
         break;
       }
+      case 'plinko.drop': {
+        if (c.peer.floor !== CASINO) break;
+        const ball = plinko.drop(c.id, c.chips, c.peer.name, msg, c.peer.color);
+        if (!ball) break;
+        plinkoWake();
+        // Everyone in the casino sees it fall, on the machine's screen.
+        const json = JSON.stringify({ t: 'plinko.ball', ball } satisfies ServerMsg);
+        for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+        break;
+      }
       case 'dog.pet':
         floorOf(c)?.dog.pet(c.peer);
         break;
@@ -2750,6 +2779,9 @@ export async function startServer(cfg: Config) {
     crash.close();
     if (crashBoardSoon) clearTimeout(crashBoardSoon);
     crashStats.flush();
+    // Plinko balls still falling land now and are paid (their slots were picked on the drop), before the bank's written.
+    if (plinkoClock) clearTimeout(plinkoClock);
+    plinko.close();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();

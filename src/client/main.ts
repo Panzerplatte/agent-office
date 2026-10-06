@@ -109,6 +109,9 @@ import { openJukebox } from './ui/jukebox';
 import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
 import { addCrashScreen, type CrashScreen } from './world/crashscreen';
 import { CrashPanel, mine as myCrashBet } from './ui/crash';
+import { PlinkoPanel } from './ui/plinko';
+import { LINGER_MS, drawScreen as drawPlinkoScreen, pegsHit } from './world/plinkoboard';
+import { RECENT as PLINKO_RECENT, fallMs as plinkoFallMs, type PlinkoRisk } from '../shared/plinko';
 import type { JukeboxView } from './world/jukebox';
 import { openBookshelf } from './ui/bookshelf';
 import { Arcade } from './ui/arcade';
@@ -367,6 +370,7 @@ function theCasino(): Casino {
     crashBoard.setBoard(store.crashBoard);
     store.on('crashBoard', () => crashBoard.setBoard(store.crashBoard));
     crashDrawnAt = -Infinity;
+    plinkoDrawnAt = -Infinity;
     noOutline(casino.group);
   }
   return casino;
@@ -925,6 +929,93 @@ function updateCrash(now: number) {
     crashScreen.draw(c, now - store.crashAt, store.you);
   }
   crashPanel.update();
+}
+
+// ---- Plinko -----------------------------------------------------------------------------------------
+// The machine in the middle of the casino's hall, for everyone down there: its big screen shows the
+// board and every ball falling through it (see world/plinkoboard.ts). E at it opens the panel to drop
+// your own (see ui/plinko.ts). The office picks each ball's path and pays when it lands; this only
+// animates the path it sent, from when it was dropped, so everyone sees the same ball in the same place.
+const plinkoPanel = new PlinkoPanel({
+  drop: (d) => net.send({ t: 'plinko.drop', bet: d.bet, rows: d.rows, risk: d.risk }),
+  closed: () => (hintKey = 'stale'),
+  balance: () => chips.balance,
+  you: () => store.you,
+  balls: () => store.plinkoBalls,
+});
+/** How many pegs each ball's been heard hitting (rows + 1 once it's landed), by its id. */
+const plinkoHeard = new Map<number, number>();
+/** When the last peg tick was played, to keep a shower of balls from turning into noise. */
+let plinkoTickAt = 0;
+/** When the machine's screen was last drawn (performance.now()); -Infinity: draw it again. */
+let plinkoDrawnAt = -Infinity;
+store.on('plinko', () => {
+  const b = store.plinkoBalls[store.plinkoBalls.length - 1];
+  if (downstairs && casino && b && b.ball.age === 0) sound.plinko('drop', b.ball.peer === store.you ? {} : { at: casino.plinko.where });
+  plinkoDrawnAt = -Infinity;
+});
+const plinkoView = new THREE.Frustum();
+const plinkoViewMatrix = new THREE.Matrix4();
+/** The board the machine shows: the one the newest ball's on, else the last that landed, else 16 rows at medium risk. */
+function plinkoShown(): { rows: number; risk: PlinkoRisk } {
+  const b = store.plinkoBalls[store.plinkoBalls.length - 1]?.ball ?? store.plinkoRecent[0];
+  return b ? { rows: b.rows, risk: b.risk } : { rows: 16, risk: 'medium' };
+}
+/**
+ * Every frame in the casino: hears the balls hit their pegs and land (yours right by you, everyone
+ * else's from the machine), puts landed ones in the strip and clears them away, and draws the
+ * machine's screen (every frame while balls fall and it's in view) and the panel.
+ */
+function updatePlinko(now: number) {
+  if (!downstairs || !casino) {
+    if (plinkoPanel.open) plinkoPanel.close();
+    return;
+  }
+  const where = casino.plinko.where;
+  const balls = store.plinkoBalls;
+  for (const { ball, start } of balls) {
+    const ms = now - start;
+    const landed = ms >= plinkoFallMs(ball.rows);
+    const hits = landed ? ball.rows + 1 : pegsHit(ball.rows, ms);
+    const heard = plinkoHeard.get(ball.id);
+    plinkoHeard.set(ball.id, hits);
+    // One that was already falling when you came down is only heard from where it is now.
+    if (heard === undefined || hits <= heard) continue;
+    const yours = ball.peer === store.you;
+    if (landed) {
+      store.plinkoRecent = [{ name: ball.name, color: ball.color, bet: ball.bet, rows: ball.rows, risk: ball.risk, m: ball.m, won: ball.won }, ...store.plinkoRecent].slice(0, PLINKO_RECENT);
+      if (yours) plinkoPanel.landed(ball);
+      sound.plinko('land', { m: ball.m, ...(yours ? {} : { at: where }) });
+      plinkoDrawnAt = -Infinity;
+    } else if (now - plinkoTickAt > 40 && (yours || balls.length < 8)) {
+      plinkoTickAt = now;
+      sound.plinko('peg', { depth: hits / ball.rows, ...(yours ? {} : { at: where }) });
+    }
+  }
+  // Gone once they've sat in their slot a moment.
+  const gone = balls.filter((b) => now - b.start > plinkoFallMs(b.ball.rows) + LINGER_MS);
+  if (gone.length) {
+    store.plinkoBalls = balls.filter((b) => !gone.includes(b));
+    for (const b of gone) plinkoHeard.delete(b.ball.id);
+    plinkoDrawnAt = -Infinity;
+  }
+  const busy = store.plinkoBalls.length > 0;
+  if (now - plinkoDrawnAt >= (busy ? 0 : 1e9)) {
+    plinkoView.setFromProjectionMatrix(plinkoViewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    if (plinkoView.intersectsObject(casino.plinko.screen)) {
+      plinkoDrawnAt = now;
+      const shown = plinkoShown();
+      drawPlinkoScreen(casino.plinko.canvas, {
+        ...shown,
+        balls: store.plinkoBalls.filter((b) => b.ball.rows === shown.rows && b.ball.risk === shown.risk),
+        now,
+        you: store.you,
+        recent: store.plinkoRecent,
+      });
+      casino.plinko.texture.needsUpdate = true;
+    }
+  }
+  plinkoPanel.update(now);
 }
 
 // ---- Slot machines ----------------------------------------------------------------------------------
@@ -2362,6 +2453,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'darts') stepUpToDarts();
   else if (target.kind === 'pool') stepUpToPool();
   else if (target.kind === 'crash') crashPanel.show();
+  else if (target.kind === 'plinko') plinkoPanel.show();
 }
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
@@ -3206,6 +3298,11 @@ function hintFor(it: Interactable): Hint {
         : t('main.crashAbout');
       return { k: `${about}|${!!me}`, parts: [title(t('main.crash')), aside(about), key('E', t(me && c.phase === 'running' && me.out === undefined ? 'main.crashCashOut' : 'main.crashPlay'))] };
     }
+    case 'plinko': {
+      const falling = store.plinkoBalls.filter((b) => performance.now() - b.start < plinkoFallMs(b.ball.rows)).length;
+      const about = falling ? t('main.plinkoFalling', { n: falling }) : t('main.plinkoAbout');
+      return { k: about, parts: [title(t('main.plinko')), aside(about), key('E', t('main.plinkoPlay'))] };
+    }
     case 'jukebox': {
       const j = store.jukebox;
       const what = j.on ? trackTitle(j) : '';
@@ -3929,7 +4026,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -4434,6 +4531,7 @@ function frame(ts?: number) {
     casinoAshtray?.update(t, dt, (smoking ? 1 : 0) + [...remotes.values()].filter((r) => r.person.smoking).length);
     casinoJukebox?.update(t, dt, sound.beat());
     updateCrash(performance.now());
+    updatePlinko(performance.now());
     if (!pokerFelt) {
       pokerFelt = new PokerFelt(casino.poker);
       pokerFelt.render(store.poker, true);
