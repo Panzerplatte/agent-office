@@ -11,6 +11,7 @@ import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
 import type { CrashAutoBet, CrashAutoState, CrashBoard, CrashState } from './crash.js';
+import type { PlinkoBall, PlinkoRisk, PlinkoState } from './plinko.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -739,6 +740,8 @@ export interface FloorView {
   crashBoard?: CrashBoard;
   /** Your Crash auto-bet (only in the casino): running, or the last one and why it stopped. */
   crashAuto?: CrashAutoState | null;
+  /** The Plinko machine in the casino's main hall (only in the casino): the balls still falling, and the last ones that landed. */
+  plinko?: PlinkoState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1349,6 +1352,12 @@ export type ClientMsg =
   | { t: 'crash.cancel' }
   | { t: 'crash.cashout' }
   | { t: 'crash.look' }
+  /**
+   * Plinko, at the machine in the casino's main hall: drop a ball for `bet` chips on a board of
+   * `rows` rows of pegs (8 to 16) at `risk`. The office takes the bet, picks the ball's path and pays
+   * bet × its slot's multiplier when it lands (see shared/plinko.ts).
+   */
+  | { t: 'plinko.drop'; bet: number; rows: number; risk: PlinkoRisk }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1492,6 +1501,8 @@ export type ServerMsg =
   | { t: 'crash.board'; board: CrashBoard }
   /** To your pages in the casino: your Crash auto-bet changed (it bet, a round settled, it stopped and why). */
   | { t: 'crash.auto'; auto: CrashAutoState | null }
+  /** In the casino: someone dropped a ball on the Plinko machine, with the path the office picked for it (it lands after fallMs). */
+  | { t: 'plinko.ball'; ball: PlinkoBall }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

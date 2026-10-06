@@ -17,8 +17,9 @@ import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } fro
 import { emptyRoulette, type RouletteState } from '../shared/roulette';
 import { emptyCrash, emptyCrashBoard, type CrashAutoState, type CrashBoard, type CrashState } from '../shared/crash';
 import type { BallState } from '../shared/hoop';
+import { emptyPlinko, type PlinkoBall, type PlinkoLanding } from '../shared/plinko';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'plinko';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -223,6 +224,9 @@ class Store {
   crashBoard: CrashBoard = emptyCrashBoard();
   /** Your Crash auto-bet, as the office last said: running, or the last one and why it stopped. */
   crashAuto: CrashAutoState | null = null;
+  /** The Plinko machine's balls, each with when it was dropped (performance.now(), from its age when the office sent it), newest last; and the last ones that landed, newest first, as the office had them when you came down. */
+  plinkoBalls: { ball: PlinkoBall; start: number }[] = [];
+  plinkoRecent: PlinkoLanding[] = [];
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -317,7 +321,11 @@ class Store {
     this.crashAt = performance.now();
     this.crashBoard = v.crashBoard ?? emptyCrashBoard();
     this.crashAuto = v.crashAuto ?? null;
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard', 'crashAuto'] as Topic[]) this.emit(t);
+    const plinko = v.plinko ?? emptyPlinko();
+    const now = performance.now();
+    this.plinkoBalls = plinko.balls.map((ball) => ({ ball, start: now - ball.age }));
+    this.plinkoRecent = plinko.recent;
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard', 'crashAuto', 'plinko'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -508,6 +516,10 @@ class Store {
         this.crash = msg.crash;
         this.crashAt = performance.now();
         this.emit('crash');
+        break;
+      case 'plinko.ball':
+        this.plinkoBalls.push({ ball: msg.ball, start: performance.now() - msg.ball.age });
+        this.emit('plinko');
         break;
       case 'crash.board':
         this.crashBoard = msg.board;

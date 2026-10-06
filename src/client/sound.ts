@@ -793,6 +793,35 @@ export class OfficeSound {
     }
   }
 
+  /**
+   * Plinko, at the machine in the casino's hall: a ball let go at the top (`drop`, a soft click), a
+   * tick off a peg (`peg`, a little higher the further down the board it is: `depth` 0 to 1), and the
+   * ball dropping into its slot (`land`): a dull thud under 1×, a ding at 1× and up, and a rising
+   * chime with chips for a big one (10× and up). `at` is the machine; without it, it's your own ball, right by you.
+   */
+  plinko(kind: 'drop' | 'peg' | 'land', opts: { at?: Pos; depth?: number; m?: number } = {}) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`plinko-${kind}`);
+    const out = opts.at ? this.panner(opts.at, 3, 1) : ctx.createGain();
+    if (!opts.at) (out as GainNode).gain.value = 0.7;
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    if (kind === 'drop') this.blip(out, t0, 900, 0.6, 0.05, 0.05, 'triangle');
+    else if (kind === 'peg') this.blip(out, t0, 1400 + (opts.depth ?? 0) * 900 + rand(-60, 60), 0.92, 0.045, 0.035, 'sine');
+    else {
+      const m = opts.m ?? 0;
+      if (m < 1) this.blip(out, t0, 180, 0.6, 0.12, 0.12, 'sine');
+      else if (m < 10) {
+        this.blip(out, t0, 1047, 1, 0.25, 0.08, 'triangle');
+        this.blip(out, t0, 2094, 1, 0.12, 0.02);
+      } else {
+        [784, 1047, 1319, 1568].forEach((f, i) => this.blip(out, t0 + i * 0.07, f, 1, i === 3 ? 0.5 : 0.12, 0.09, 'triangle'));
+        for (let i = 0; i < 5; i++) this.clink(out, t0 + 0.3 + i * 0.05, rand(2500, 3200), 0.03);
+      }
+    }
+  }
+
   /** Whoosh: the rush of air and the squeal of hands on brass, all the way down a fire pole. */
   slide(seconds = 1.6) {
     const ctx = this.ctx;
