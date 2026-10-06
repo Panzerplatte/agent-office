@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOT_STACK, MIN_BUY_IN, TURN_MS, act, bestHand, buildPots, compareHands, foldOut, freshDeck, options, potTotal, shuffled, startHand, value5, type Card, type Hand } from '../src/shared/poker.js';
+import { BIG_BLIND, BOT_STACK, MAX_BUY_IN, MIN_BUY_IN, SMALL_BLIND, TURN_MS, act, bestHand, buildPots, compareHands, foldOut, freshDeck, options, potTotal, shuffled, startHand, value5, type Card, type Hand } from '../src/shared/poker.js';
 import { Poker, SHOW_MS, botAction, equity, parseAction } from '../src/server/poker.js';
 
 const cards = (s: string) => s.split(' ') as Card[];
@@ -358,13 +358,26 @@ function bank(start = 1000) {
   };
 }
 
-function table() {
-  const b = bank();
+function table(start = 1000) {
+  const b = bank(start);
   let t = 0;
   let seed = 3;
   const poker = new Poker(b, () => t, (n) => ((seed = (seed * 16807) % 2147483647) % n));
   return { b, poker, wait: (ms: number) => { t += ms; return poker.tick(); } };
 }
+
+test('high rollers buy in with up to 10,000 (never more than they have), the blinds as they were', () => {
+  assert.equal(MAX_BUY_IN, 10_000);
+  assert.deepEqual([SMALL_BLIND, BIG_BLIND], [5, 10]);
+  const { b, poker } = table(20_000);
+  assert.equal(poker.sit('c1', 'Ada', 'k1', 'chips:a', MAX_BUY_IN + 1), false, 'over the most');
+  assert.ok(poker.sit('c1', 'Ada', 'k1', 'chips:a', MAX_BUY_IN));
+  assert.equal(b.bal('chips:a'), 10_000);
+  assert.equal(poker.topUp('c1', 1), false, 'topped up past the most');
+  const poor = table(5000);
+  assert.equal(poor.poker.sit('c2', 'Bo', 'k2', 'chips:b', 6000), false, 'more than the balance');
+  assert.ok(poor.poker.sit('c2', 'Bo', 'k2', 'chips:b', 5000));
+});
 
 test('sitting down takes the buy-in, standing up gives back what is in front of you', () => {
   const { b, poker } = table();

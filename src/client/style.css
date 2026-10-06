@@ -417,12 +417,14 @@ button { font-family: inherit; }
 .bj-clock { height: 6px; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; background: #f1e4d3; }
 .bj-clock span { display: block; height: 100%; background: #ffd166; transition: width .25s linear; }
 .bj-betting { display: grid; gap: 6px; }
-.bj-chips { display: flex; justify-content: center; align-items: center; gap: 6px; }
+.bj-chips { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
 .bj-chip { width: 38px; height: 38px; border-radius: 50%; border: 3px dashed #fff; outline: 2px solid var(--ink); color: #fff; font-weight: 900; font-size: 12px; cursor: pointer; text-shadow: 0 1px 0 #0006; }
 .bj-chip.c5 { background: #d0263a; }
 .bj-chip.c25 { background: #2a9d4b; }
 .bj-chip.c100 { background: #22232e; }
 .bj-chip.c500 { background: #7b3fbf; }
+.bj-chip.c1000 { background: #e0a91b; }
+.bj-chip.c5000 { background: #8a4b1f; }
 .bj-chip:disabled { opacity: .35; cursor: default; }
 .bj-amount { min-width: 90px; text-align: center; font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .bj-amount.down { color: var(--ink); }
@@ -433,7 +435,7 @@ button { font-family: inherit; }
 .slots-title { font-weight: 900; font-size: 15px; text-align: center; }
 .slots-jackpot { text-align: center; font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; color: #b5179e; }
 .slots-bet-label { font-size: 12px; color: var(--muted); }
-.slots-bets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.slots-bets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .slots .btn { padding: 4px 6px; font-size: 13px; }
 .slots .btn:disabled { opacity: .4; cursor: not-allowed; }
 .slots > .slots-spin { padding: 8px; font-size: 16px; }
@@ -494,7 +496,7 @@ button { font-family: inherit; }
 .rl-result.won { color: #0a8f61; }
 .rl-result.lost { color: var(--muted); font-size: 13px; }
 .rl-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rl-chips { display: flex; gap: 4px; }
+.rl-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .rl-chip { width: 32px; height: 32px; border-radius: 50%; border: 3px dashed #fff; background: var(--chip); color: #fff; font: inherit; font-size: 11px; font-weight: 900; text-shadow: 0 0 2px #000; box-shadow: 0 0 0 2px var(--ink); cursor: pointer; }
 .rl-chip.on { transform: translateY(-3px); box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px #ffd84d; }
 .rl-chip.short { opacity: .35; }

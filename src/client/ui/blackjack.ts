@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { locale, t } from '../i18n';
 import { MAX_BET, MIN_BET, allowed, handValue, isBlackjack, suitOf, type BjAction, type BjHand, type BjPlayer, type BlackjackState, type Card, type Outcome } from '../../shared/blackjack';
 import { rankLabel } from '../world/cards';
 import { $, h } from './dom';
@@ -18,7 +18,13 @@ export interface BlackjackPanelHooks {
 
 const SUIT = { S: '♠', H: '♥', D: '♦', C: '♣' } as const;
 /** The chips you put a bet together from. */
-export const CHIPS = [5, 25, 100, 500] as const;
+export const CHIPS = [5, 25, 100, 500, 1000, 5000] as const;
+
+/** An amount of chips as it's written in the panels: 10,000 (10.000 in German). */
+export const amountText = (v: number) => v.toLocaleString(locale());
+
+/** What's written on a chip: 5, 500, 1k, 5k. */
+export const chipLabel = (v: number) => (v >= 1000 ? `${v / 1000}k` : String(v));
 
 /** A hand's total as it's written: "17", "7 / 17" while an ace could still be 1 or 11 (not once it's `done`), "BJ" for a blackjack. */
 export function totalLabel(cards: readonly Card[], split = false, done = false): string {
@@ -51,7 +57,7 @@ function hand(hd: BjHand, up: boolean): HTMLElement {
     {},
     h('span.bj-cards', {}, ...hd.cards.map(mini)),
     h('span.bj-total', {}, totalLabel(hd.cards, hd.split, hd.done)),
-    h('span.bj-stake', {}, `${hd.bet}${hd.doubled ? ' ×2' : ''}`),
+    h('span.bj-stake', {}, `${amountText(hd.bet)}${hd.doubled ? ' ×2' : ''}`),
     out,
   );
 }
@@ -98,7 +104,7 @@ export class BlackjackPanel {
 
     this.amount = h('span.bj-amount');
     this.chipBtns = CHIPS.map((c) => {
-      const b = h(`button.bj-chip.c${c}`, { type: 'button', title: t('menus.bjAddChip', { n: c }) }, String(c));
+      const b = h(`button.bj-chip.c${c}`, { type: 'button', title: t('menus.bjAddChip', { n: amountText(c) }) }, chipLabel(c));
       b.addEventListener('click', () => this.add(c));
       return b;
     });
@@ -186,7 +192,7 @@ export class BlackjackPanel {
     const r = d.round;
     const me = d.seats.find((s) => s.peer === you);
     const mine = r && me ? r.players.find((p) => p.id === me.id) : undefined;
-    this.balanceEl.textContent = balance === null ? '' : t('menus.bjBalance', { n: balance });
+    this.balanceEl.textContent = balance === null ? '' : t('menus.bjBalance', { n: amountText(balance) });
 
     // The dealer.
     const dealerCards = r?.dealer ?? [];
@@ -204,7 +210,7 @@ export class BlackjackPanel {
         const p = r?.players.find((pl) => pl.id === s.id);
         const name = `${s.name}${s.peer === you ? ` ${t('menus.dartsYou')}` : ''}${s.peer ? '' : ` ${t('menus.poolAway')}`}`;
         const cls = ['bj-seat', s.id === upId ? 'up' : '', s.peer ? '' : 'away', s.peer === you ? 'me' : ''].filter(Boolean).join('.');
-        const body = p ? this.hands(p, s.id === upId ? r!.turn!.hand : -1) : s.bet ? [h('span.bj-bet', {}, t('menus.bjBetDown', { n: s.bet }))] : [h('span.bj-nobet', {}, '—')];
+        const body = p ? this.hands(p, s.id === upId ? r!.turn!.hand : -1) : s.bet ? [h('span.bj-bet', {}, t('menus.bjBetDown', { n: amountText(s.bet) }))] : [h('span.bj-nobet', {}, '—')];
         return h(`div.${cls}`, {}, h('span.bj-seat-name', {}, name), ...body);
       }),
     );
@@ -225,7 +231,7 @@ export class BlackjackPanel {
       lines.push({ text: isBlackjack(known) ? t('menus.bjDealerBlackjack') : dv > 21 ? t('menus.bjDealerBust') : t('menus.bjDealerHas', { n: dv }), cls: '' });
       if (mine) {
         const net = (mine.paid ?? 0) - mine.hands.reduce((a, hd) => a + hd.bet, 0) - (mine.insurance ?? 0);
-        lines.push({ text: net > 0 ? t('menus.bjYouWon', { n: net }) : net < 0 ? t('menus.bjYouLost', { n: -net }) : t('menus.bjYouEven'), cls: net > 0 ? 'won' : net < 0 ? 'foul' : '' });
+        lines.push({ text: net > 0 ? t('menus.bjYouWon', { n: amountText(net) }) : net < 0 ? t('menus.bjYouLost', { n: amountText(-net) }) : t('menus.bjYouEven'), cls: net > 0 ? 'won' : net < 0 ? 'foul' : '' });
       }
     }
     if (d.shoe.shuffled && d.stage !== 'idle' && d.stage !== 'betting') lines.push({ text: t('menus.bjShuffled'), cls: '' });
@@ -239,14 +245,14 @@ export class BlackjackPanel {
       const cap = Math.min(MAX_BET, balance ?? MAX_BET);
       if (this.pending > cap) this.pending = 0;
       for (const [i, b] of this.chipBtns.entries()) b.disabled = !!down || this.pending + CHIPS[i] > cap;
-      this.amount.textContent = down ? t('menus.bjBetDown', { n: down }) : this.pending ? String(this.pending) : t('menus.bjMinMax', { min: MIN_BET, max: MAX_BET });
+      this.amount.textContent = down ? t('menus.bjBetDown', { n: amountText(down) }) : this.pending ? amountText(this.pending) : t('menus.bjMinMax', { min: MIN_BET, max: amountText(MAX_BET) });
       this.amount.classList.toggle('down', !!down);
       this.clearBtn.classList.toggle('hidden', !!down || !this.pending);
       this.placeBtn.classList.toggle('hidden', !!down);
       this.placeBtn.disabled = this.pending < MIN_BET;
       const again = me!.last && me!.last <= cap && !down && !this.pending ? me!.last : 0;
       this.againBtn.classList.toggle('hidden', !again);
-      this.againBtn.textContent = t('menus.bjAgain', { n: again });
+      this.againBtn.textContent = t('menus.bjAgain', { n: amountText(again) });
       this.takeBackBtn.classList.toggle('hidden', !down);
       this.dealBtn.classList.toggle('hidden', !down || d.stage !== 'betting');
     }
@@ -256,7 +262,7 @@ export class BlackjackPanel {
     this.insurance.classList.toggle('hidden', !askInsurance);
     if (askInsurance) {
       const cost = Math.floor(mine!.hands[0].bet / 2);
-      this.insureBtn.textContent = t('menus.bjInsure', { n: cost });
+      this.insureBtn.textContent = t('menus.bjInsure', { n: amountText(cost) });
       this.insureBtn.disabled = !cost || (balance !== null && balance < cost);
     }
 
@@ -277,7 +283,7 @@ export class BlackjackPanel {
 
   private hands(p: BjPlayer, upHand: number): HTMLElement[] {
     const out = p.hands.map((hd, i) => hand(hd, i === upHand));
-    if (p.insurance) out.push(h('span.bj-ins', {}, `${t('menus.bjInsurance', { n: p.insurance })}${p.insurancePaid ? ` +${p.insurancePaid}` : ''}`));
+    if (p.insurance) out.push(h('span.bj-ins', {}, `${t('menus.bjInsurance', { n: amountText(p.insurance) })}${p.insurancePaid ? ` +${amountText(p.insurancePaid)}` : ''}`));
     return out;
   }
 

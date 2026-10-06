@@ -148,9 +148,9 @@ export const MIN_PLAYERS = 2;
 /** The blinds, in chips. */
 export const SMALL_BLIND = 5;
 export const BIG_BLIND = 10;
-/** What you can sit down with (and top up to between hands), in chips: 10 to 200 big blinds. */
+/** What you can sit down with (and top up to between hands), in chips: 10 to 1,000 big blinds (up to 10,000, for high rollers). */
 export const MIN_BUY_IN = 10 * BIG_BLIND;
-export const MAX_BUY_IN = 200 * BIG_BLIND;
+export const MAX_BUY_IN = 1000 * BIG_BLIND;
 /** How long you have to act on your turn (ms) before the office checks or folds for you. */
 export const TURN_MS = 30_000;
 /** Dealer-Bots you can sit at the table, at most. */
