@@ -55,7 +55,7 @@ import { locale as slotsLocale } from './i18n';
 import { Hands } from './world/hands';
 import { Basketball, IN_HANDS } from './world/hoop';
 import { HOOP, SWEET, idealSpeed, lookAtRim, meter, shotSpeed, throwPitch, tossSpeed, underCeiling } from '../shared/hoop';
-import { STREAK_PAUSE } from '../shared/chips';
+import { STREAK_PAUSE, creditWork, workTime } from '../shared/chips';
 import { Smoke } from './world/smoke';
 import { HAZE_MAX, Sky, describeSky } from './world/sky';
 import { Laptop } from './world/laptop';
@@ -91,6 +91,7 @@ import { localizeHud, openHelp, renderCaffeine, renderChat, renderPeople, render
 import { Compass, type Bearing } from './ui/compass';
 import { chips } from './chips';
 import { chipsToast, mountChips } from './ui/chips';
+import { openCredit } from './ui/credit';
 import { openCharacter } from './ui/character';
 import { openSettings } from './ui/settings';
 import { hiringPaused, renderUsage, usageLabel, usageTitle } from './ui/usage';
@@ -1235,7 +1236,7 @@ net.onMessage((msg) => {
       break;
     case 'chips':
       chips.set(msg.chips, msg.change);
-      if (!msg.quiet) chipsToast(msg.change);
+      if (!msg.quiet && msg.change) chipsToast(msg.change);
       break;
     case 'chips.top':
       chips.setTop(msg.top);
@@ -2259,6 +2260,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'pole' && target.pole !== undefined) usePole(target.pole);
   else if (target.kind === 'meeting') showMeeting();
   else if (target.kind === 'bar') showBar();
+  else if (target.kind === 'bank') openCredit((amount) => net.send({ t: 'chips.credit', amount }));
   else if (target.kind === 'dj') blowHorn();
   else if (target.kind === 'golf') teeOff();
   else if (target.kind === 'ball') takeBall();
@@ -3168,6 +3170,11 @@ function hintFor(it: Interactable): Hint {
       const up = floorThere(1)?.name;
       return { k: `landing|${up}`, parts: [title(t('main.firePole')), aside(up ? t('main.comesDownFrom', { floor: up }) : t('main.comesDownAbove')), key('E', t('main.twirl'))] };
     }
+    case 'bank': {
+      const c = chips.state.credit;
+      const what = c ? t('main.bankOwed', { owed: c.owed.toLocaleString(slotsLocale()), wait: workTime(creditWork(c.owed)) }) : t('main.bankCredit');
+      return { k: what, parts: [title(t('main.bank')), aside(what), key('E', t(c ? 'main.bankLook' : 'main.askCredit'))] };
+    }
     case 'bar': {
       const cut = booze.cutOff(performance.now() / 1000);
       return { k: String(cut), parts: [title(t(downstairs ? 'main.casinoBar' : 'main.skyBar')), aside(t(cut ? 'main.hadEnough' : 'main.onTheHouse')), key('E', t(cut ? 'main.askWater' : 'main.orderDrink'))] };
@@ -3790,7 +3797,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, bank: 3.5 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */

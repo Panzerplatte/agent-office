@@ -187,6 +187,10 @@ export const NOTICES = table(
     'arcade.tooMany': "🕹️ That's a lot of new games in a row, so this one won't go on the high-score table",
     'arcade.lost': "🕹️ The office couldn't follow this game, so its score won't go on the high-score table",
     'arcade.highScore': '🏆 {name} set a new arcade high score: {score}',
+    'chips.creditOwed': '🏦 You still owe {owed} chips on your credit (about {wait} of project work): pay it back before the next one',
+    'chips.creditAmount': '🏦 The bank gives credit in set amounts only (10,000 chips at most)',
+    'chips.creditCasino': '🏦 Credit is at the cashier, down in the casino',
+    'chips.creditPaid': '🏦 Your credit is paid back: the bank will give you another one',
   },
   {
     'floor.removed': '🛗 {who} hat {name} aus dem Gebäude genommen',
@@ -341,6 +345,10 @@ export const NOTICES = table(
     'arcade.tooMany': '🕹️ Das sind viele neue Spiele hintereinander, deshalb kommt dieses nicht in die Highscore-Liste',
     'arcade.lost': '🕹️ Das Büro konnte diesem Spiel nicht folgen, deshalb kommt der Punktestand nicht in die Highscore-Liste',
     'arcade.highScore': '🏆 {name} hat einen neuen Arcade-Highscore aufgestellt: {score}',
+    'chips.creditOwed': '🏦 Auf deinem Kredit sind noch {owed} Chips offen (ca. {wait} Projektarbeit): erst abbezahlen, dann gibt’s den nächsten',
+    'chips.creditAmount': '🏦 Die Bank gibt Kredit nur in festen Beträgen (höchstens 10.000 Chips)',
+    'chips.creditCasino': '🏦 Kredit gibt’s an der Kasse, unten im Casino',
+    'chips.creditPaid': '🏦 Dein Kredit ist abbezahlt: die Bank gibt dir wieder einen',
   },
 );
 

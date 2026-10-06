@@ -42,6 +42,8 @@ const WOOD = '#5a2e1c';
 const WOOD_DARK = '#3b1d12';
 const BRASS = '#d4a84b';
 const INK = '#14101a';
+/** How near the cashier's window you have to be to bank there (chip credit, see shared/chips.ts) (m). */
+const BANK_REACH = 1.6;
 const CHIP_COLORS = ['#f4f1ea', '#d62839', '#1d4ed8', '#16a34a', '#111111', '#7c3aed'];
 
 /** A view of one table: where its felt is, so a game can lay cards and chips on it. */
@@ -1271,6 +1273,15 @@ export function buildCasino(): Casino {
   cashierW.setTask({ name: `🪙 ${t('world.casinoCashier')}`, summary: t('world.casinoCashierSummary') });
   cashierW.root.position.set(C.x, 0, C.front - C.depth - 0.5);
   group.add(cashierW.root);
+  // The cashier is the bank (chip credit, see shared/chips.ts): walk up to the window, or look at the
+  // counter or the cashier, and press E. The cage is merged in with the rest of the room, so the
+  // crosshair finds it on a box round the counter and the cashier that's never drawn.
+  const bank: Interactable = { kind: 'bank', x: C.x, z: C.front + 0.6, radius: BANK_REACH };
+  interactables.push(bank);
+  const bankBox = new THREE.Mesh(new THREE.BoxGeometry(C.length, 1.9, C.depth + 0.7), new THREE.MeshBasicMaterial({ visible: false }));
+  bankBox.position.set(C.x, 0.95, C.front - (C.depth + 0.7) / 2);
+  bankBox.userData.interact = bank;
+  group.add(bankBox);
 
   const boardCanvas = document.createElement('canvas');
   boardCanvas.width = 1024;
