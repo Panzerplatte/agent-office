@@ -168,6 +168,7 @@ export function openHelp() {
     ['🤖', t('menus.helpKiosks')],
     ['📝', t('menus.helpWhiteboard')],
     ['🕹️', t('menus.helpArcade')],
+    ['🐍', t('menus.helpSnake')],
     ['🎉', t('menus.helpGong')],
     ['N', t('menus.helpNext')],
     ['🏀', t('menus.helpHoop')],

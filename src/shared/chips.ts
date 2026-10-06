@@ -47,6 +47,8 @@ export const EARN = {
   /** Golf off the balcony: a hole in one, and a ball that stops close to the pin (within GOLF_CLOSE m). */
   golfHole: { chips: 150, cooldown: MIN, perDay: 450 },
   golfClose: { chips: 10, cooldown: 30_000, perDay: 50 },
+  /** Snake: a good run on the lounge's Snake machine (a score of GOOD_RUN or more, see server/snake.ts). */
+  snakeScore: { chips: 20, cooldown: 3 * MIN, perDay: 100 },
   /** A pull request merged: for whoever queued the task, or hired the worker, it came from. */
   merged: { chips: 200, perDay: 1000 },
 } satisfies Record<string, Earning>;

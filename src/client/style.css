@@ -844,7 +844,10 @@ button { font-family: inherit; }
 .hang .seg .dot { width: 12px; height: 12px; }
 .hang-preview { display: flex; justify-content: center; margin-top: 14px; }
 .hang-preview:empty { display: none; }
-.hang-preview img { display: block; max-width: 100%; max-height: 240px; border: 12px solid var(--frame, #c98b5a); outline: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); background: #fff; }
+.hang-rot { align-items: center; }
+.hang-rot-value { min-width: 4ch; text-align: center; font-weight: 800; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .hang-preview img { transition: none; } }
+.hang-preview img { transition: transform .15s ease; display: block; max-width: 100%; max-height: 240px; border: 12px solid var(--frame, #c98b5a); outline: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); background: #fff; }
 .hang-status { display: flex; gap: 8px; align-items: center; margin: 12px 0 0; font-size: 13px; font-weight: 700; color: var(--muted); line-height: 1.45; }
 .hang-status:empty { display: none; }
 .hang-status.error { color: var(--ink); background: #ffd6e0; border: 2px solid var(--ink); border-radius: 10px; padding: 8px 12px; }
@@ -1291,6 +1294,10 @@ a.when:hover { text-decoration: underline; }
 .arcade > .close.corner { top: 0; right: auto; left: calc(100% + 10px); }
 /* The arcade cabinet in the lounge (ui/cabinet.ts) plays on the keyboard, and says so over the game when a worker of yours needs input. */
 .arcade.cabinet canvas { cursor: default; }
+/* The Snake machine (ui/snake.ts): steered on the keyboard or by swiping, and a box for your name when you make the high-score table. */
+.arcade.snake canvas { cursor: default; }
+.snake-name { position: absolute; bottom: calc(100% + 10px); left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 10px; white-space: nowrap; padding: 6px 6px 6px 14px; background: var(--paper); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); font-weight: 900; font-size: 15px; animation: pop .18s ease-out; }
+.snake-name input { width: 12em; font: inherit; }
 /* The website on the lounge TV up close (ui/tvbrowser.ts): the page takes the mouse, the bar under it navigates. */
 .arcade.tvb canvas { cursor: default; outline: none; }
 .tvb-bar { gap: 6px; padding: 6px; max-width: min(calc(100vw - 24px), 1100px); }

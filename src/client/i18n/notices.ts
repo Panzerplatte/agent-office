@@ -77,8 +77,9 @@ const texts = strings(
 
     // Pictures, the bookshelf and the whiteboard
     'pictureGone': 'Someone took that picture down',
-    'hangAim': 'Aim at a wall to hang it there',
+    'hangAim': 'Aim at a wall to hang it there, or at a desk top to stand it there',
     'hangTaken': "Something's already on the wall there",
+    'hangTakenDesk': "Something's already on the desk there: the laptop, a mug or another picture",
     'hangUpTop': 'No walls to hang pictures on up here — take the elevator down to a floor',
     'hangCasino': "The casino's walls are the house's — take the elevator up to a floor to hang pictures",
     'bookFailed': "📚 Couldn't open {name}: {error}",
@@ -216,8 +217,9 @@ const texts = strings(
     'cardQueued': '#{issue} ist schon in der Warteschlange',
 
     'pictureGone': 'Jemand hat das Bild abgehängt',
-    'hangAim': 'Ziel auf eine Wand, um es dort aufzuhängen',
+    'hangAim': 'Ziel auf eine Wand, um es dort aufzuhängen, oder auf einen Schreibtisch, um es dort hinzustellen',
     'hangTaken': 'Da hängt schon etwas an der Wand',
+    'hangTakenDesk': 'Da steht schon etwas auf dem Schreibtisch: der Laptop, eine Tasse oder ein anderes Bild',
     'hangUpTop': 'Hier oben gibt es keine Wände für Bilder — fahr mit dem Aufzug auf eine Etage',
     'hangCasino': 'Die Wände im Casino gehören dem Haus — fahr mit dem Aufzug auf eine Etage, um Bilder aufzuhängen',
     'bookFailed': '📚 {name} konnte nicht geöffnet werden: {error}',
