@@ -893,7 +893,13 @@ store.on('crash', () => {
   crashWas = { round: c.round, phase: c.phase, players: c.players.length, out: me?.out !== undefined };
   crashDrawnAt = -Infinity;
 });
-/** Keeps the wall screen (and the panel, while it's open) up to date: every frame while the curve climbs, a few times a second otherwise. */
+const crashView = new THREE.Frustum();
+const crashViewMatrix = new THREE.Matrix4();
+/**
+ * Keeps the wall screen (and the panel, while it's open) up to date: every frame while the curve
+ * climbs, a few times a second otherwise, and not at all while it's out of view (the game runs
+ * nonstop, so that's most of the time: it's drawn again the moment it comes into view).
+ */
 function updateCrash(now: number) {
   if (!downstairs) {
     if (crashPanel.open) crashPanel.close();
@@ -902,6 +908,11 @@ function updateCrash(now: number) {
   const c = store.crash;
   const every = c.phase === 'running' ? 0 : c.phase === 'betting' ? 100 : 1000;
   if (crashScreen && now - crashDrawnAt >= every) {
+    crashView.setFromProjectionMatrix(crashViewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    if (!crashView.intersectsObject(crashScreen.mesh)) {
+      crashPanel.update();
+      return;
+    }
     crashDrawnAt = now;
     crashScreen.draw(c, now - store.crashAt, store.you);
   }

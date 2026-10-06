@@ -23,7 +23,7 @@ async function freePort(): Promise<number> {
 interface Person {
   msgs: any[];
   send(msg: object): void;
-  next(t: string, ok?: (m: any) => boolean): Promise<any>;
+  next(t: string, ok?: (m: any) => boolean, ms?: number): Promise<any>;
   close(): void;
 }
 
@@ -56,9 +56,9 @@ test('Crash in the running office: everyone in the casino sees the round, only t
       msgs,
       send: (msg) => ws.send(JSON.stringify(msg)),
       // The next message of type `t` (after the last one this took), that `ok` likes.
-      next: (t, ok = () => true) =>
+      next: (t, ok = () => true, ms = 5000) =>
         new Promise((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error(`${name} never got ${t}`)), 5000);
+          const timer = setTimeout(() => reject(new Error(`${name} never got ${t}`)), ms);
           const look = () => {
             for (; seen < msgs.length; seen++) {
               if (msgs[seen].t === t && ok(msgs[seen])) {
@@ -81,7 +81,10 @@ test('Crash in the running office: everyone in the casino sees the round, only t
     const cid = await join('Cid', CASINO);
     await ann.next('welcome');
     const welcome = await bob.next('welcome');
-    assert.equal(welcome.crash.phase, 'idle');
+    // It's running already, nobody in it: bets open for the first round of the first series.
+    assert.equal(welcome.crash.phase, 'betting');
+    assert.deepEqual([welcome.crash.series, welcome.crash.of], [1, 1]);
+    assert.ok(welcome.crash.odds.max >= 50 && welcome.crash.odds.back > 0.98);
     assert.deepEqual(welcome.crash.players, []);
     await cid.next('welcome');
     // The day's bonus for coming in may still be on its way: Bob's balance is the last he heard.
@@ -95,24 +98,30 @@ test('Crash in the running office: everyone in the casino sees the round, only t
 
     // Too much (over the limit, or over the balance) is turned down, and Bob's told how it really is.
     bob.send({ t: 'crash.bet', amount: 10_001 });
-    assert.equal((await bob.next('crash')).crash.phase, 'idle');
+    assert.deepEqual((await bob.next('crash')).crash.players, []);
     bob.send({ t: 'crash.bet', amount: bobStart + 1 });
-    assert.equal((await bob.next('crash')).crash.phase, 'idle');
+    assert.deepEqual((await bob.next('crash')).crash.players, []);
 
-    // A bet: everyone down there sees it, and the clock starts.
+    // A bet: everyone down there sees it.
     bob.send({ t: 'crash.bet', amount: 100 });
     const seen = await cid.next('crash', (m) => m.crash.players.length === 1);
     assert.equal(seen.crash.phase, 'betting');
     assert.deepEqual([seen.crash.players[0].name, seen.crash.players[0].bet], ['Bob', 100]);
-    assert.ok(seen.crash.left > 9000);
+    assert.ok(seen.crash.left > 0 && seen.crash.left <= 10_000);
     assert.equal(seen.crash.crash, null);
     assert.equal((await bob.next('chips', (m) => m.chips.balance === bobStart - 100)).chips.balance, bobStart - 100);
     // Too early to cash out; taking it back gives it back.
     bob.send({ t: 'crash.cashout' });
     assert.equal((await bob.next('crash')).crash.players[0].out, undefined);
     bob.send({ t: 'crash.cancel' });
-    assert.equal((await cid.next('crash', (m) => m.crash.players.length === 0)).crash.phase, 'idle');
+    assert.equal((await cid.next('crash', (m) => m.crash.players.length === 0)).crash.phase, 'betting', 'the clock runs on with nobody in');
     assert.equal((await bob.next('chips', (m) => m.chips.balance === bobStart)).chips.balance, bobStart);
+
+    // Nobody's in, and it takes off anyway when the 10 s are up: the office's timer runs it nonstop.
+    const off = await cid.next('crash', (m) => m.crash.phase !== 'betting', 12_000);
+    assert.ok(['running', 'crashed'].includes(off.crash.phase));
+    assert.deepEqual(off.crash.players, []);
+    assert.equal(off.crash.of, 1);
   } finally {
     for (const p of people) p.close();
     office.shutdown();

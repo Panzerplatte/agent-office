@@ -1204,8 +1204,13 @@ export async function startServer(cfg: Config) {
   };
   /** To everyone in the casino: the Crash round, as it is now. */
   const crashChanged = () => {
-    const json = JSON.stringify({ t: 'crash', crash: crash.state() } satisfies ServerMsg);
-    for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+    let json = '';
+    for (const o of clients.values()) {
+      if (o.peer.floor !== CASINO || o.ws.readyState !== WebSocket.OPEN) continue;
+      // Only put together when someone's down there to see it.
+      json ||= JSON.stringify({ t: 'crash', crash: crash.state() } satisfies ServerMsg);
+      o.ws.send(json);
+    }
   };
   // --- Poker: one table, down in the casino. Everyone down there sees it, each with only their own cards (see server/poker.ts).
   const poker = new Poker(chips);
@@ -2648,14 +2653,18 @@ export async function startServer(cfg: Config) {
     if (roulette.tick()) rouletteChanged();
   }, 200);
 
-  // The Crash round's clock: bets close, the multiplier climbs, it crashes, the screen's cleared.
-  const crashClock = setInterval(() => {
+  // The Crash round's clock, nonstop: bets close, the multiplier climbs, it crashes, bets open again.
+  // One timer, set for the next thing that happens (a few wake-ups a round), not a tick every frame.
+  let crashClock: ReturnType<typeof setTimeout>;
+  const crashLoop = () => {
     if (crash.tick()) crashChanged();
-  }, 50);
+    crashClock = setTimeout(crashLoop, Math.max(0, crash.nextAt() - Date.now()));
+  };
+  crashLoop();
 
   const shutdown = (keep = false) => {
     // Bets on a Crash round that hasn't crashed (and weren't cashed out) go back before the bank's written.
-    clearInterval(crashClock);
+    clearTimeout(crashClock);
     crash.close();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);

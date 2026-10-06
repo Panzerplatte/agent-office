@@ -455,6 +455,7 @@ button { font-family: inherit; }
 .crash-panel .body { display: flex; flex-direction: column; gap: 10px; }
 .crash-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .crash-status { font-weight: 800; }
+.crash-round { font-size: 0.7em; font-weight: 700; opacity: 0.75; }
 .crash-balance { font-size: 13px; color: var(--muted); font-weight: 700; }
 .crash-mult { font-size: 34px; font-weight: 900; font-variant-numeric: tabular-nums; color: #2a9d5c; }
 .crash-mult.crashed { color: #d1344f; }
