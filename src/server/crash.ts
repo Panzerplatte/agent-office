@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { BET_TIME, CRASHED_TIME, CYCLE, HISTORY, MAX_PLAYERS, betOk, crashPoint, crashedBy, drawSeries, multiplierAt, payout, timeFor, type CrashOdds, type CrashPhase, type CrashPlayer, type CrashState } from '../shared/crash.js';
+import { BET_TIME, CRASHED_TIME, CYCLE, HISTORY, MAX_BET, MAX_PLAYERS, autoBetOk, autoStop, betOk, crashPoint, crashedBy, drawSeries, multiplierAt, nextAutoBet, payout, targetOk, timeFor, type CrashAutoState, type CrashAutoStop, type CrashOdds, type CrashPhase, type CrashPlayer, type CrashState } from '../shared/crash.js';
 
 /** What the game needs of the chips bank (server/chips.ts): taking a stake, and paying out. */
 export interface CrashBank {
@@ -15,6 +15,8 @@ export interface CrashOptions {
   series?: () => CrashOdds;
   /** Who's bet what and won what, all-time, for the scoreboard (server/crashstats.ts): told when a bet goes down, goes back, and settles. */
   stats?: CrashTally;
+  /** Someone's auto-bet changed (it bet, a round settled, it stopped): told whose, and how it is now. */
+  onAuto?: (wallet: string, auto: CrashAutoState) => void;
 }
 
 /** What the game tells the scoreboard's totals (see server/crashstats.ts). */
@@ -27,6 +29,15 @@ export interface CrashTally {
 /** In someone's round: whose wallet the bet came out of (and the winnings go back into). */
 interface Player extends CrashPlayer {
   wallet: string;
+  /** Put down by their auto-bet (so how it settles counts towards it). */
+  byAuto?: boolean;
+}
+
+/** Someone's auto-bet: its settings, how far it's got, the next bet, and who to bet as. */
+interface AutoRun extends CrashAutoState {
+  peer: string;
+  name: string;
+  color?: string;
 }
 
 /** A uniform random number in [0, 1), from 52 cryptographically random bits. */
@@ -67,6 +78,9 @@ export class Crash {
   private pick: (odds: CrashOdds) => number;
   private draw: () => CrashOdds;
   private stats: CrashTally | undefined;
+  private onAuto: ((wallet: string, auto: CrashAutoState) => void) | undefined;
+  /** Everyone's auto-bet, running or the last one stopped (so their pages can say why), by wallet. */
+  private autos = new Map<string, AutoRun>();
 
   constructor(
     private readonly bank: CrashBank,
@@ -75,6 +89,7 @@ export class Crash {
     this.now = opts.now ?? Date.now;
     this.pick = opts.point ?? ((odds) => crashPoint(random(), odds));
     this.stats = opts.stats;
+    this.onAuto = opts.onAuto;
     this.draw = opts.series ?? (() => drawSeries(random(), random()));
     // The first series, and bets open for its first round straight away.
     this.odds = this.draw();
@@ -93,7 +108,7 @@ export class Crash {
       of: this.of,
       odds: this.odds,
       crash: this.phase === 'crashed' ? this.point : null,
-      players: this.players.map(({ wallet: _, ...p }) => p),
+      players: this.players.map(({ wallet: _, byAuto: __, ...p }) => p),
       history: this.history,
     });
   }
@@ -106,16 +121,83 @@ export class Crash {
   /**
    * `wallet` (on page `peer`, called `name`) bets `amount` on the next round: only while bets are
    * taken (no round climbing or just crashed), once a round, a whole number within the limits (up to
-   * MAX_BET), and only chips they have: the bank takes them there and then. Says whether it went down.
+   * MAX_BET), and only chips they have: the bank takes them there and then. With `target` (see
+   * targetOk) the office cashes it out by itself at exactly that, if the round gets there. Says whether it went down.
    */
-  bet(peer: string, wallet: string, name: string, amount: unknown, color?: string): boolean {
-    if (!betOk(amount)) return false;
-    if (this.phase !== 'betting' || this.now() >= this.endsAt) return false;
-    if (this.players.some((p) => p.wallet === wallet) || this.players.length >= MAX_PLAYERS) return false;
-    if (!this.bank.bet(wallet, amount, 'crash.bet', { quiet: true })) return false;
-    this.players.push({ id: `c${++this.ids}`, name: name.slice(0, 24), ...(color ? { color } : {}), peer, bet: amount, wallet });
+  bet(peer: string, wallet: string, name: string, amount: unknown, color?: string, target?: unknown): boolean {
+    return this.place(peer, wallet, name, amount, color, target) === null;
+  }
+
+  /** Puts a bet down (see bet), or says why it couldn't. */
+  private place(peer: string, wallet: string, name: string, amount: unknown, color: string | undefined, target: unknown, byAuto = false): CrashAutoStop | 'closed' | 'bad' | null {
+    if (!betOk(amount)) return typeof amount === 'number' && amount > MAX_BET ? 'limit' : 'bad';
+    if (target !== undefined && target !== null && !targetOk(target)) return 'bad';
+    if (this.phase !== 'betting' || this.now() >= this.endsAt) return 'closed';
+    if (this.players.some((p) => p.wallet === wallet)) return 'closed';
+    if (this.players.length >= MAX_PLAYERS) return 'full';
+    if (!this.bank.bet(wallet, amount, 'crash.bet', { quiet: true })) return 'balance';
+    const auto = typeof target === 'number' ? { auto: target } : {};
+    this.players.push({ id: `c${++this.ids}`, name: name.slice(0, 24), ...(color ? { color } : {}), peer, bet: amount, ...auto, wallet, ...(byAuto ? { byAuto } : {}) });
     this.stats?.bet(wallet, amount, name, color);
+    return null;
+  }
+
+  // ---- Auto-bet ---------------------------------------------------------------------------------------
+
+  /**
+   * `wallet` (on page `peer`) starts an auto-bet with `settings` (see CrashAutoBet; checked here):
+   * it bets straight away if bets are open and they're not in yet, else from the next betting window.
+   * Any auto-bet they had is replaced. Says whether it started.
+   */
+  startAuto(peer: string, wallet: string, name: string, settings: unknown, color?: string): boolean {
+    const s = autoBetOk(settings);
+    if (!s) return false;
+    const run: AutoRun = { on: true, settings: s, rounds: 0, profit: 0, next: s.base, peer, name, ...(color ? { color } : {}) };
+    this.autos.set(wallet, run);
+    if (this.phase === 'betting' && this.now() < this.endsAt && !this.players.some((p) => p.wallet === wallet)) this.autoBet(wallet, run);
+    else this.told(wallet, run);
     return true;
+  }
+
+  /** `wallet`'s auto-bet stops (a bet it already put down stays in the round). Says whether one was running. */
+  stopAuto(wallet: string, why: CrashAutoStop = 'user'): boolean {
+    const run = this.autos.get(wallet);
+    if (!run?.on) return false;
+    run.on = false;
+    run.stopped = why;
+    this.told(wallet, run);
+    return true;
+  }
+
+  /** `wallet`'s auto-bet as their pages see it: running, or the last one and why it stopped (null if they never had one). */
+  autoState(wallet: string): CrashAutoState | null {
+    const run = this.autos.get(wallet);
+    return run ? view(run) : null;
+  }
+
+  /** The auto-bet puts its next bet down, or stops and says why it couldn't. */
+  private autoBet(wallet: string, run: AutoRun) {
+    const why = this.place(run.peer, wallet, run.name, run.next, run.color, run.settings.target, true);
+    if (why === 'closed') return;
+    if (why === null) this.told(wallet, run);
+    else this.stopAuto(wallet, why === 'bad' ? 'limit' : why);
+  }
+
+  /** A bet settled for `won` (0: lost; any cash-out counts as a win): if their auto-bet put it down, it counts, the next bet's worked out, and it may stop there. */
+  private settled(p: Player, won: number) {
+    const run = this.autos.get(p.wallet);
+    if (!p.byAuto || !run?.on) return;
+    run.rounds++;
+    run.profit += won - p.bet;
+    run.next = nextAutoBet(run.settings, p.bet, won > 0);
+    const stop = autoStop(run.settings, run.rounds, run.profit);
+    if (stop) this.stopAuto(p.wallet, stop);
+    else if (run.next > MAX_BET) this.stopAuto(p.wallet, 'limit');
+    else this.told(p.wallet, run);
+  }
+
+  private told(wallet: string, run: AutoRun) {
+    this.onAuto?.(wallet, view(run));
   }
 
   /** `wallet` takes their bet back while the clock's still counting down. Says whether they had one. */
@@ -126,12 +208,15 @@ export class Crash {
     this.players = this.players.filter((o) => o !== p);
     this.bank.award(wallet, p.bet, 'crash.refund', { quiet: true });
     this.stats?.refund(wallet, p.bet);
+    // Taking back a bet the auto-bet put down stops it, or it'd only be back next round.
+    if (p.byAuto) this.stopAuto(wallet);
     return true;
   }
 
   /**
    * `wallet` cashes out: only while the multiplier's climbing, before it's gone past the crash point
-   * (as of now, by the office's clock), once. Pays bet × the multiplier now. Says what it paid, or 0.
+   * (as of now, by the office's clock), once. Pays bet × the multiplier now (or the bet's auto
+   * cash-out, if the multiplier's already past it). Says what it paid, or 0.
    */
   cashOut(wallet: string, peer?: string): number {
     if (this.phase !== 'running') return 0;
@@ -139,14 +224,34 @@ export class Crash {
     if (crashedBy(this.point, ms)) return 0;
     const p = this.players.find((o) => o.wallet === wallet);
     if (!p || p.out !== undefined) return 0;
+    if (peer) p.peer = peer;
     const m = multiplierAt(ms);
+    return this.pay(p, p.auto !== undefined && p.auto <= m ? p.auto : m);
+  }
+
+  /** `p` is cashed out at `m`: paid bet × m. Says what it paid. */
+  private pay(p: Player, m: number): number {
     const won = payout(p.bet, m);
     p.out = m;
     p.won = won;
-    if (peer) p.peer = peer;
-    this.bank.award(wallet, won, 'crash.win', { quiet: true });
-    this.stats?.settle(wallet, p.bet, won, m);
+    this.bank.award(p.wallet, won, 'crash.win', { quiet: true });
+    this.stats?.settle(p.wallet, p.bet, won, m);
+    this.settled(p, won);
     return won;
+  }
+
+  /**
+   * Everyone still in whose auto cash-out the multiplier's got to (`m`), and the round gets to (it's
+   * no higher than the crash point), is cashed out at exactly that. Says whether anyone was.
+   */
+  private autoCash(m: number): boolean {
+    let any = false;
+    for (const p of this.players) {
+      if (p.out !== undefined || p.auto === undefined || p.auto > m || p.auto > this.point) continue;
+      this.pay(p, p.auto);
+      any = true;
+    }
+    return any;
   }
 
   /** `peer` is a page of `wallet`'s (it opened the panel): their entry in the round is marked as theirs. Says whether there was one. */
@@ -163,15 +268,20 @@ export class Crash {
    * then: one timer, a few wake-ups a round, whether anyone's in the casino or not.
    */
   nextAt(): number {
-    if (this.phase === 'running') return this.startedAt + Math.ceil(timeFor(this.point + 0.01)) + 1;
-    return this.endsAt;
+    if (this.phase !== 'running') return this.endsAt;
+    let at = this.startedAt + Math.ceil(timeFor(this.point + 0.01)) + 1;
+    // Or an auto cash-out the round gets to, before that.
+    for (const p of this.players) if (p.out === undefined && p.auto !== undefined && p.auto <= this.point) at = Math.min(at, this.startedAt + Math.ceil(timeFor(p.auto)) + 1);
+    return at;
   }
 
   /**
    * The clock: when the betting time's up the round starts (and its crash point's picked), bets or
-   * not; when the multiplier's gone past it the round crashes (whoever's still in loses their bet);
+   * not; while it climbs, bets are cashed out at their auto cash-out as the multiplier gets there;
+   * when the multiplier's gone past the crash point the round crashes (whoever's still in loses their bet);
    * and a while after that bets open for the next round, after the series' last round for the first
-   * round of a new series, with new odds and a clean history. Says whether anything changed.
+   * round of a new series, with new odds and a clean history, and every auto-bet that's on puts its
+   * next bet down. Says whether anything changed.
    */
   tick(): boolean {
     const now = this.now();
@@ -183,7 +293,10 @@ export class Crash {
       if (crashedBy(this.point, 0)) this.crashed(now);
       return true;
     }
-    if (this.phase === 'running' && crashedBy(this.point, now - this.startedAt)) {
+    if (this.phase === 'running') {
+      const ms = now - this.startedAt;
+      const paid = this.autoCash(multiplierAt(ms));
+      if (!crashedBy(this.point, ms)) return paid;
       this.crashed(now);
       return true;
     }
@@ -198,6 +311,7 @@ export class Crash {
         this.odds = this.draw();
         this.history = [];
       } else this.of++;
+      for (const [wallet, run] of this.autos) if (run.on) this.autoBet(wallet, run);
       return true;
     }
     return false;
@@ -213,13 +327,25 @@ export class Crash {
       }
     }
     this.players = [];
+    for (const run of this.autos.values()) run.on = false;
   }
 
   private crashed(now: number) {
+    // Auto cash-outs the round got to are paid, however late the clock got here.
+    this.autoCash(this.point);
     this.phase = 'crashed';
     this.endsAt = now + CRASHED_TIME;
     this.history = [this.point, ...this.history].slice(0, HISTORY);
     // Whoever's still in lost their bet.
-    for (const p of this.players) if (p.out === undefined) this.stats?.settle(p.wallet, p.bet, 0, this.point);
+    for (const p of this.players) {
+      if (p.out !== undefined) continue;
+      this.stats?.settle(p.wallet, p.bet, 0, this.point);
+      this.settled(p, 0);
+    }
   }
+}
+
+/** An auto-bet without who it bets as: what its owner's pages are told. */
+function view({ peer: _, name: __, color: ___, ...run }: AutoRun): CrashAutoState {
+  return structuredClone(run);
 }

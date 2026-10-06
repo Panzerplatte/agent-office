@@ -15,10 +15,10 @@ import { emptyPoker, type PokerState } from '../shared/poker';
 import { emptyBlackjack, type BlackjackState } from '../shared/blackjack';
 import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } from '../shared/onlineblackjack';
 import { emptyRoulette, type RouletteState } from '../shared/roulette';
-import { emptyCrash, emptyCrashBoard, type CrashBoard, type CrashState } from '../shared/crash';
+import { emptyCrash, emptyCrashBoard, type CrashAutoState, type CrashBoard, type CrashState } from '../shared/crash';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -221,6 +221,8 @@ class Store {
   crashAt = 0;
   /** The Crash scoreboard next to the screen: the most wagered and the most won, all-time (your own rows marked). */
   crashBoard: CrashBoard = emptyCrashBoard();
+  /** Your Crash auto-bet, as the office last said: running, or the last one and why it stopped. */
+  crashAuto: CrashAutoState | null = null;
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -314,7 +316,8 @@ class Store {
     this.crash = v.crash ?? emptyCrash();
     this.crashAt = performance.now();
     this.crashBoard = v.crashBoard ?? emptyCrashBoard();
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard'] as Topic[]) this.emit(t);
+    this.crashAuto = v.crashAuto ?? null;
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard', 'crashAuto'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -509,6 +512,10 @@ class Store {
       case 'crash.board':
         this.crashBoard = msg.board;
         this.emit('crashBoard');
+        break;
+      case 'crash.auto':
+        this.crashAuto = msg.auto;
+        this.emit('crashAuto');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

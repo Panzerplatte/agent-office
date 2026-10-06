@@ -153,6 +153,8 @@ export interface CrashPlayer {
   bet: number;
   out?: number;
   won?: number;
+  /** Where the bet cashes out by itself (the office does it, at exactly this), if it was set. */
+  auto?: number;
 }
 
 /**
@@ -257,4 +259,86 @@ export function crashRanking<R extends CrashBoardRow>(rows: readonly R[], top = 
     wagered: rows.filter((r) => r.wagered > 0).sort((a, b) => b.wagered - a.wagered || tie(a, b)).slice(0, top),
     won: rows.filter((r) => r.net > 0).sort((a, b) => b.net - a.net || tie(a, b)).slice(0, top),
   };
+}
+
+// ---- Auto cash-out and auto-bet ---------------------------------------------------------------------
+
+/** The lowest and highest multiplier a bet can be cashed out at by itself (the highest any series goes). */
+export const AUTO_MIN = 1.01;
+export const AUTO_MAX = SERIES_LIMITS.max[1];
+
+/** Whether `m` can be an auto cash-out target: a multiplier to the hundredth, from AUTO_MIN up to AUTO_MAX. */
+export function targetOk(m: unknown): m is number {
+  return typeof m === 'number' && Number.isFinite(m) && m >= AUTO_MIN && m <= AUTO_MAX && Math.abs(Math.round(m * 100) - m * 100) < 1e-6;
+}
+
+/** The most a win or a loss can raise the next auto-bet by (%), and the most rounds a stop can be set at. */
+export const AUTO_RAISE_MAX = 1000;
+export const AUTO_ROUNDS_MAX = 10_000;
+
+/**
+ * Auto-bet ("Auto-Start"): the office bets `base` in every betting window, round after round, cashed
+ * out at `target` (if set; otherwise it's up to you, every round). After a loss the next bet is the
+ * last one raised by `onLoss` % (0: back to `base`), after a win by `onWin` %. It stops by itself after
+ * `rounds` rounds, once it's `profit` up, or `loss` down (each one only if set), and whenever the
+ * next bet won't fit (more than you have, or than MAX_BET).
+ */
+export interface CrashAutoBet {
+  base: number;
+  target?: number;
+  onLoss: number;
+  onWin: number;
+  rounds?: number;
+  profit?: number;
+  loss?: number;
+}
+
+/** Why an auto-bet stopped: you stopped it (or took the bet back), a stop condition, the next bet didn't fit, the round was full, or you left the casino. */
+export type CrashAutoStop = 'user' | 'rounds' | 'profit' | 'loss' | 'balance' | 'limit' | 'full' | 'left';
+
+/** An auto-bet as its owner's pages see it: the settings, how far it's got (rounds settled, profit so far), the next bet, and if it's over, why. */
+export interface CrashAutoState {
+  on: boolean;
+  settings: CrashAutoBet;
+  rounds: number;
+  profit: number;
+  next: number;
+  stopped?: CrashAutoStop;
+}
+
+const whole = (n: unknown, lo: number, hi: number): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= lo && n <= hi;
+
+/** Auto-bet settings from a page, checked: null unless every field's within bounds (an optional one can be left out). */
+export function autoBetOk(v: unknown): CrashAutoBet | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (!betOk(o.base) || !whole(o.onLoss, 0, AUTO_RAISE_MAX) || !whole(o.onWin, 0, AUTO_RAISE_MAX)) return null;
+  if (o.target !== undefined && !targetOk(o.target)) return null;
+  if (o.rounds !== undefined && !whole(o.rounds, 1, AUTO_ROUNDS_MAX)) return null;
+  for (const k of ['profit', 'loss'] as const) if (o[k] !== undefined && !whole(o[k], 1, Number.MAX_SAFE_INTEGER)) return null;
+  const s: CrashAutoBet = { base: o.base, onLoss: o.onLoss, onWin: o.onWin };
+  if (o.target !== undefined) s.target = o.target as number;
+  if (o.rounds !== undefined) s.rounds = o.rounds as number;
+  if (o.profit !== undefined) s.profit = o.profit as number;
+  if (o.loss !== undefined) s.loss = o.loss as number;
+  return s;
+}
+
+/**
+ * The auto-bet's next bet, after a round it bet `last` in and won (or lost): raised by the setting's
+ * percentage, rounded up to the whole chip (so a raise is always at least 1), or back to the base.
+ * It can come out over MAX_BET: then the auto-bet stops (see autoStop).
+ */
+export function nextAutoBet(s: CrashAutoBet, last: number, won: boolean): number {
+  const pct = won ? s.onWin : s.onLoss;
+  if (!pct) return s.base;
+  return Math.ceil((last * (100 + pct)) / 100 - 1e-9);
+}
+
+/** Whether an auto-bet `rounds` rounds and `profit` chips in has hit one of its stops, and which. */
+export function autoStop(s: CrashAutoBet, rounds: number, profit: number): 'rounds' | 'profit' | 'loss' | null {
+  if (s.profit !== undefined && profit >= s.profit) return 'profit';
+  if (s.loss !== undefined && -profit >= s.loss) return 'loss';
+  if (s.rounds !== undefined && rounds >= s.rounds) return 'rounds';
+  return null;
 }

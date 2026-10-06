@@ -314,7 +314,19 @@ export async function startServer(cfg: Config) {
       }, 0);
     },
   });
-  const crash = new Crash(chips, { stats: crashStats });
+  const crash = new Crash(chips, {
+    stats: crashStats,
+    // An auto-bet's news goes to its owner's pages in the casino.
+    onAuto: (wallet, auto) => {
+      for (const o of clients.values()) if (o.chips === wallet && o.peer.floor === CASINO) sendTo(o, { t: 'crash.auto', auto });
+    },
+  });
+  /** `c` is leaving the casino (or the office): with no other page of theirs left down there, their Crash auto-bet stops. */
+  const crashAutoLeft = (c: Client) => {
+    if (c.peer.floor !== CASINO) return;
+    if ([...clients.values()].some((o) => o !== c && o.chips === c.chips && o.peer.floor === CASINO)) return;
+    if (crash.stopAuto(c.chips, 'left')) crashChanged();
+  };
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -692,7 +704,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), jukebox: casinoJukebox.state() });
+  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
     // And what's on the lounge TV, which only sends a frame when the page changes.
@@ -1174,6 +1186,8 @@ export async function startServer(cfg: Config) {
       handleMessage(client, msg);
     });
     ws.on('close', () => {
+      // Offline (this page, down in the casino): their Crash auto-bet stops, unless another page of theirs is still there.
+      crashAutoLeft(client);
       clients.delete(id);
       chips.topCheck(); // offline now, on the leaderboard
       if (client.whiteboard) drawingChanged(floorOf(client));
@@ -1432,6 +1446,8 @@ export async function startServer(cfg: Config) {
     const onlinebjLeft = onlinebj.away(c.id);
     // Out of the casino: their place at the roulette table (and their chips on it) waits for them.
     const rouletteLeft = roulette.away(c.id);
+    // Out of the casino: their Crash auto-bet stops (unless another page of theirs is still down there).
+    crashAutoLeft(c);
     c.attached.clear();
     c.typingAt.clear();
     c.stale.clear();
@@ -1915,13 +1931,21 @@ export async function startServer(cfg: Config) {
         else sendTo(c, { t: 'roulette', roulette: roulette.state() });
         break;
       }
+      case 'crash.autobet': {
+        if (c.peer.floor !== CASINO) break;
+        const changed = msg.auto ? crash.startAuto(c.id, c.chips, c.peer.name, msg.auto, c.peer.color) : crash.stopAuto(c.chips);
+        // Settings that don't check out: their page hears how it really is.
+        if (!changed) sendTo(c, { t: 'crash.auto', auto: crash.autoState(c.chips) });
+        crashChanged();
+        break;
+      }
       case 'crash.bet':
       case 'crash.cancel':
       case 'crash.cashout':
       case 'crash.look': {
         if (c.peer.floor !== CASINO) break;
         const changed =
-          msg.t === 'crash.bet' ? crash.bet(c.id, c.chips, c.peer.name, msg.amount, c.peer.color)
+          msg.t === 'crash.bet' ? crash.bet(c.id, c.chips, c.peer.name, msg.amount, c.peer.color, msg.auto)
           : msg.t === 'crash.cancel' ? crash.cancel(c.chips)
           : msg.t === 'crash.cashout' ? crash.cashOut(c.chips, c.id) > 0
           : crash.look(c.id, c.chips);

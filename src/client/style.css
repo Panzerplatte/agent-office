@@ -451,7 +451,6 @@ button { font-family: inherit; }
 .backdrop.crash-backdrop { background: transparent; place-items: end end; pointer-events: none; }
 .crash-backdrop > .modal { pointer-events: auto; }
 .modal.crash-panel { width: min(420px, 100%); }
-.crash-panel footer .grow { font-size: 11px; }
 .crash-panel .body { display: flex; flex-direction: column; gap: 10px; }
 .crash-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .crash-status { font-weight: 800; }
@@ -467,6 +466,18 @@ button { font-family: inherit; }
 .crash-row input { flex: 1; min-width: 0; font: inherit; font-size: 15px; border: 3px solid var(--ink); border-radius: 12px; padding: 8px 10px; background: #fff; }
 .crash-cash { font-size: 18px; padding: 12px; }
 .crash-panel .setting-note { margin: 0; }
+.crash-target { font-size: 13px; font-weight: 700; }
+.crash-target > span:first-child { white-space: nowrap; flex: 1; }
+.crash-row.crash-target input { flex: 0 0 96px; padding: 5px 8px; font-size: 14px; }
+.crash-auto { border: 2px solid var(--ink); border-radius: 12px; padding: 6px 10px; font-size: 13px; font-weight: 700; }
+.crash-auto summary { cursor: pointer; font-weight: 800; }
+.crash-auto-state { color: var(--muted); font-variant-numeric: tabular-nums; }
+.crash-auto[open] summary { margin-bottom: 8px; }
+.crash-auto-grid { display: grid; grid-template-columns: auto 1fr 64px; gap: 6px; align-items: center; }
+.crash-auto-stops { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 6px; align-items: center; margin: 6px 0 8px; }
+.crash-auto input, .crash-auto select { min-width: 0; font: inherit; font-weight: 600; border: 2px solid var(--ink); border-radius: 8px; padding: 4px 6px; background: #fff; }
+.crash-auto > .btn { width: 100%; }
+.crash-auto .setting-note { margin-top: 6px; }
 /* At the roulette table (casino): the betting layout at the bottom, the clock and the last numbers over it, the chips under it. */
 .roulette { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); padding: 8px 12px 10px; display: grid; gap: 6px; font-size: 13px; font-weight: 800; }
 .rl-top { display: flex; align-items: center; gap: 10px; }
