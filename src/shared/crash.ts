@@ -3,8 +3,9 @@
 // faster and faster, until it crashes at a point the office picked with a cryptographic random
 // source when the round began (and tells nobody until it's happened). Cash out before that and you
 // win your bet × the multiplier you got out at; still in when it crashes, and the bet's lost.
-// Everyone in the casino sees the same curve, the same crash and who got out where. Here are the
-// rules: the curve, the crash point's odds, what a cash-out pays, and what a round looks like.
+// Everyone in the casino sees the same curve, the same crash and who got out where. It runs nonstop,
+// in series of 25 rounds, each series with odds of its own. Here are the rules: the curve, the crash
+// point's odds, the series, what a cash-out pays, and what a round looks like.
 
 // ---- The curve --------------------------------------------------------------------------------------
 
@@ -23,21 +24,32 @@ export function timeFor(m: number): number {
 
 // ---- The crash point --------------------------------------------------------------------------------
 
-/** What every round returns in the long run, wherever you cash out: the house keeps 1 %. */
+/** What every round returns in the long run, wherever you cash out, at the usual odds: the house keeps 1 %. */
 export const HOUSE = 0.99;
-/** The highest a round can go: at this the multiplier crashes whatever. */
+/** The highest a round can go at the usual odds: at this the multiplier crashes whatever. */
 export const MAX_CRASH = 100;
 
 /**
- * Where a round crashes, from `r`, a uniform random number in [0, 1): 0.99 / (1 − r), down to the
- * hundredth, between 1.00 (an instant crash, about 2 rounds in 100, when nobody gets out) and
- * MAX_CRASH. It gets to at least `m` (any m from 1.01 up to MAX_CRASH) with a chance of 0.99 / m, so
- * cashing out at m pays m × that in the long run: 0.99 of the bet, wherever you get out.
+ * The odds of a series of rounds (see CYCLE): what comes back in the long run (`back`, so the house
+ * keeps 1 − back) and the highest a round can go (`max`). Every series draws its own (see
+ * drawSeries), within SERIES_LIMITS.
  */
-export function crashPoint(r: number): number {
+export interface CrashOdds {
+  back: number;
+  max: number;
+}
+
+/**
+ * Where a round crashes, from `r`, a uniform random number in [0, 1): back / (1 − r), down to the
+ * hundredth, between 1.00 (an instant crash, about 2 rounds in 100, when nobody gets out) and `max`.
+ * It gets to at least `m` (any m from 1.01 up to `max`) with a chance of back / m, so cashing out at m
+ * pays m × that in the long run: `back` of the bet, wherever you get out. This 1 / m shape is the only
+ * one that's the same deal at every cash-out point, so a series changes `back` and `max`, not the shape.
+ */
+export function crashPoint(r: number, odds: CrashOdds = { back: HOUSE, max: MAX_CRASH }): number {
   if (!(r >= 0 && r < 1)) return 1;
-  const m = Math.floor((100 * HOUSE) / (1 - r) + 1e-9) / 100;
-  return Math.min(MAX_CRASH, Math.max(1, m));
+  const m = Math.floor((100 * odds.back) / (1 - r) + 1e-9) / 100;
+  return Math.min(odds.max, Math.max(1, m));
 }
 
 /**
@@ -49,10 +61,42 @@ export function crashedBy(crash: number, ms: number): boolean {
 }
 
 /** The chance a round gets to at least `m` before it crashes (so a cash-out at `m` can happen). */
-export function chanceToReach(m: number): number {
+export function chanceToReach(m: number, odds: CrashOdds = { back: HOUSE, max: MAX_CRASH }): number {
   if (m <= 1) return 1;
-  if (m > MAX_CRASH) return 0;
-  return Math.min(1, HOUSE / m);
+  if (m > odds.max) return 0;
+  return Math.min(1, odds.back / m);
+}
+
+// ---- Series of rounds -------------------------------------------------------------------------------
+
+/** Rounds in a series: after the last one the game starts over (round 1, no history) with new odds. */
+export const CYCLE = 25;
+
+/**
+ * What a series' odds can be: the house keeps between 0.8 and 1.2 % (so about 1 %, and the chance of an
+ * instant crash at 1.00× is between about 1.8 and 2.2 in 100), and a round goes up to between 50×
+ * and 1000×.
+ */
+export const SERIES_LIMITS = { back: [0.988, 0.992], max: [50, 1000] } as const;
+
+/** The caps a series can have (between the limits, as round numbers), one of which it draws evenly in log steps. */
+export const SERIES_MAXES = [50, 75, 100, 150, 200, 250, 500, 750, 1000] as const;
+
+/**
+ * A series' odds, from `r1` and `r2`, uniform random numbers in [0, 1): what comes back, to the tenth
+ * of a percent, and the cap, both always within SERIES_LIMITS (nonsense in gives the usual odds).
+ */
+export function drawSeries(r1: number, r2: number): CrashOdds {
+  if (!(r1 >= 0 && r1 < 1 && r2 >= 0 && r2 < 1)) return { back: HOUSE, max: MAX_CRASH };
+  const [lo, hi] = SERIES_LIMITS.back;
+  const steps = Math.round((hi - lo) * 1000);
+  const back = Math.round((lo + Math.floor(r1 * (steps + 1)) / 1000) * 1000) / 1000;
+  return { back, max: SERIES_MAXES[Math.floor(r2 * SERIES_MAXES.length)] };
+}
+
+/** Whether `o` is within SERIES_LIMITS. */
+export function oddsOk(o: CrashOdds): boolean {
+  return o.back >= SERIES_LIMITS.back[0] && o.back <= SERIES_LIMITS.back[1] && o.max >= SERIES_LIMITS.max[0] && o.max <= SERIES_LIMITS.max[1];
 }
 
 // ---- Bets and payouts -------------------------------------------------------------------------------
@@ -81,18 +125,18 @@ export function multText(m: number): string {
 // ---- A round ----------------------------------------------------------------------------------------
 
 /**
- * Where the round is: nobody's bet yet (`idle`), bets going down while the clock counts down
- * (`betting`, from the first bet), the multiplier climbing (`running`: cash out now), and the crash
- * (`crashed`), shown a while before the next round can start.
+ * Where the round is: bets going down while the clock counts down (`betting`), the multiplier
+ * climbing (`running`: cash out now), and the crash (`crashed`), shown a while before bets open for
+ * the next. It never stops: the next round's clock starts after every crash, bets or not.
  */
-export type CrashPhase = 'idle' | 'betting' | 'running' | 'crashed';
+export type CrashPhase = 'betting' | 'running' | 'crashed';
 
-/** How long bets are taken for, from the first bet down (ms). */
+/** How long bets are taken for before every round (ms). */
 export const BET_TIME = 10_000;
-/** How long the crash stays up before the next round can start (ms). */
+/** How long the crash stays up before bets open for the next round (ms). */
 export const CRASHED_TIME = 4_000;
-/** Crash points the screen keeps, newest first. */
-export const HISTORY = 12;
+/** Crash points the screen keeps, newest first: the whole series. */
+export const HISTORY = CYCLE;
 /** How many people can be in one round. */
 export const MAX_PLAYERS = 24;
 
@@ -115,20 +159,26 @@ export interface CrashPlayer {
  * The round, as every page in the casino sees it. `left` is how long the betting clock (or the crash
  * on the screen) has to go, `elapsed` how long the multiplier's been climbing (ms), both as of when
  * the office sent it; a page works out the multiplier from there with multiplierAt. `crash` is where
- * it crashed, only once it has: until then nobody but the office knows.
+ * it crashed, only once it has: until then nobody but the office knows. `round` counts every round
+ * since the office started; `series` is which series of CYCLE rounds this is, `of` which round of it
+ * (1 to CYCLE), and `odds` the series' odds (not its crash points: those are only told one by one,
+ * as they happen). `history` is this series' crash points so far, newest first.
  */
 export interface CrashState {
   phase: CrashPhase;
   left: number;
   elapsed: number;
   round: number;
+  series: number;
+  of: number;
+  odds: CrashOdds;
   crash: number | null;
   players: CrashPlayer[];
   history: number[];
 }
 
 export function emptyCrash(): CrashState {
-  return { phase: 'idle', left: 0, elapsed: 0, round: 0, crash: null, players: [], history: [] };
+  return { phase: 'betting', left: 0, elapsed: 0, round: 0, series: 0, of: 0, odds: { back: HOUSE, max: MAX_CRASH }, crash: null, players: [], history: [] };
 }
 
 /** The multiplier on the screen `since` ms after `s` arrived: climbing while it's running, the crash point once crashed, else 1. */

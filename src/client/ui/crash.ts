@@ -1,10 +1,11 @@
-import { BET_CHOICES, MAX_BET, MIN_BET, multText, payout, shownMultiplier, type CrashPlayer, type CrashState } from '../../shared/crash';
+import { BET_CHOICES, CYCLE, MAX_BET, MIN_BET, multText, payout, shownMultiplier, type CrashPlayer, type CrashState } from '../../shared/crash';
 import { t } from '../i18n';
+import { backText } from '../world/crashscreen';
 import { h, openModal, type Modal } from './dom';
 
 // The panel for Crash, opened with E at the screen on the casino's wall: pick a bet and put it down
-// (Enter), take it back while the clock's still running, and cash out (Space, or the big button)
-// while the multiplier climbs. It sits in the bottom right corner, with no dimming, so the wall
+// (Enter) while the clock counts down after every crash, take it back before it runs out, and cash out
+// (Space, or the big button) while the multiplier climbs. The header says which round of the series it is. It sits in the bottom right corner, with no dimming, so the wall
 // screen stays in view.
 
 export interface CrashPanelHooks {
@@ -41,6 +42,8 @@ export class CrashPanel {
   private amount = savedAmount();
   private els: {
     status: HTMLElement;
+    round: HTMLElement;
+    footer: HTMLElement;
     mult: HTMLElement;
     balance: HTMLElement;
     input: HTMLInputElement;
@@ -62,6 +65,8 @@ export class CrashPanel {
   show() {
     if (this.modal) return;
     const status = h('div.crash-status');
+    const round = h('span.crash-round');
+    const footer = h('span.grow');
     const mult = h('div.crash-mult');
     const balance = h('div.crash-balance');
     const input = h('input', { type: 'number', min: String(MIN_BET), max: String(MAX_BET), step: '1', value: String(this.amount), 'aria-label': t('menus.crashAmount') }) as HTMLInputElement;
@@ -78,7 +83,7 @@ export class CrashPanel {
     const el = h(
       'div.modal.crash-panel',
       { role: 'dialog', 'aria-label': t('menus.crash') },
-      h('header', {}, h('h2', {}, `🚀 ${t('menus.crash')}`)),
+      h('header', {}, h('h2', {}, `🚀 ${t('menus.crash')} `, round)),
       h(
         'div.body',
         {},
@@ -88,9 +93,9 @@ export class CrashPanel {
         cash,
         note,
       ),
-      h('footer', {}, h('span.grow', {}, t('menus.crashFooter', { max: MAX_BET.toLocaleString() }))),
+      h('footer', {}, footer),
     );
-    this.els = { status, mult, balance, input, chips, bet, cancel, cash, note };
+    this.els = { status, round, footer, mult, balance, input, chips, bet, cancel, cash, note };
     this.drawn = '';
     window.addEventListener('keydown', this.onKey, true);
     this.modal = openModal(el, {
@@ -119,22 +124,23 @@ export class CrashPanel {
     const m = shownMultiplier(s, since);
     const balance = this.hooks.balance();
     const left = s.phase === 'betting' ? Math.max(0, s.left - since) : 0;
-    const key = [s.phase, s.round, m, Math.ceil(left / 100), me?.bet, me?.out, balance, this.amount, s.players.length].join('|');
+    const key = [s.phase, s.round, s.of, s.odds.back, s.odds.max, m, Math.ceil(left / 100), me?.bet, me?.out, balance, this.amount, s.players.length].join('|');
     if (key === this.drawn) return;
     this.drawn = key;
 
+    els.round.textContent = s.of ? `· ${t('menus.crashRound', { n: s.of, of: CYCLE })}${s.of === 1 && s.phase === 'betting' ? ` · ${t('menus.crashNewSeries')}` : ''}` : '';
+    els.footer.textContent = t('menus.crashFooter', { max: MAX_BET.toLocaleString(), cycle: CYCLE, back: backText(s.odds), cap: `${s.odds.max}×` });
     els.status.textContent =
-      s.phase === 'idle' ? t('menus.crashIdle')
-      : s.phase === 'betting' ? t('menus.crashBetting', { s: (left / 1000).toFixed(1) })
+      s.phase === 'betting' ? t('menus.crashBetting', { s: (left / 1000).toFixed(1) })
       : s.phase === 'running' ? t('menus.crashRunning')
       : t('menus.crashCrashedAt', { m: multText(s.crash ?? m) });
     // The multiplier once it's off; before that, the clock.
-    els.mult.textContent = s.phase === 'betting' ? `${(left / 1000).toFixed(1)} s` : s.phase === 'idle' ? '—' : multText(m);
+    els.mult.textContent = s.phase === 'betting' ? `${(left / 1000).toFixed(1)} s` : multText(m);
     els.mult.classList.toggle('crashed', s.phase === 'crashed');
-    els.mult.classList.toggle('waiting', s.phase === 'betting' || s.phase === 'idle');
+    els.mult.classList.toggle('waiting', s.phase === 'betting');
     els.balance.textContent = t('menus.crashBalance', { n: balance.toLocaleString() });
 
-    const canBet = (s.phase === 'idle' || s.phase === 'betting') && !me;
+    const canBet = s.phase === 'betting' && left > 0 && !me;
     const amount = Math.min(this.amount, MAX_BET);
     els.bet.textContent = t('menus.crashBet', { n: amount.toLocaleString() });
     els.bet.disabled = !canBet || amount > balance || amount < MIN_BET;
@@ -155,7 +161,7 @@ export class CrashPanel {
 
     els.note.textContent =
       me && s.phase === 'crashed' && me.out === undefined ? t('menus.crashYouLost', { n: me.bet.toLocaleString() })
-      : me && (s.phase === 'betting' || s.phase === 'idle') ? t('menus.crashYouAreIn', { n: me.bet.toLocaleString() })
+      : me && s.phase === 'betting' ? t('menus.crashYouAreIn', { n: me.bet.toLocaleString() })
       : me && s.phase === 'running' && me.out === undefined ? t('menus.crashSpace')
       : amount > balance && canBet ? t('menus.crashTooMuch')
       : t('menus.crashRules');

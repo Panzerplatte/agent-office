@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { BET_TIME, CRASHED_TIME, HISTORY, MAX_PLAYERS, betOk, crashPoint, crashedBy, multiplierAt, payout, type CrashPhase, type CrashPlayer, type CrashState } from '../shared/crash.js';
+import { BET_TIME, CRASHED_TIME, CYCLE, HISTORY, MAX_PLAYERS, betOk, crashPoint, crashedBy, drawSeries, multiplierAt, payout, timeFor, type CrashOdds, type CrashPhase, type CrashPlayer, type CrashState } from '../shared/crash.js';
 
 /** What the game needs of the chips bank (server/chips.ts): taking a stake, and paying out. */
 export interface CrashBank {
@@ -9,8 +9,10 @@ export interface CrashBank {
 
 export interface CrashOptions {
   now?: () => number;
-  /** Where the next round crashes: from a cryptographically random number unless a test says otherwise. */
-  point?: () => number;
+  /** Where the next round crashes, at the series' odds: from a cryptographically random number unless a test says otherwise. */
+  point?: (odds: CrashOdds) => number;
+  /** A new series' odds: drawn from cryptographically random numbers unless a test says otherwise. */
+  series?: () => CrashOdds;
   /** Who's bet what and won what, all-time, for the scoreboard (server/crashstats.ts): told when a bet goes down, goes back, and settles. */
   stats?: CrashTally;
 }
@@ -35,28 +37,35 @@ function random(): number {
 }
 
 /**
- * The casino's Crash game, one for the whole building. The office runs every round: it takes each
- * bet (through the chips bank, which won't take more than you have), counts the betting clock down,
- * picks where the round crashes when it starts (and keeps it to itself), and pays every cash-out
- * there and then at the multiplier the office's own clock says. Pages only say "bet this" and "cash
+ * The casino's Crash game, one for the whole building. The office runs every round, nonstop: it
+ * opens bets for BET_TIME after every crash (bets or not), takes each bet (through the chips bank,
+ * which won't take more than you have), picks where the round crashes when it starts, at the series'
+ * odds (and keeps it to itself), and pays every cash-out there and then at the multiplier the
+ * office's own clock says. Every CYCLE rounds a new series starts: round 1 again, the history wiped,
+ * and new odds drawn (see drawSeries). Pages only say "bet this" and "cash
  * me out"; when they arrive is what counts, so a cash-out that gets here after the crash gets nothing.
  *
  * Bets are someone's (`wallet`), not their page's: a reload or walking off doesn't lose a bet, and
  * any page of theirs in the casino can cash it out.
  */
 export class Crash {
-  private phase: CrashPhase = 'idle';
+  private phase: CrashPhase = 'betting';
   /** When the betting clock (or the crash on the screen) runs out, and when the multiplier started climbing (ms). */
   private endsAt = 0;
   private startedAt = 0;
-  private round = 0;
+  private round = 1;
+  /** Which series this is, which round of it (1 to CYCLE), and its odds. */
+  private series = 1;
+  private of = 1;
+  private odds: CrashOdds;
   /** Where this round crashes: picked as it starts, only told once it has. */
   private point = 1;
   private players: Player[] = [];
   private history: number[] = [];
   private ids = 0;
   private now: () => number;
-  private pick: () => number;
+  private pick: (odds: CrashOdds) => number;
+  private draw: () => CrashOdds;
   private stats: CrashTally | undefined;
 
   constructor(
@@ -64,8 +73,12 @@ export class Crash {
     opts: CrashOptions = {},
   ) {
     this.now = opts.now ?? Date.now;
-    this.pick = opts.point ?? (() => crashPoint(random()));
+    this.pick = opts.point ?? ((odds) => crashPoint(random(), odds));
     this.stats = opts.stats;
+    this.draw = opts.series ?? (() => drawSeries(random(), random()));
+    // The first series, and bets open for its first round straight away.
+    this.odds = this.draw();
+    this.endsAt = this.now() + BET_TIME;
   }
 
   /** The round as it is now, for every page in the casino: nobody's wallet, and never the crash point before the crash. */
@@ -76,6 +89,9 @@ export class Crash {
       left: this.phase === 'betting' || this.phase === 'crashed' ? Math.max(0, this.endsAt - now) : 0,
       elapsed: this.phase === 'running' ? Math.max(0, now - this.startedAt) : 0,
       round: this.round,
+      series: this.series,
+      of: this.of,
+      odds: this.odds,
       crash: this.phase === 'crashed' ? this.point : null,
       players: this.players.map(({ wallet: _, ...p }) => p),
       history: this.history,
@@ -90,22 +106,15 @@ export class Crash {
   /**
    * `wallet` (on page `peer`, called `name`) bets `amount` on the next round: only while bets are
    * taken (no round climbing or just crashed), once a round, a whole number within the limits (up to
-   * MAX_BET), and only chips they have: the bank takes them there and then. The first bet starts the
-   * clock. Says whether it went down.
+   * MAX_BET), and only chips they have: the bank takes them there and then. Says whether it went down.
    */
   bet(peer: string, wallet: string, name: string, amount: unknown, color?: string): boolean {
     if (!betOk(amount)) return false;
-    if (this.phase !== 'idle' && this.phase !== 'betting') return false;
-    if (this.phase === 'betting' && this.now() >= this.endsAt) return false;
+    if (this.phase !== 'betting' || this.now() >= this.endsAt) return false;
     if (this.players.some((p) => p.wallet === wallet) || this.players.length >= MAX_PLAYERS) return false;
     if (!this.bank.bet(wallet, amount, 'crash.bet', { quiet: true })) return false;
     this.players.push({ id: `c${++this.ids}`, name: name.slice(0, 24), ...(color ? { color } : {}), peer, bet: amount, wallet });
     this.stats?.bet(wallet, amount, name, color);
-    if (this.phase === 'idle') {
-      this.phase = 'betting';
-      this.endsAt = this.now() + BET_TIME;
-      this.round++;
-    }
     return true;
   }
 
@@ -117,8 +126,6 @@ export class Crash {
     this.players = this.players.filter((o) => o !== p);
     this.bank.award(wallet, p.bet, 'crash.refund', { quiet: true });
     this.stats?.refund(wallet, p.bet);
-    // The last bet taken back: no round after all.
-    if (!this.players.length) this.phase = 'idle';
     return true;
   }
 
@@ -151,16 +158,27 @@ export class Crash {
   }
 
   /**
-   * The clock: when the betting time's up the round starts (and its crash point's picked), when the
-   * multiplier's gone past it the round crashes (whoever's still in loses their bet), and a while
-   * after that the screen's cleared for the next. Says whether anything changed.
+   * When tick() next has something to do (ms, on the office's clock): the betting clock or the crash
+   * on the screen running out, or the multiplier going past the crash point. The office sleeps till
+   * then: one timer, a few wake-ups a round, whether anyone's in the casino or not.
+   */
+  nextAt(): number {
+    if (this.phase === 'running') return this.startedAt + Math.ceil(timeFor(this.point + 0.01)) + 1;
+    return this.endsAt;
+  }
+
+  /**
+   * The clock: when the betting time's up the round starts (and its crash point's picked), bets or
+   * not; when the multiplier's gone past it the round crashes (whoever's still in loses their bet);
+   * and a while after that bets open for the next round, after the series' last round for the first
+   * round of a new series, with new odds and a clean history. Says whether anything changed.
    */
   tick(): boolean {
     const now = this.now();
     if (this.phase === 'betting' && now >= this.endsAt) {
       this.phase = 'running';
       this.startedAt = now;
-      this.point = this.pick();
+      this.point = this.pick(this.odds);
       // An instant crash happens there and then.
       if (crashedBy(this.point, 0)) this.crashed(now);
       return true;
@@ -170,8 +188,16 @@ export class Crash {
       return true;
     }
     if (this.phase === 'crashed' && now >= this.endsAt) {
-      this.phase = 'idle';
+      this.phase = 'betting';
+      this.endsAt = now + BET_TIME;
       this.players = [];
+      this.round++;
+      if (this.of >= CYCLE) {
+        this.series++;
+        this.of = 1;
+        this.odds = this.draw();
+        this.history = [];
+      } else this.of++;
       return true;
     }
     return false;
@@ -187,7 +213,6 @@ export class Crash {
       }
     }
     this.players = [];
-    this.phase = 'idle';
   }
 
   private crashed(now: number) {

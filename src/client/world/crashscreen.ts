@@ -1,15 +1,16 @@
 import * as THREE from 'three';
 import { CRASH_SCREEN } from '../../shared/casino';
-import { BET_TIME, GROWTH, multText, shownMultiplier, timeFor, type CrashState } from '../../shared/crash';
-import { t } from '../i18n';
+import { BET_TIME, CYCLE, GROWTH, multText, shownMultiplier, timeFor, type CrashOdds, type CrashState } from '../../shared/crash';
+import { locale, t } from '../i18n';
 import type { Interactable } from './office';
 import { mesh, toon } from './toon';
 
 // The Crash screen on the casino's west wall (CRASH_SCREEN): a big canvas everyone down there
-// watches. While bets are open it counts down and lists who's in; once the round's off the curve
+// watches. The game never stops: after every crash bets open and it counts down and lists who's in
+// (with a "new series" banner at the first round of a series); once the round's off the curve
 // climbs with the multiplier in big figures over it, a dot on the curve with the name of everyone who
 // cashed out where they did, and when it crashes the curve goes red with where it crashed. Along the
-// top, the last crash points.
+// top, the series' crash points so far, and in the corner which round of the series it is.
 
 const W = 1280;
 const H = Math.round((W * CRASH_SCREEN.height) / CRASH_SCREEN.width);
@@ -32,6 +33,11 @@ export interface CrashScreen {
 /** A multiplier's colour: grey near 1, then green, gold, and hot pink for the big ones. */
 export function multColor(m: number): string {
   return m < 1.5 ? '#c9c1d6' : m < 2 ? '#7ae582' : m < 10 ? '#ffd166' : '#ff5ca8';
+}
+
+/** What a series pays back in the long run, as a percentage: "98.9" (or "98,9" in German). */
+export function backText(odds: CrashOdds): string {
+  return (odds.back * 100).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 /** Builds it on the casino's wall: the screen, its frame, and somewhere to press E. */
@@ -107,6 +113,21 @@ function paint(g: CanvasRenderingContext2D, s: CrashState, since: number, you: s
   g.fillStyle = '#ff5ca8';
   g.font = font(54);
   g.fillText(`🚀 ${t('world.crashTitle')}`, 34, 58);
+  // Which round of the series, and how high it can go, in the top right corner.
+  let end = W - 34;
+  if (s.of) {
+    const round = t('world.crashRound', { n: s.of, of: CYCLE });
+    const cap = t('world.crashUpTo', { m: `${s.odds.max}×` });
+    g.textAlign = 'right';
+    g.font = font(30);
+    g.fillStyle = '#ffd166';
+    g.fillText(round, end, 50);
+    const rw = g.measureText(round).width;
+    g.font = font(18, 800);
+    g.fillStyle = '#c9c1d6';
+    g.fillText(cap, end, 80);
+    end -= Math.max(rw, g.measureText(cap).width) + 24;
+  }
   g.font = font(26, 800);
   // Newest first, from just after the title.
   let x = 400;
@@ -114,7 +135,7 @@ function paint(g: CanvasRenderingContext2D, s: CrashState, since: number, you: s
   for (const h of s.history) {
     const text = multText(h);
     const w = g.measureText(text).width + 24;
-    if (x + w > W - 34) break;
+    if (x + w > end) break;
     g.fillStyle = h < 2 ? 'rgba(239, 71, 111, 0.22)' : 'rgba(122, 229, 130, 0.18)';
     g.beginPath();
     g.roundRect(x, 38, w, 40, 20);
@@ -187,13 +208,21 @@ function graph(g: CanvasRenderingContext2D, s: CrashState, m: number, since: num
     // The clock as a bar along the graph's bottom.
     g.fillStyle = 'rgba(255, 209, 102, 0.8)';
     g.fillRect(G.x, G.y + G.h - 10, G.w * Math.min(1, left / BET_TIME), 10);
-  } else {
-    g.fillStyle = '#f4efe1';
-    fit(g, t('world.crashIdle'), 56, G.w - 60);
-    g.fillText(t('world.crashIdle'), cx, cy);
     g.fillStyle = '#c9c1d6';
-    fit(g, t('world.crashHowTo'), 32, G.w - 60, 800);
-    g.fillText(t('world.crashHowTo'), cx, cy + 70);
+    fit(g, t('world.crashHowTo'), 30, G.w - 60, 800);
+    g.fillText(t('world.crashHowTo'), cx, cy + 160);
+    // The first round of a series: its new odds, as a banner over the clock.
+    if (s.of === 1) {
+      const text = `✨ ${t('world.crashNewSeries', { m: `${s.odds.max}×`, back: backText(s.odds) })}`;
+      fit(g, text, 34, G.w - 100);
+      const w = g.measureText(text).width + 48;
+      g.fillStyle = 'rgba(255, 92, 168, 0.2)';
+      g.beginPath();
+      g.roundRect(cx - w / 2, G.y + 22, w, 56, 28);
+      g.fill();
+      g.fillStyle = '#ff5ca8';
+      g.fillText(text, cx, G.y + 50);
+    }
   }
 
   if (s.phase === 'running' || crashed) {
