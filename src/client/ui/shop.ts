@@ -26,7 +26,6 @@ export function openShop(hooks: ShopHooks) {
     { role: 'dialog', 'aria-label': t('menus.shop') },
     h('header', {}, h('h2', {}, t('menus.shopTitle')), close),
     body,
-    h('footer', {}, h('span.grow', {}, t('menus.shopFoot'))),
   );
   let painted = '';
   const paint = () => {
@@ -69,8 +68,7 @@ export function openShop(hooks: ShopHooks) {
       );
     };
     body.replaceChildren(
-      h('p.setting-note', { style: 'margin:0 0 6px;font-weight:800' }, t('menus.shopBalance', { n: n(s.balance) })),
-      h('p.setting-note', { style: 'margin:0 0 4px' }, t('menus.shopNote')),
+      h('p.setting-note', { style: 'margin:0 0 4px;font-weight:800' }, t('menus.shopBalance', { n: n(s.balance) })),
       ...SHOP_SLOTS.flatMap((slot) => {
         const items = SHOP_ITEMS.filter((i) => i.slot === slot);
         if (!items.length) return [];
