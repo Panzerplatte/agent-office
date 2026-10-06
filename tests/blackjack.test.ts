@@ -314,6 +314,22 @@ function table(cards: Card[], money: Record<string, number> = { ka: 100, kb: 100
   return { tb, bank, later: (ms: number) => ((t += ms), tb.tick()) };
 }
 
+test('high rollers: bets up to 10,000 a hand, still never more than you have', () => {
+  assert.equal(MAX_BET, 10_000);
+  assert.ok(betOk(10_000) && !betOk(10_001));
+  const { tb, bank } = table([], { ka: 20_000, kb: 6000 });
+  assert.ok(tb.join('p1', 'Ada', 'ka'));
+  assert.ok(tb.join('p2', 'Bo', 'kb'));
+  assert.equal(tb.bet('p1', MAX_BET + 1), false, 'over the table limit');
+  assert.equal(tb.bet('p2', 6001), false, 'more than the balance');
+  assert.ok(tb.bet('p2', 6000));
+  assert.ok(tb.bet('p1', MAX_BET));
+  // Everyone has bet: dealt, and the stakes taken.
+  assert.equal(tb.state().stage, 'playing');
+  assert.equal(bank.balance('ka'), 10_000);
+  assert.equal(bank.balance('kb'), 0);
+});
+
 test('table: sit, bet (never more than you have), deal at once when everyone has bet, pay out after the dealer', () => {
   const { tb, bank, later } = table(order([['TS', '9H']], ['TC', '7D']));
   assert.ok(tb.join('p1', 'Ada', 'ka'));

@@ -233,6 +233,7 @@ test('the buttons: bet, bet down, insurance, waiting, sitting down again', () =>
   ob.join('p1', 'Ada', 'ka', 'f1');
   ob.join('p2', 'Bo', 'kb', 'f2');
   assert.deepEqual(controlsFor(ob.state().tables[0], 'p1', 30), { kind: 'bet', cap: 30, again: 0 });
+  assert.deepEqual(controlsFor(ob.state().tables[0], 'p1', 50_000), { kind: 'bet', cap: 10_000, again: 0 }, 'a high roller, up to the table limit');
   stack(1, order([['TS', '6H'], ['9S', '8H']], ['AC', '7D']));
   ob.bet('p1', 20);
   assert.deepEqual(controlsFor(ob.state().tables[0], 'p1', 30), { kind: 'down', bet: 20, deal: true });

@@ -34,7 +34,7 @@ export class SlotsPanel {
     this.jackpot = h('div.slots-jackpot');
     this.status = h('div.slots-status');
     this.bets = BETS.map((b) => {
-      const btn = h('button.btn', { type: 'button' }, String(b));
+      const btn = h('button.btn', { type: 'button' }, n(b));
       btn.addEventListener('click', () => hooks.bet(b));
       return btn;
     });
@@ -109,7 +109,7 @@ function paytable(): HTMLElement[] {
   const three = (Object.keys(PAY_THREE) as (keyof typeof PAY_THREE)[]).sort((a, b) => PAY_THREE[b] - PAY_THREE[a]);
   const glyph = (s: keyof typeof SYMBOL_GLYPH) => SYMBOL_GLYPH[s];
   return [
-    row(`${glyph('star')} ${glyph('star')} ${glyph('star')}`, t('menus.slotsPayJackpot', { max: MAX_BET })),
+    row(`${glyph('star')} ${glyph('star')} ${glyph('star')}`, t('menus.slotsPayJackpot', { max: n(MAX_BET) })),
     ...three.map((s) => row(`${glyph(s)} ${glyph(s)} ${glyph(s)}`, `× ${PAY_THREE[s]}`)),
     row(`${glyph('cherry')} ${glyph('cherry')} –`, `× ${PAY_CHERRY[2]}`),
     row(`${glyph('cherry')} – –`, `× ${PAY_CHERRY[1]}`),
