@@ -260,6 +260,11 @@ export class WorkerManager {
     }));
   }
 
+  /** This floor's terminal host's process, when there is one (see ptys.ts). */
+  get hostPid(): number | undefined {
+    return this.host.pid;
+  }
+
   deskOccupied(deskId: string): boolean {
     for (const w of this.workers.values()) if (w.info.deskId === deskId) return true;
     return false;

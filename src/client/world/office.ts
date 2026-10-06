@@ -37,7 +37,7 @@ export interface Collider {
   fence?: boolean;
 }
 
-export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'snake' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts' | 'pool' | 'crash' | 'bank' | 'shop' | 'plinko';
+export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'snake' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts' | 'pool' | 'crash' | 'bank' | 'shop' | 'plinko' | 'machine';
 
 /** Something you can use. Its scene object carries it as `userData.interact`, for clicking. */
 export interface Interactable {
@@ -1195,6 +1195,10 @@ export function buildOffice(): Office {
   monitor.position.set(MACHINE_MONITOR.x + 0.07, MACHINE_MONITOR.y, MACHINE_MONITOR.z);
   monitor.rotation.y = Math.PI / 2;
   group.add(monitor);
+  // E (or a click) opens 🖥️ This machine, process by process (ui/machine.ts).
+  const machineIt: Interactable = { kind: 'machine', x: MACHINE_MONITOR.x + 1.6, z: MACHINE_MONITOR.z, radius: 2.4 };
+  interactables.push(machineIt);
+  monitor.userData.interact = machineIt;
   fixture('west', MACHINE_MONITOR.z, MACHINE_MONITOR.y, MACHINE_MONITOR.width + 0.2, MACHINE_MONITOR.height + 0.2);
 
   const couch = new THREE.Group();

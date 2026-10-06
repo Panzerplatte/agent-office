@@ -539,6 +539,68 @@ export interface MachineState {
   set?: { limit: number; by: string; at: number };
 }
 
+/** One process in the 🖥️ This machine breakdown (see server/procs.ts). */
+export interface ProcRow {
+  pid: number;
+  /**
+   * What it runs: trimmed, with paths cut to their last part and anything that looks secret (tokens,
+   * passwords, credentials in URLs, env values) blanked out. Just its name for other users' processes.
+   */
+  cmd: string;
+  /** Memory it has resident, bytes. */
+  rss: number;
+  /** Its share of the whole machine's CPU (every core) over the last few seconds, 0-100; null until there are two readings. */
+  cpu: number | null;
+  /** Seconds it has been running. */
+  age?: number;
+}
+
+/** A worker, a part of the office itself, or another program on the machine, with every process that's theirs. */
+export interface ProcGroup {
+  kind: 'worker' | 'office' | 'other';
+  /** The worker's id; for the office 'server', 'ptys', 'tv' or 'helpers'; for others other:<user>:<name>, or 'other:rest' for everything not listed. */
+  id: string;
+  /** Another program's process name (the client names the office's parts and the workers itself). */
+  label: string;
+  /** Whose processes these are, for another program. */
+  user?: string;
+  worker?: { name: string; color: string; floor: string; status: WorkerStatus; task?: string; issue?: number; branch?: string };
+  /** Every process in the group, together. */
+  rss: number;
+  cpu: number | null;
+  count: number;
+  /** Its biggest processes, by memory and by CPU. */
+  top: ProcRow[];
+  /** Dev servers that have been running a long while. */
+  hints: { cmd: string; age: number }[];
+  /** What it pushes the machine into pressure with, when the machine is under pressure. */
+  heavy?: ('mem' | 'cpu')[];
+}
+
+/** 🖥️ This machine, process by process: sent every few seconds to whoever has the breakdown open. */
+export interface MachineProcs {
+  at: number;
+  /** The machine's own figures for the same moment (as on the wall monitor). */
+  cpu: number | null;
+  cores: number;
+  memUsed: number;
+  memTotal: number;
+  pressure?: string;
+  /** Which of memory and CPU the pressure is about. */
+  strain: { mem: boolean; cpu: boolean };
+  /** Workers first, then the office itself, then the rest of the machine. */
+  groups: ProcGroup[];
+  /**
+   * What no process accounts for, so the groups and this add up to the machine's figures: the
+   * kernel, caches and buffers. Memory goes below 0 when processes share pages (each one's RSS counts them).
+   */
+  rest: { rss: number; cpu: number | null };
+  /** Processes counted in all. */
+  procs: number;
+  /** This platform's process table can't be read (Windows). */
+  unsupported?: boolean;
+}
+
 export interface GhState<T> {
   items: T[];
   error?: string;
@@ -1125,6 +1187,9 @@ export type ClientMsg =
   | { t: 'notify.test' }
   /** Admins: the most workers the office runs at once, across every floor; null takes the limit off. */
   | { t: 'machine.limit'; limit: number | null }
+  /** The 🖥️ This machine breakdown opened (`machine.procs` every few seconds) or closed: the office only reads the process table while someone watches. */
+  | { t: 'machine.watch' }
+  | { t: 'machine.unwatch' }
   | { t: 'voice'; voice: boolean; muted: boolean; sharing: boolean }
   /** Put a worker's website on the floor's lounge TV: only a port the services board lists for this floor. */
   | { t: 'tvbrowser.open'; port: number }
@@ -1542,6 +1607,8 @@ export type ServerMsg =
   | { t: 'meeting'; state: MeetingState }
   | { t: 'notify'; state: NotifyState }
   | { t: 'machine'; state: MachineState }
+  /** Sent to whoever watches the 🖥️ This machine breakdown. */
+  | { t: 'machine.procs'; state: MachineProcs }
   | { t: 'sky'; state: SkyState }
   | { t: 'theme'; state: ThemeState }
   /** The floor you're on changed its look (to everyone on it). */

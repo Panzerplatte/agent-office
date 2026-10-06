@@ -71,7 +71,8 @@ export type ToHost =
   | { t: 'stop' };
 
 export type FromHost =
-  | { t: 'ready'; version: number; sessions: string[] }
+  /** `pid` is the host's own process (hosts from before it was sent leave it out). */
+  | { t: 'ready'; version: number; sessions: string[]; pid?: number }
   | { t: 'spawned'; id: string; pid: number }
   | ({ t: 'attached'; id: string; pid: number } & Omit<Adopted, 'pty'>)
   | { t: 'gone'; id: string }
@@ -174,6 +175,12 @@ export class PtyHost {
     return this.sock !== null;
   }
 
+  /** The host's own process, once connected (for 🖥️ This machine). */
+  get pid(): number | undefined {
+    return this.sock ? this.hostPid : undefined;
+  }
+  private hostPid?: number;
+
   /**
    * Finds the host this office left running, or starts one. Resolves to false when there is no
    * host to be had: terminals then run in-process.
@@ -202,6 +209,7 @@ export class PtyHost {
       if (!found) return false;
       const { sock, sessions } = found;
       this.sock = sock;
+      this.hostPid = found.pid;
       this.unclaimed = new Set(sessions);
       readMessages(sock, (msg) => this.onMessage(msg as FromHost));
       sock.on('close', () => this.onClose(sock));
@@ -308,7 +316,7 @@ export class PtyHost {
   }
 
   /** Connects and says hello with the saved token. Undefined if no host answers. */
-  private hello(): Promise<{ sock: net.Socket; version: number; sessions: string[] } | undefined> {
+  private hello(): Promise<{ sock: net.Socket; version: number; sessions: string[]; pid?: number } | undefined> {
     let token: string;
     try {
       token = JSON.parse(readFileSync(this.infoPath, 'utf8')).token;
@@ -318,7 +326,7 @@ export class PtyHost {
     return new Promise((resolve) => {
       const sock = net.createConnection(this.socketPath);
       let settled = false;
-      const done = (v?: { sock: net.Socket; version: number; sessions: string[] }) => {
+      const done = (v?: { sock: net.Socket; version: number; sessions: string[]; pid?: number }) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -331,7 +339,7 @@ export class PtyHost {
       sock.on('close', () => done());
       sock.on('connect', () => sock.write(frame({ t: 'hello', token })));
       readMessages(sock, (msg: FromHost) => {
-        if (msg.t === 'ready') done({ sock, version: msg.version, sessions: Array.isArray(msg.sessions) ? msg.sessions : [] });
+        if (msg.t === 'ready') done({ sock, version: msg.version, sessions: Array.isArray(msg.sessions) ? msg.sessions : [], pid: typeof msg.pid === 'number' ? msg.pid : undefined });
       });
     });
   }

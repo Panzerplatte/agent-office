@@ -213,7 +213,7 @@ const server = net.createServer((sock) => {
       s.attached = false;
       s.held = undefined;
     }
-    send({ t: 'ready', version: PTY_PROTOCOL, sessions: [...sessions.keys()] });
+    send({ t: 'ready', version: PTY_PROTOCOL, sessions: [...sessions.keys()], pid: process.pid });
   });
   sock.on('close', () => {
     if (office !== sock) return;
