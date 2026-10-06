@@ -868,6 +868,16 @@ button { font-family: inherit; }
 .jb-logo { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid var(--ink); border-radius: 50%; color: #fff; font-size: 16px; line-height: 1; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45); }
 .jb-now .jb-logo { width: 36px; height: 36px; font-size: 20px; }
 
+/* The casino shop */
+.modal.shop { width: min(600px, 100%); }
+.shop-slot { margin: 16px 0 8px; font-size: 15px; font-weight: 900; }
+.shop-list li { cursor: default; }
+.shop-list .svc-title { display: flex; align-items: center; gap: 8px; }
+.shop-about { white-space: normal; }
+.shop-short { flex: none; font-size: 12px; font-weight: 800; color: var(--muted); }
+.shop-badge { font-size: 11px; font-weight: 900; padding: 1px 7px; border-radius: 999px; background: var(--good); color: #fff; }
+.shop-swatch { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #14101a; font-weight: 900; font-size: 15px; }
+
 /* Pictures on the walls */
 .modal.hang { width: min(560px, 100%); }
 .hang .seg { gap: 6px; }

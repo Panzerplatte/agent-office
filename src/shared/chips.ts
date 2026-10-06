@@ -127,6 +127,9 @@ export interface ChipsState {
   ledger: ChipsEntry[];
   /** Your credit at the bank while you still owe on it (none: you can take one). */
   credit?: CreditState;
+  /** What you've bought at the casino's shop (item ids, see shared/shop.ts), and what of it you have on. None: nothing yet. */
+  items?: string[];
+  worn?: string[];
 }
 
 /** How many people the casino's chips board (and the HUD's chips window) ranks. */
@@ -141,6 +144,8 @@ export interface ChipsTopRow {
   online?: boolean;
   /** It's you (only on your own page's copy). */
   you?: boolean;
+  /** The colour their name is in, bought at the shop (see shared/shop.ts). */
+  nameColor?: string;
 }
 
 /** A positive whole number of chips, small enough to add up exactly: the only kind of amount a bet or payout takes. */

@@ -41,6 +41,7 @@ import { checkFrame as checkSnakeFrame, checkResult as checkSnakeResult, cleanNa
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
 import { isBusy } from '../shared/status.js';
+import { shopItem } from '../shared/shop.js';
 import { Chips, activeMsg, basketOf, chipsId, shotAtHoop, type ChipsTopEntry } from './chips.js';
 import { Poker } from './poker.js';
 import { ACTIVE_FOR, GOLF_CLOSE, creditWork, workTime, type ChipsTopRow } from '../shared/chips.js';
@@ -245,6 +246,17 @@ export async function startServer(cfg: Config) {
     nameOf: (who) => (who.startsWith('account:') ? accounts.get(who.slice('account:'.length))?.name : undefined),
     online: (who) => [...clients.values()].some((c) => c.chips === who),
   });
+  /** What `who` has on from the shop changed: their avatar on every page of theirs, for everyone, and the desks of the workers they hired. */
+  const shopWorn = (who: string) => {
+    const wear = chips.worn(who);
+    for (const c of clients.values()) {
+      if (c.chips !== who) continue;
+      if (wear.length) c.peer.wear = wear;
+      else delete c.peer.wear;
+      broadcast({ t: 'peer.update', peer: c.peer });
+    }
+    broadcast({ t: 'shop.looks', looks: chips.looks() });
+  };
   /** The leaderboard as `c` sees it: names and balances, their own row marked, nobody's id. */
   const chipsTopFor = (c: Client, top: ChipsTopEntry[]): ChipsTopRow[] => top.map(({ id, ...row }) => (id === c.chips ? { ...row, you: true } : row));
   // Blackjack: the casino's table, one for the whole building. Every stake and payout goes through the
@@ -1133,6 +1145,9 @@ export async function startServer(cfg: Config) {
     clients.set(id, client);
     if (account) accounts.seen(account.id);
     chips.seen(client.chips, { name, color: client.peer.color });
+    // What they have on from the shop, for everyone to see.
+    const wear = chips.worn(client.chips);
+    if (wear.length) client.peer.wear = wear;
     ws.on('pong', () => (client.isAlive = true));
 
     sendTo(client, {
@@ -1151,6 +1166,7 @@ export async function startServer(cfg: Config) {
       me,
       chips: chips.state(client.chips),
       chipsTop: chipsTopFor(client, chips.top()),
+      looks: chips.looks(),
       onlinebj: onlinebj.state(),
       notify: webhook.state(),
       machine: machine.state(),
@@ -1611,6 +1627,8 @@ export async function startServer(cfg: Config) {
         c.peer.look = sanitizeLook(msg.look, c.peer.look);
         chips.seen(c.chips, { name: c.peer.name, color: c.peer.color });
         broadcast({ t: 'peer.update', peer: c.peer });
+        // A new name: the desks of the workers they hired go by it.
+        if (c.peer.wear?.length) broadcast({ t: 'shop.looks', looks: chips.looks() });
         break;
       }
       case 'voice':
@@ -1910,6 +1928,23 @@ export async function startServer(cfg: Config) {
           sendTo(c, { t: 'toast', ...notice('chips.creditOwed', { owed: owed.toLocaleString('en'), wait: workTime(creditWork(owed)) }), level: 'warn' });
         }
         else if (why) sendTo(c, { t: 'toast', ...notice('chips.creditAmount'), level: 'warn' });
+        break;
+      }
+      case 'shop.buy': {
+        if (c.peer.floor !== CASINO) {
+          sendTo(c, { t: 'toast', ...notice('shop.casino'), level: 'warn' });
+          break;
+        }
+        const item = shopItem(msg.item);
+        const why = chips.buy(c.chips, msg.item);
+        if (why === 'chips' && item) sendTo(c, { t: 'toast', ...notice('shop.chips', { price: item.price.toLocaleString('en'), balance: chips.balance(c.chips).toLocaleString('en') }), level: 'warn' });
+        else if (why === 'owned') sendTo(c, { t: 'toast', ...notice('shop.owned'), level: 'warn' });
+        else if (why) sendTo(c, { t: 'toast', ...notice('shop.item'), level: 'warn' });
+        else shopWorn(c.chips);
+        break;
+      }
+      case 'shop.wear': {
+        if (chips.wear(c.chips, msg.item, msg.on === true)) shopWorn(c.chips);
         break;
       }
       case 'roulette.join':

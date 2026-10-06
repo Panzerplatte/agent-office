@@ -1,3 +1,4 @@
+import { SHOP_ITEMS, nameColorOf, shopItem, shopReason, tidyWorn } from '../shared/shop.js';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HOOP, THREE_POINT, backboard, launch, simulate } from '../shared/hoop.js';
@@ -32,6 +33,9 @@ interface Wallet {
   /** What they were called, and their colour, when last about: for the leaderboard while they're away. */
   name?: string;
   color?: string;
+  /** What they've bought at the shop (item ids, see shared/shop.ts), oldest first, and what of it they have on. */
+  items?: string[];
+  worn?: string[];
 }
 
 /** A place on the leaderboard, with whose it is (`id`, which stays on the server: a browser's id is its key). */
@@ -119,7 +123,64 @@ export class Chips {
   /** `id`'s balance and latest changes, newest first, for their page. */
   state(id: string): ChipsState {
     const w = this.data.wallets[id];
-    return w ? { balance: w.balance, ledger: w.ledger.map((e) => ({ ...e })), ...(w.credit ? { credit: { amount: w.credit.amount, owed: wholeChips(w.credit.owed) } } : {}) } : { balance: START_CHIPS, ledger: [] };
+    if (!w) return { balance: START_CHIPS, ledger: [] };
+    return {
+      balance: w.balance,
+      ledger: w.ledger.map((e) => ({ ...e })),
+      ...(w.credit ? { credit: { amount: w.credit.amount, owed: wholeChips(w.credit.owed) } } : {}),
+      ...(w.items?.length ? { items: [...w.items], worn: [...(w.worn ?? [])] } : {}),
+    };
+  }
+
+  /**
+   * `id` buys `itemId` at the shop (see shared/shop.ts): its price comes off their balance (credit
+   * chips spend like any others), with "shop:<id>" in their ledger, and it's theirs for good, put on
+   * straight away. Says why not ('item': there's no such thing, 'owned': they have it already,
+   * 'chips': they haven't enough), changing nothing, or null when it's bought.
+   */
+  buy(id: string, itemId: unknown): 'item' | 'owned' | 'chips' | null {
+    const item = shopItem(itemId);
+    if (!item || !idOk(id)) return 'item';
+    const w = this.wallet(id);
+    if (w.items?.includes(item.id)) return 'owned';
+    if (w.balance < item.price) return 'chips';
+    w.items = [...(w.items ?? []), item.id];
+    w.worn = tidyWorn([...(w.worn ?? []), item.id], w.items);
+    this.change(id, w, -item.price, shopReason(item), false);
+    return null;
+  }
+
+  /** `id` puts on (or takes off) something they bought. Says false, changing nothing, unless they have it and it changes what they wear. */
+  wear(id: string, itemId: unknown, on: boolean): boolean {
+    const item = shopItem(itemId);
+    const w = this.data.wallets[id];
+    if (!item || !w?.items?.includes(item.id)) return false;
+    const was = w.worn ?? [];
+    const worn = tidyWorn(on ? [...was, item.id] : was.filter((x) => x !== item.id), w.items);
+    if (worn.join() === was.join()) return false;
+    w.worn = worn;
+    this.dirty();
+    this.onChange?.(id, this.state(id), undefined, true);
+    this.topCheck();
+    return true;
+  }
+
+  /** What `id` has on from the shop (item ids). */
+  worn(id: string): string[] {
+    return [...(this.data.wallets[id]?.worn ?? [])];
+  }
+
+  /**
+   * What everyone has on from the shop, by the name they go by (see top): for the desks of the
+   * workers they hired, whether they're about or not. Only people who have something on.
+   */
+  looks(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const [id, w] of Object.entries(this.data.wallets)) {
+      const name = this.nameOf?.(id) ?? w.name;
+      if (name && w.worn?.length) out[name] = [...(out[name] ?? []), ...w.worn.filter((x) => !out[name]?.includes(x))];
+    }
+    return out;
   }
 
   /** What `id` still owes on their credit, in whole chips (0: nothing, they can take one). */
@@ -272,7 +333,8 @@ export class Chips {
     for (const [id, w] of Object.entries(this.data.wallets)) {
       const name = this.nameOf?.(id) ?? w.name;
       if (!name) continue;
-      rows.push({ id, name, chips: w.balance, ...(w.color ? { color: w.color } : {}), ...(this.online?.(id) ? { online: true } : {}) });
+      const nameColor = nameColorOf(w.worn);
+      rows.push({ id, name, chips: w.balance, ...(w.color ? { color: w.color } : {}), ...(this.online?.(id) ? { online: true } : {}), ...(nameColor ? { nameColor } : {}) });
     }
     rows.sort((a, b) => b.chips - a.chips || a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
     return rows.slice(0, n);
@@ -375,6 +437,7 @@ export class Chips {
           ...(w.credit && Number.isFinite(w.credit.at) && Number.isSafeInteger(w.credit.amount) && Number.isFinite(w.credit.owed) && w.credit.owed > SLIVER ? { credit: { at: w.credit.at, amount: w.credit.amount, owed: Math.min(w.credit.owed, CREDIT_MAX) } } : {}),
           ...(typeof w.name === 'string' && w.name ? { name: w.name.slice(0, 24) } : {}),
           ...(typeof w.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(w.color) ? { color: w.color } : {}),
+          ...shopOf(w),
         };
       }
       this.data = { wallets, once: Array.isArray(saved.once) ? saved.once.filter((k) => typeof k === 'string') : [] };
@@ -434,6 +497,14 @@ export function activeMsg(msg: { t: string; moving?: unknown }): boolean {
   return ACTIVE.has(msg.t) || /^(ball|darts|pool|golf|cabinet|wb)\./.test(msg.t);
 }
 const ACTIVE = new Set(['act', 'golf', 'emote', 'chat', 'term.input', 'term.typing', 'worker.prompt', 'worker.spawn', 'whistle']);
+
+/** A saved wallet's shop things, kept tidy: only items that are still in the catalogue, each once, and only what's owned worn. */
+function shopOf(w: Partial<Wallet>): Pick<Wallet, 'items' | 'worn'> {
+  if (!Array.isArray(w.items)) return {};
+  const items = SHOP_ITEMS.filter((i) => w.items!.includes(i.id)).map((i) => i.id);
+  if (!items.length) return {};
+  return { items, worn: tidyWorn(Array.isArray(w.worn) ? w.worn : [], items) };
+}
 
 /** Less than this owed on a credit is paid (chips). */
 const SLIVER = 1e-6;

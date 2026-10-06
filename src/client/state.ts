@@ -18,7 +18,7 @@ import { emptyRoulette, type RouletteState } from '../shared/roulette';
 import { emptyCrash, emptyCrashBoard, type CrashAutoState, type CrashBoard, type CrashState } from '../shared/crash';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -223,6 +223,8 @@ class Store {
   crashBoard: CrashBoard = emptyCrashBoard();
   /** Your Crash auto-bet, as the office last said: running, or the last one and why it stopped. */
   crashAuto: CrashAutoState | null = null;
+  /** What everyone has on from the casino's shop, by name (see shared/shop.ts): for the desks of the workers they hired. */
+  looks: Record<string, string[]> = {};
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -339,6 +341,7 @@ class Store {
     switch (msg.t) {
       case 'welcome':
         this.you = msg.you;
+        this.looks = msg.looks ?? {};
         this.peers = new Map(msg.peers.map((p) => [p.id, p]));
         this.floors = msg.floors;
         this.projectsDir = msg.projectsDir;
@@ -516,6 +519,10 @@ class Store {
       case 'crash.auto':
         this.crashAuto = msg.auto;
         this.emit('crashAuto');
+        break;
+      case 'shop.looks':
+        this.looks = msg.looks;
+        this.emit('looks');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

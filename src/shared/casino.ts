@@ -222,6 +222,43 @@ export const CRASH_SCREEN = { x: CASINO_ROOM.minX + 0.07, y: 2.75, z: 8.3, width
  */
 export const CRASH_BOARD = { x: CASINO_ROOM.minX + 0.07, y: CRASH_SCREEN.y, z: 4.62, width: 2.1, height: CRASH_SCREEN.height } as const;
 
+/**
+ * The shop (see shared/shop.ts): a room of its own off the main hall, through a doorway in the south
+ * wall at its west end. `room` is its floor, behind the main hall's south wall (which is `wall` thick),
+ * under a lower ceiling; `door` is the doorway's middle along that wall, how wide and how tall it is.
+ */
+export const CASINO_SHOP = {
+  room: { minX: -17.6, maxX: -8.4, minZ: CASINO_ROOM.maxZ + 0.3, maxZ: CASINO_ROOM.maxZ + 7.5, height: 3.4 },
+  wall: 0.3,
+  door: { x: -13, width: 2, height: 2.6 },
+} as const;
+/**
+ * The shop's counter, across the back of the room facing the door: `x` its middle, `front` the side
+ * you stand at (the shopkeeper's behind it, toward the back wall), `length` × `depth`, `height` tall.
+ * E there (or at a display) opens the shop; `reach` is how near you have to be.
+ */
+export const SHOP_COUNTER = { x: -13, front: CASINO_SHOP.room.maxZ - 1.9, length: 3.6, depth: 0.7, height: 1.05, reach: 1.7 } as const;
+/**
+ * The shop's displays, each a box on the floor with things from the shop on it: the hats on stands
+ * down the west wall, the desk things in a glass case down the east wall, and a pedestal in the
+ * middle with the crown on it. `slots` is what's shown on each (see ShopSlot).
+ */
+export const SHOP_DISPLAYS = [
+  { id: 'hats', minX: CASINO_SHOP.room.minX, maxX: CASINO_SHOP.room.minX + 0.62, minZ: CASINO_SHOP.room.minZ + 1.2, maxZ: CASINO_SHOP.room.maxZ - 0.5, height: 0.9 },
+  { id: 'desk', minX: CASINO_SHOP.room.maxX - 0.7, maxX: CASINO_SHOP.room.maxX, minZ: CASINO_SHOP.room.minZ + 1.2, maxZ: CASINO_SHOP.room.maxZ - 0.5, height: 0.95 },
+  { id: 'crown', minX: SHOP_COUNTER.x - 0.4, maxX: SHOP_COUNTER.x + 0.4, minZ: CASINO_SHOP.room.minZ + 2.6, maxZ: CASINO_SHOP.room.minZ + 3.4, height: 1.1 },
+] as const;
+
+/** Where the shop's things don't let you walk: the counter (and the shopkeeper's side of it, back to the wall) and the displays. */
+export function shopFootprints(): Footprint[] {
+  const S = CASINO_SHOP.room;
+  const C = SHOP_COUNTER;
+  return [
+    { minX: C.x - C.length / 2, maxX: C.x + C.length / 2, minZ: C.front, maxZ: S.maxZ, top: 9 },
+    ...SHOP_DISPLAYS.map((d) => ({ minX: d.minX, maxX: d.maxX, minZ: d.minZ, maxZ: d.maxZ, top: 9 })),
+  ];
+}
+
 /** A box on the floor that nobody walks through: the tables, the machines, the counters. */
 export interface Footprint {
   minX: number;
@@ -255,9 +292,16 @@ export function casinoFootprints(): Footprint[] {
   return out;
 }
 
-/** Whether you can stand at (x, z) in the casino, keeping `r` meters off the walls and everything in it. */
+/** Whether you can stand at (x, z) in the casino (its main hall, the shop or the doorway between), keeping `r` meters off the walls and everything in it. */
 export function casinoWalkable(x: number, z: number, r = 0.3): boolean {
   const R = CASINO_ROOM;
+  const S = CASINO_SHOP;
+  // Through the shop's doorway, between its jambs.
+  if (z > R.maxZ - r && z < S.room.minZ + r) return Math.abs(x - S.door.x) < S.door.width / 2 - r;
+  if (z >= S.room.minZ + r) {
+    if (x < S.room.minX + r || x > S.room.maxX - r || z > S.room.maxZ - r) return false;
+    return !shopFootprints().some((f) => x > f.minX - r && x < f.maxX + r && z > f.minZ - r && z < f.maxZ + r);
+  }
   if (x < R.minX + r || x > R.maxX - r || z < R.minZ + r || z > R.maxZ - r) return false;
   // The elevator's shaft, either side of its doorway (you ride in its car).
   const E = CASINO_ELEVATOR;

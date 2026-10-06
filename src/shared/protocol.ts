@@ -275,6 +275,8 @@ export interface PeerInfo {
   doing?: string;
   /** Reading something off the bookshelf: an open book in their hands, its pages turning. */
   reading?: boolean;
+  /** What they have on from the casino's shop (item ids, see shared/shop.ts): a hat, sunglasses… */
+  wear?: string[];
 }
 
 /** A styled run of text on a terminal row: [text, fg, bg, flags]. */
@@ -1337,6 +1339,10 @@ export type ClientMsg =
   | { t: 'roulette.unbet'; spot?: string }
   /** At the bank (the cashier), in the casino: a chip credit of `amount` (one of CREDIT_AMOUNTS in shared/chips.ts), once the last one's paid back. */
   | { t: 'chips.credit'; amount: number }
+  /** At the shop's counter, in the casino: buy `item` (an id from SHOP_ITEMS in shared/shop.ts) for its price in chips. */
+  | { t: 'shop.buy'; item: string }
+  /** Put on (`on`) or take off something you bought at the shop, anywhere. */
+  | { t: 'shop.wear'; item: string; on: boolean }
   /**
    * Crash, at the big screen on the casino's wall: bet `amount` on the next round (while bets are
    * open), take it back before the clock runs out, cash out while the multiplier climbs, or say this
@@ -1382,6 +1388,8 @@ export type ServerMsg =
       chips: ChipsState;
       /** Chips: the top CHIPS_TOP balances in the building, most first, for the casino's board. */
       chipsTop: ChipsTopRow[];
+      /** What everyone has on from the casino's shop, by name (see Chips.looks): for the desks of the workers they hired. */
+      looks: Record<string, string[]>;
       /** Online blackjack at the PCs: every table, for the PC monitors and for playing. */
       onlinebj: OnlineBlackjackState;
       notify: NotifyState;
@@ -1500,6 +1508,8 @@ export type ServerMsg =
   | { t: 'chips'; chips: ChipsState; change?: ChipsEntry; quiet?: boolean }
   /** Chips: the top CHIPS_TOP balances changed (a new order, a balance, a name, someone came or went). */
   | { t: 'chips.top'; top: ChipsTopRow[] }
+  /** What everyone has on from the shop changed (see welcome's looks). */
+  | { t: 'shop.looks'; looks: Record<string, string[]> }
   | { t: 'jukebox'; state: JukeboxState }
   /** Who's at the arcade cabinet on your floor now, and the building's high scores. */
   | { t: 'cabinet'; state: CabinetState }

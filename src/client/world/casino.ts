@@ -7,6 +7,7 @@ import {
   CASINO_LOUNGE,
   CASINO_ROOM,
   CASINO_SEATING,
+  CASINO_SHOP,
   CHIP_BOARD,
   CRASH_BOARD,
   POKER_TABLE,
@@ -24,6 +25,7 @@ import { ELEVATOR, ELEVATOR_FRONT, WALL_T } from '../../shared/layout';
 import { t } from '../i18n';
 import { Worker } from './character';
 import { buildCasinoBartender } from './casinobartender';
+import { buildCasinoShop, type CasinoShop } from './casinoshop';
 import { buildElevator, type Elevator } from './elevator';
 import type { Collider, Interactable } from './office';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
@@ -153,6 +155,8 @@ export interface ChipBoardRow {
   online?: boolean;
   /** It's whoever's looking: their row is lit up. */
   you?: boolean;
+  /** Their name's colour, bought at the shop (see shared/shop.ts). */
+  nameColor?: string;
 }
 
 /** The board over the cashier's cage: everyone's chips, most first. */
@@ -184,6 +188,8 @@ export interface Casino {
   crashBoard: CrashBoardView;
   /** Where you stand at the cashier's window, and the cashier behind it. */
   cashier: { at: { x: number; z: number }; worker: Worker };
+  /** The shop, through the doorway at the west end of the south wall (see casinoshop.ts). */
+  shop: CasinoShop;
   update(t: number, dt: number): void;
 }
 
@@ -545,10 +551,15 @@ export function buildCasino(): Casino {
   const paper = wallTexture();
   const panel = toon(WOOD_DARK);
   const dado = 1.15;
+  // The south wall has the shop's doorway in it (see casinoshop.ts): two runs, either side of it.
+  const door = CASINO_SHOP.door;
+  const doorW = door.x - door.width / 2;
+  const doorE = door.x + door.width / 2;
   const walls: [number, number, number, number, number][] = [
     // x, z, length, turned (0 along x, 1 along z), facing (+1 into the room along the normal)
     [cx, R.minZ, w, 0, 1],
-    [cx, R.maxZ, w, 0, -1],
+    [(R.minX + doorW) / 2, R.maxZ, doorW - R.minX, 0, -1],
+    [(doorE + R.maxX) / 2, R.maxZ, R.maxX - doorE, 0, -1],
     [R.minX, cz, d, 1, 1],
     [R.maxX, cz, d, 1, -1],
   ];
@@ -566,12 +577,15 @@ export function buildCasino(): Casino {
     const rail = turned ? [0.1, 0.05, len] : [len, 0.05, 0.1];
     statics.add(mesh(new THREE.BoxGeometry(rail[0], rail[1], rail[2]), brass, turned ? x + 0.05 * face : x, dado + 0.025, turned ? z : z + 0.05 * face, false));
     // The wall itself, behind, so nothing shows through from outside.
-    const back = turned ? [WALL_T, H, len + WALL_T * 2] : [len + WALL_T * 2, H, WALL_T];
-    statics.add(mesh(new THREE.BoxGeometry(back[0], back[1], back[2]), toon('#1a0a10'), turned ? x - (WALL_T / 2) * face : x, H / 2, turned ? z : z - (WALL_T / 2) * face, false));
+    // (Out round the room's corners, but not into the shop's doorway.)
+    const x0 = turned ? x : x - len / 2 - (x - len / 2 <= R.minX ? WALL_T : 0);
+    const x1 = turned ? x : x + len / 2 + (x + len / 2 >= R.maxX ? WALL_T : 0);
+    const back = turned ? [WALL_T, H, len + WALL_T * 2] : [x1 - x0, H, WALL_T];
+    statics.add(mesh(new THREE.BoxGeometry(back[0], back[1], back[2]), toon('#1a0a10'), turned ? x - (WALL_T / 2) * face : (x0 + x1) / 2, H / 2, turned ? z : z - (WALL_T / 2) * face, false));
     colliders.push(
       turned
         ? { minX: face > 0 ? x - WALL_T : x, maxX: face > 0 ? x : x + WALL_T, minZ: R.minZ - WALL_T, maxZ: R.maxZ + WALL_T, top: 99 }
-        : { minX: R.minX - WALL_T, maxX: R.maxX + WALL_T, minZ: face > 0 ? z - WALL_T : z, maxZ: face > 0 ? z : z + WALL_T, top: 99 },
+        : { minX: x0, maxX: x1, minZ: face > 0 ? z - WALL_T : z, maxZ: face > 0 ? z : z + WALL_T, top: 99 },
     );
   }
   // A dark ceiling with a coffer of lit cove round its edge, and pot lights in rows.
@@ -1352,9 +1366,14 @@ export function buildCasino(): Casino {
           g.lineWidth = 4;
           g.stroke();
         }
-        g.fillStyle = '#f4efe1';
+        g.fillStyle = r.nameColor ?? '#f4efe1';
         fitFont(g, r.name, 34, 250, 800);
+        if (r.nameColor) {
+          g.shadowColor = r.nameColor;
+          g.shadowBlur = 14;
+        }
         g.fillText(r.name, x + 82, y);
+        g.shadowBlur = 0;
         g.textAlign = 'right';
         g.fillStyle = '#ffd166';
         g.font = '900 34px Nunito, ui-rounded, system-ui, sans-serif';
@@ -1546,7 +1565,10 @@ export function buildCasino(): Casino {
   group.add(mergeByMaterial(statics));
 
   // ---- Moving -----------------------------------------------------------------------------------------------------
-  const workers = [poker.dealer, blackjack.dealer, roulette.dealer, cashierW, bartender];
+  // ---- The shop, off the main hall -------------------------------------------------------------------------------
+  const shop = buildCasinoShop(group, colliders, interactables);
+
+  const workers = [poker.dealer, blackjack.dealer, roulette.dealer, cashierW, bartender, shop];
   const tmp = new THREE.Color();
   return {
     group,
@@ -1561,6 +1583,7 @@ export function buildCasino(): Casino {
     chipBoard,
     crashBoard,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
+    shop,
     update(time, dt) {
       elevator.update(dt);
       for (const wk of workers) wk.update(dt, time);
