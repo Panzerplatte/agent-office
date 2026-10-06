@@ -113,8 +113,10 @@ import { TvBrowser } from './tvbrowser';
 import { TvViewer } from './ui/tvbrowser';
 import { OnlineBlackjack } from './ui/onlineblackjack';
 import { Cabinet } from './ui/cabinet';
+import { SnakeMachine } from './ui/snake';
 import { trackTitle } from '../shared/jukebox';
 import { GAME, scoreText } from '../shared/cabinet';
+import { SNAKE_GAME } from '../shared/snake';
 import { EMOTES, EMOTE_BY_ID, EMOTE_EASE_OUT, EmoteBucket, type EmoteId } from '../shared/emotes';
 import { EmoteWheel } from './ui/emotes';
 import { WHISTLE_MAX_SECS, WhistleGate } from '../shared/whistle';
@@ -440,6 +442,8 @@ store.on('jukebox', () => {
 });
 // The arcade cabinet next to it: BLOCKFALL up close, and on its screen for everyone else on the floor.
 const cabinet = new Cabinet(office.cabinet.screen, net, { openTerminal: (id) => openWorkerTerminal(id), sound: (kind, lines) => sound.arcade(kind, lines) });
+// The Snake machine between the TV and the jukebox: Snake up close, and on its screen for everyone else on the floor.
+const snakeMachine = new SnakeMachine(office.snakeCabinet.screen, net, { sound: (kind) => sound.snake(kind) });
 const notifier = new DesktopNotifier(() => settings.notify, (id) => openWorkerTerminal(id));
 
 // ---- Golf off the balcony --------------------------------------------------------------------------
@@ -541,7 +545,7 @@ function theirShot(id: string, shot: Shot, from?: [number, number]) {
   const floor = store.floor;
   setTimeout(() => {
     if (store.floor !== floor || upTop) return;
-    if (bunker.on) return putts.launch(putt({ yaw: shot.yaw, power: shot.power, from: from ? { x: from[0], z: from[1] } : PUTT_TEE }), p.name, false);
+    if (bunker.on) return putts.launch(putt({ yaw: shot.yaw, power: shot.power, from: from ? { x: from[0], z: from[1] } : PUTT_TEE }), p.name, false, id);
     balls.launch(shotHere(shot), p.name, false);
     teeEmptyUntil = performance.now() + 1800;
     sound.golf('hit', TEE_BALL);
@@ -1262,6 +1266,8 @@ net.onMessage((msg) => {
           if (msg.golf) p.golfing = true;
           else delete p.golfing;
         }
+        // Off the tee: their ball doesn't stay lying on the carpet.
+        if (!msg.golf) putts.forget(msg.id);
         r?.person.setGolf(msg.golf);
         break;
       }
@@ -1629,6 +1635,7 @@ function syncPeers() {
   for (const [id, r] of remotes) {
     const peer = store.peers.get(id);
     if (!peer || !store.onMyFloor(peer)) {
+      putts.forget(id);
       scene.remove(r.person.root);
       remotes.delete(id);
     }
@@ -2306,6 +2313,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'gong') hitGong();
   else if (target.kind === 'whiteboard') openWhiteboard(net);
   else if (target.kind === 'cabinet') cabinet.play();
+  else if (target.kind === 'snake') snakeMachine.play();
   else if (target.kind === 'ladder') grabLadder();
   else if (target.kind === 'pole' && target.pole !== undefined) usePole(target.pole);
   else if (target.kind === 'meeting') showMeeting();
@@ -3177,6 +3185,17 @@ function hintFor(it: Interactable): Hint {
       const about = left !== null ? t('main.gamePaused', { score: scoreText(left) }) : best ? `🏆 ${clip(best.name, 24)} · ${scoreText(best.score)}` : t('main.noHighScore');
       return { k: `${left}|${best?.name}|${best?.score}`, parts: [title(`🕹️ ${GAME}`), aside(about), key('E', t(left !== null ? 'main.carryOn' : 'main.play'))] };
     }
+    case 'snake': {
+      const s = store.snake;
+      const f = store.snakeFrame;
+      if (s.player && s.player.id !== store.you) {
+        const who = s.player.name;
+        return { k: `${who}|${f?.score}`, parts: [title(`🐍 ${SNAKE_GAME}`), aside(`${t('main.playing', { name: clip(who, 24) })}${f ? ` · ${scoreText(f.score)}` : ''}`), key('E', t('main.watch'))] };
+      }
+      const best = s.scores[0];
+      const about = best ? `🏆 ${clip(best.name, 24)} · ${scoreText(best.score)}` : t('main.noHighScore');
+      return { k: `${best?.name}|${best?.score}`, parts: [title(`🐍 ${SNAKE_GAME}`), aside(about), key('E', t('main.play'))] };
+    }
     case 'bookshelf': {
       const names = [...store.peers.values()].filter((p) => p.reading && p.id !== store.you && store.onMyFloor(p)).map((p) => p.name).join(', ');
       return { k: names, parts: [title(t('main.bookshelf')), aside(names ? t('main.reading', { names: clip(names, 40) }) : t('main.projectDocs')), key('E', t('main.readDocs'))] };
@@ -3198,7 +3217,7 @@ function hintFor(it: Interactable): Hint {
     }
     case 'decor': {
       const d = store.decor.find((x) => x.id === it.decorId);
-      return { k: `${d?.title}|${d?.by}`, parts: [title(`🖼️ ${d?.title || t('main.aPicture')}`), d ? aside(t('main.hungBy', { name: d.by })) : '', key('E', t('main.lookCloser'))] };
+      return { k: `${d?.title}|${d?.by}|${d?.on}`, parts: [title(`🖼️ ${d?.title || t('main.aPicture')}`), d ? aside(t(d.on === 'desk' ? 'main.placedBy' : 'main.hungBy', { name: d.by })) : '', key('E', t('main.lookCloser'))] };
     }
     case 'seat': {
       const seat = SEATING_BY_ID.get(it.seatId ?? '');
@@ -3508,11 +3527,18 @@ function renderBlackjackHint(el: HTMLElement) {
 
 function renderHangHint(el: HTMLElement) {
   const spot = hanger.spot;
-  const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}`;
+  const desk = spot?.on === 'desk';
+  const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}|${desk}`;
   if (k === hintKey) return;
   hintKey = k;
-  const title = t(!spot ? 'main.aimAtWall' : !spot.ok ? 'main.inTheWay' : hanger.moving ? 'main.movingPicture' : 'main.hangingPicture');
-  el.replaceChildren(h('span.title', {}, title), key(t('main.keyClick'), t('main.hang')), key(t('main.keyScroll'), t('main.size')), key('Esc', t('main.cancel')));
+  const title = t(!spot ? 'main.aimAtWall' : !spot.ok ? 'main.inTheWay' : hanger.moving ? 'main.movingPicture' : desk ? 'main.standingPicture' : 'main.hangingPicture');
+  el.replaceChildren(
+    h('span.title', {}, title),
+    key(t('main.keyClick'), t(desk ? 'main.standIt' : 'main.hang')),
+    key(t('main.keyScroll'), t('main.size')),
+    key(t('main.keyQR'), t(desk ? 'main.turnStanding' : 'main.turn')),
+    key('Esc', t('main.cancel')),
+  );
   el.classList.remove('hidden');
 }
 
@@ -3773,6 +3799,12 @@ function hangingKey(code: string): boolean {
     case 'Equal':
       hanger.resize(1);
       return true;
+    case 'KeyQ':
+      hanger.rotate(1);
+      return true;
+    case 'KeyR':
+      hanger.rotate(-1);
+      return true;
   }
   return false;
 }
@@ -3852,7 +3884,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -4200,6 +4232,7 @@ function frame(ts?: number) {
   arcade.update(camera, dt);
   tvViewer.update(camera, dt);
   cabinet.update(camera, dt);
+  snakeMachine.update(camera, dt);
   // Pulled away from the tee (sat down, off up the ladder, into the elevator): the club goes back.
   if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) golf.stop();
   golf.update(dt);
@@ -4403,7 +4436,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !tvViewer.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
+  if (firstPerson && !arcade.zoomed && !tvViewer.zoomed && !cabinet.zoomed && !snakeMachine.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
@@ -4457,7 +4490,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

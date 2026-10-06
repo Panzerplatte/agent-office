@@ -8,7 +8,7 @@
  * Everything goes through one master gain that Settings turns down or mutes. Voice chat doesn't, and
  * the jukebox has a volume of its own.
  */
-import { CABINET, DESKS, DJ_BOOTH, FLOOR, GONG, JUKEBOX, WINDOWS as OPENINGS } from '../shared/layout';
+import { CABINET, DESKS, DJ_BOOTH, FLOOR, GONG, JUKEBOX, SNAKE_CABINET, WINDOWS as OPENINGS } from '../shared/layout';
 import type { GongWhy } from '../shared/protocol';
 import { streamUrl } from '../shared/jukebox';
 import { TunePlayer } from './music';
@@ -49,6 +49,8 @@ const WINDOWS: Pos[] = OPENINGS.filter((o) => o.y0 < 2).map((o) =>
 const GONG_AT: Pos = { x: GONG.x, y: GONG.height - 1.36, z: GONG.z };
 /** The arcade cabinet's speaker, under its screen. */
 const CABINET_AT: Pos = { x: CABINET.x - 0.2, y: 1.2, z: CABINET.z };
+/** The Snake machine's speaker, under its screen. */
+const SNAKE_AT: Pos = { x: SNAKE_CABINET.x - 0.2, y: 1.2, z: SNAKE_CABINET.z };
 /** A gong's overtones don't line up like a string's: [ratio to the lowest, loudness, seconds to die away]. */
 const GONG_PARTIALS: [number, number, number][] = [
   [1, 0.8, 7],
@@ -1464,6 +1466,23 @@ export class OfficeSound {
     if (kind === 'land') this.blip(out, t0, 160, 0.55, 0.07, 0.1, 'square');
     else if (kind === 'clear') [523, 659, 784, 1047, 1319].slice(0, lines + 1).forEach((f, i) => this.blip(out, t0 + i * 0.07, f, 1.02, 0.1, 0.09, 'square'));
     else [392, 330, 262, 196].forEach((f, i) => this.blip(out, t0 + i * 0.18, f, 0.97, 0.17, 0.14, 'triangle'));
+  }
+
+  /** The Snake machine: a gulp of food, a sparkle for golden food, a faint tick for a turn, the crash, and a fanfare for making the high-score table. */
+  snake(kind: 'eat' | 'golden' | 'turn' | 'crash' | 'record') {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`snake.${kind}`);
+    const out = this.panner(SNAKE_AT, 1.5, 1.2);
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.02;
+    if (kind === 'turn') this.blip(out, t0, 1400, 1, 0.025, 0.025, 'square');
+    else if (kind === 'eat') this.blip(out, t0, 440, 1.6, 0.08, 0.1, 'square');
+    else if (kind === 'golden') [784, 988, 1175, 1568].forEach((f, i) => this.blip(out, t0 + i * 0.06, f, 1.01, 0.09, 0.08, 'triangle'));
+    else if (kind === 'crash') {
+      this.blip(out, t0, 220, 0.25, 0.4, 0.16, 'sawtooth');
+      this.blip(out, t0 + 0.05, 110, 0.4, 0.35, 0.12, 'square');
+    } else [523, 659, 784, 659, 784, 1047].forEach((f, i) => this.blip(out, t0 + i * 0.11, f, 1, i === 5 ? 0.35 : 0.1, 0.1, 'square'));
   }
 
   // ---- Alerts ----------------------------------------------------------------------------------

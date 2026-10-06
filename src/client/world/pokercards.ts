@@ -20,6 +20,8 @@ const STACK_MAX = 16;
 
 /** Chips by what they're worth, biggest first, in the casino's colours. */
 export const DENOMS: readonly { value: number; color: string; edge: string }[] = [
+  { value: 5000, color: '#8a4b1f', edge: '#fde68a' },
+  { value: 1000, color: '#e0a91b', edge: '#fff7d6' },
   { value: 500, color: '#7c3aed', edge: '#f5d0fe' },
   { value: 100, color: '#111111', edge: '#f8f8f2' },
   { value: 25, color: '#16a34a', edge: '#f8f8f2' },

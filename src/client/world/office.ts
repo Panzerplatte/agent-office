@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ASHTRAY, BALCONY, BALCONY_DOOR, BEANBAGS, BOARDS, BOOKSHELF, CABINET, DARTBOARD, DESKS, DESK_SIZE, ELEVATOR, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MACHINE_MONITOR, MEETING_BOARD, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PLANTS, POOL_TABLE, SEATING_BY_ID, SLAB, STAIRS, STATIONS, STATION_AGENT, STOREY, STREET_Y, TV, WALL_HEIGHT, WALL_T, WINDOWS, deskSeat, streetBelow, type DeskDef, type Opening, type Side, type StationKind } from '../../shared/layout';
+import { ASHTRAY, BALCONY, BALCONY_DOOR, BEANBAGS, BOARDS, BOOKSHELF, CABINET, DARTBOARD, DESKS, DESK_SIZE, ELEVATOR, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MACHINE_MONITOR, MEETING_BOARD, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PLANTS, POOL_TABLE, SEATING_BY_ID, SLAB, SNAKE_CABINET, STAIRS, STATIONS, STATION_AGENT, STOREY, STREET_Y, TV, WALL_HEIGHT, WALL_T, WINDOWS, deskSeat, streetBelow, type DeskDef, type Opening, type Side, type StationKind } from '../../shared/layout';
 import { wallFacing, type WallId, type WallRect } from '../../shared/decor';
 import { deskPoint } from '../../shared/nav';
 import { FLOOR_PALETTES, type FloorPalette } from '../../shared/floors';
@@ -10,6 +10,7 @@ import { buildGong, type Gong } from './gong';
 import { buildJukebox, type JukeboxView } from './jukebox';
 import { buildBookshelf } from './bookshelf';
 import { buildCabinet, type CabinetModel } from './cabinet';
+import { buildSnakeCabinet, type SnakeCabinetModel } from './snakecabinet';
 import { buildWhiteboard, type WhiteboardStand } from './whiteboard';
 import { buildGreen, buildTee, type Green, type Tee } from './golf';
 import { buildStack, type Stack } from './stack';
@@ -36,7 +37,7 @@ export interface Collider {
   fence?: boolean;
 }
 
-export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts' | 'pool' | 'crash';
+export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'snake' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts' | 'pool' | 'crash';
 
 /** Something you can use. Its scene object carries it as `userData.interact`, for clicking. */
 export interface Interactable {
@@ -100,6 +101,8 @@ export interface Office {
   jukebox: JukeboxView;
   /** The arcade cabinet in the lounge, where BLOCKFALL plays (ui/cabinet.ts). */
   cabinet: CabinetModel;
+  /** The Snake arcade machine between the TV and the jukebox (its screen is the game's to paint). */
+  snakeCabinet: SnakeCabinetModel;
   /** The rolling whiteboard everyone draws on together. */
   whiteboard: WhiteboardStand;
   /** The golf tee on the balcony, and the hole across the street it's hit at. */
@@ -1238,6 +1241,11 @@ export function buildOffice(): Office {
   colliders.push(cabinet.collider);
   interactables.push(cabinet.interactable);
   fixture('east', CABINET.z, CABINET.height / 2, CABINET.width + 0.1, CABINET.height);
+  const snakeCabinet = buildSnakeCabinet(night);
+  group.add(snakeCabinet.group);
+  colliders.push(snakeCabinet.collider);
+  interactables.push(snakeCabinet.interactable);
+  fixture('east', SNAKE_CABINET.z, SNAKE_CABINET.height / 2, SNAKE_CABINET.width + 0.3, SNAKE_CABINET.height);
 
   // The bookshelf of the project's docs, on the south wall between the middle window and the balcony doors.
   const shelf = buildBookshelf();
@@ -1451,7 +1459,7 @@ export function buildOffice(): Office {
     loft: meshesOf(...loftParts),
   };
 
-  return { group, colliders, interactables, desks, setBeanbags, boardMeshes, tvScreen, bossScreen, machineScreen, meetingBoard: meeting.board, meetingSign: meeting.sign, fixtures: () => fixtures, elevator, gong, jukebox, cabinet, whiteboard, tee, green, hoop, dartboard, poolTable, stack, setProjectName, setLook, setLevel, night, plants, update, look };
+  return { group, colliders, interactables, desks, setBeanbags, boardMeshes, tvScreen, bossScreen, machineScreen, meetingBoard: meeting.board, meetingSign: meeting.sign, fixtures: () => fixtures, elevator, gong, jukebox, cabinet, snakeCabinet, whiteboard, tee, green, hoop, dartboard, poolTable, stack, setProjectName, setLook, setLevel, night, plants, update, look };
 }
 
 /** A chair at the meeting table, with its laptop on the table in front of it. */

@@ -9,11 +9,11 @@ import { MAX_BET, MAX_SEATS, MIN_BET, handValue, isBlackjack, suitOf, type BjAct
 import { EMOTE_SHOWN, ONLINE_EMOTES, atFloor, canSkip, controlsFor, mmss, netOf, seatOf, type OnlineControls, type OnlineTable } from '../../shared/onlineblackjack';
 import type { ClientMsg } from '../../shared/protocol';
 import { chips } from '../chips';
-import { t } from '../i18n';
+import { locale, t } from '../i18n';
 import { store } from '../state';
 import { rankLabel } from '../world/cards';
 import type { ScreenZoom } from './arcade';
-import { CHIPS, totalLabel } from './blackjack';
+import { CHIPS, amountText, chipLabel, totalLabel } from './blackjack';
 import { h, openModal, type Modal } from './dom';
 
 export const W = 960;
@@ -30,7 +30,7 @@ const SEAT_X = [836, 658, 480, 302, 124];
 /** And how far down its cards are: the seats sit round the table's curve. */
 const SEAT_Y = [262, 292, 302, 292, 262];
 /** The chips' colours, by what they're worth (as on the casino's panel). */
-const CHIP_COLOR: Record<number, string> = { 5: '#d0263a', 25: '#2a9d4b', 100: '#22232e', 500: '#7b3fbf' };
+const CHIP_COLOR: Record<number, string> = { 5: '#d0263a', 25: '#2a9d4b', 100: '#22232e', 500: '#7b3fbf', 1000: '#e0a91b', 5000: '#8a4b1f' };
 
 /** The game picker at the PC: Minesweeper, or online blackjack (with how many are at a table, and whether your seat's kept). */
 export function pickGame(onPick: (game: 'minesweeper' | 'blackjack') => void): Modal {
@@ -248,22 +248,22 @@ export class OnlineBlackjack {
     if (c.kind === 'join') parts.push(btn(t('windows.onlinebj.sitAgain'), () => this.send({ t: 'onlinebj.join' }), '.primary'));
     else if (c.kind === 'bet') {
       for (const n of CHIPS) {
-        const b = btn(String(n), () => this.setPending(this.pending + n), `.bj-chip.c${n}`, t('menus.bjAddChip', { n }));
+        const b = btn(chipLabel(n), () => this.setPending(this.pending + n), `.bj-chip.c${n}`, t('menus.bjAddChip', { n: amountText(n) }));
         b.disabled = this.pending + n > c.cap;
         parts.push(b);
       }
-      parts.push(h('span.obj-amount', {}, this.pending ? String(this.pending) : t('menus.bjMinMax', { min: MIN_BET, max: MAX_BET })));
+      parts.push(h('span.obj-amount', {}, this.pending ? amountText(this.pending) : t('menus.bjMinMax', { min: MIN_BET, max: amountText(MAX_BET) })));
       if (this.pending) parts.push(btn(t('menus.bjClear'), () => this.setPending(0)));
       const place = btn(t('menus.bjPlace'), () => this.pending && this.send({ t: 'onlinebj.bet', amount: this.pending }), '.primary');
       place.disabled = this.pending < MIN_BET;
       parts.push(place);
-      if (c.again && !this.pending) parts.push(btn(t('menus.bjAgain', { n: c.again }), () => this.send({ t: 'onlinebj.bet', amount: c.again })));
+      if (c.again && !this.pending) parts.push(btn(t('menus.bjAgain', { n: amountText(c.again) }), () => this.send({ t: 'onlinebj.bet', amount: c.again })));
     } else if (c.kind === 'down') {
       this.pending = 0;
-      parts.push(h('span.obj-amount.down', {}, t('menus.bjBetDown', { n: c.bet })), btn(t('menus.bjTakeBack'), () => this.send({ t: 'onlinebj.bet', amount: 0 })));
+      parts.push(h('span.obj-amount.down', {}, t('menus.bjBetDown', { n: amountText(c.bet) })), btn(t('menus.bjTakeBack'), () => this.send({ t: 'onlinebj.bet', amount: 0 })));
       if (c.deal) parts.push(btn(t('menus.bjDeal'), () => this.send({ t: 'onlinebj.deal' }), '.primary'));
     } else if (c.kind === 'insure') {
-      const yes = btn(t('menus.bjInsure', { n: c.cost }), () => this.send({ t: 'onlinebj.insure', take: true }), '.primary');
+      const yes = btn(t('menus.bjInsure', { n: amountText(c.cost) }), () => this.send({ t: 'onlinebj.insure', take: true }), '.primary');
       yes.disabled = !c.cost || chips.balance < c.cost;
       parts.push(yes, btn(t('menus.bjNoInsurance'), () => this.send({ t: 'onlinebj.insure', take: false })));
     } else if (c.kind === 'moves') {
@@ -325,7 +325,7 @@ export function paintTable(g: CanvasRenderingContext2D, table: OnlineTable | und
   g.fillStyle = '#f1ede4';
   g.font = `800 18px ${FONT}`;
   if (o.watcher && me) g.fillText(t('windows.onlinebj.playing', { name: me.name }), W - 16, 21);
-  else if (o.balance !== null) g.fillText(`🪙 ${o.balance.toLocaleString()}`, W - 16, 21);
+  else if (o.balance !== null) g.fillText(`🪙 ${amountText(o.balance)}`, W - 16, 21);
   g.textAlign = 'center';
   if (table) {
     g.fillStyle = 'rgba(241, 237, 228, 0.7)';
@@ -399,7 +399,7 @@ export function paintTable(g: CanvasRenderingContext2D, table: OnlineTable | und
         if (hd.outcome) {
           const won = (hd.paid ?? 0) > hd.bet || hd.outcome === 'blackjack' || hd.outcome === 'win';
           const push = hd.outcome === 'push';
-          const text = won ? `+${(hd.paid ?? 0) - hd.bet}` : push ? t('menus.bjOutPush') : t(hd.outcome === 'bust' ? 'menus.bjOutBust' : 'menus.bjOutLose');
+          const text = won ? `+${amountText((hd.paid ?? 0) - hd.bet)}` : push ? t('menus.bjOutPush') : t(hd.outcome === 'bust' ? 'menus.bjOutBust' : 'menus.bjOutLose');
           badge(g, text, hx, y - 14, won ? '#2a9d4b' : push ? '#5a6b7a' : '#d0263a');
         }
       });
@@ -454,7 +454,7 @@ function status(table: OnlineTable, me: BlackjackSeat | undefined): [string, str
     case 'done': {
       if (mine) {
         const net = netOf(mine);
-        return [net > 0 ? t('menus.bjYouWon', { n: net }) : net < 0 ? t('menus.bjYouLost', { n: -net }) : t('menus.bjYouEven'), net > 0 ? '#9ef0b5' : net < 0 ? '#ff9f9f' : plain];
+        return [net > 0 ? t('menus.bjYouWon', { n: amountText(net) }) : net < 0 ? t('menus.bjYouLost', { n: amountText(-net) }) : t('menus.bjYouEven'), net > 0 ? '#9ef0b5' : net < 0 ? '#ff9f9f' : plain];
       }
       const dealer = (r?.dealer ?? []).filter((c): c is Card => !!c);
       return [isBlackjack(dealer) ? t('menus.bjDealerBlackjack') : handValue(dealer).total > 21 ? t('menus.bjDealerBust') : t('menus.bjDealerHas', { n: handValue(dealer).total }), plain];
@@ -537,8 +537,10 @@ function stack(g: CanvasRenderingContext2D, x: number, y: number, amount: number
     g.setLineDash([]);
   }
   g.fillStyle = '#ffffff';
-  g.font = `900 14px ${FONT}`;
-  g.fillText(String(amount), x, y - (n - 1) * 4 + 1);
+  // Up to 9,999 written out (smaller once it's four figures), then short: 10k, 12.5k.
+  const text = amount >= 10_000 ? `${(amount / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 })}k` : amountText(amount);
+  g.font = `900 ${text.length > 4 ? 11 : text.length > 3 ? 12 : 14}px ${FONT}`;
+  g.fillText(text, x, y - (n - 1) * 4 + 1);
 }
 
 /** A seat's name plate at the table's edge: yours, someone else's, someone away, kept for someone, or free. */
