@@ -215,6 +215,12 @@ export const CASINO_JUKEBOX = { x: CASINO_ROOM.maxX - 0.42, y: 0.75, z: 10.4, wi
  * (x, y, z), `width` × `height` meters; `reach` is how far out in front of it E opens the panel.
  */
 export const CRASH_SCREEN = { x: CASINO_ROOM.minX + 0.07, y: 2.75, z: 8.3, width: 4.8, height: 2.7, reach: 7 } as const;
+/**
+ * The Crash scoreboard (see CrashBoard in shared/crash.ts): on the west wall right next to the Crash
+ * screen, on its north side between it and the slot machines, as high and as tall, facing into the
+ * room (+x). Its middle is at (x, y, z), `width` × `height` meters.
+ */
+export const CRASH_BOARD = { x: CASINO_ROOM.minX + 0.07, y: CRASH_SCREEN.y, z: 4.62, width: 2.1, height: CRASH_SCREEN.height } as const;
 
 /** A box on the floor that nobody walks through: the tables, the machines, the counters. */
 export interface Footprint {

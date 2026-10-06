@@ -107,12 +107,20 @@ test('Crash in the running office: everyone in the casino sees the round, only t
     assert.ok(seen.crash.left > 9000);
     assert.equal(seen.crash.crash, null);
     assert.equal((await bob.next('chips', (m) => m.chips.balance === bobStart - 100)).chips.balance, bobStart - 100);
+    // The scoreboard next to the screen counts it, Bob's row marked on his page only, nobody's id on either.
+    const board = (await bob.next('crash.board', (m) => m.board.wagered.length === 1)).board;
+    assert.deepEqual(board.wagered[0], { name: 'Bob', wagered: 100, net: 0, rounds: 0, color: board.wagered[0].color, you: true });
+    const cidBoard = (await cid.next('crash.board', (m) => m.board.wagered.length === 1)).board;
+    assert.equal(cidBoard.wagered[0].you, undefined);
+    assert.equal(cidBoard.wagered[0].id, undefined);
+    assert.ok(!ann.msgs.some((m) => m.t === 'crash.board'), 'upstairs there is no board');
     // Too early to cash out; taking it back gives it back.
     bob.send({ t: 'crash.cashout' });
     assert.equal((await bob.next('crash')).crash.players[0].out, undefined);
     bob.send({ t: 'crash.cancel' });
     assert.equal((await cid.next('crash', (m) => m.crash.players.length === 0)).crash.phase, 'idle');
     assert.equal((await bob.next('chips', (m) => m.chips.balance === bobStart)).chips.balance, bobStart);
+    assert.deepEqual((await cid.next('crash.board', (m) => m.board.wagered.length === 0)).board, { wagered: [], won: [] }, 'taken back: never wagered');
   } finally {
     for (const p of people) p.close();
     office.shutdown();

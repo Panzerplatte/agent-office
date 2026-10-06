@@ -8,6 +8,7 @@ import {
   CASINO_ROOM,
   CASINO_SEATING,
   CHIP_BOARD,
+  CRASH_BOARD,
   POKER_TABLE,
   ROULETTE_TABLE,
   ROULETTE_WHEEL,
@@ -18,6 +19,7 @@ import {
   rouletteColor,
   type CasinoTable,
 } from '../../shared/casino';
+import { multText, type CrashBoard, type CrashBoardRow } from '../../shared/crash';
 import { ELEVATOR, ELEVATOR_FRONT, WALL_T } from '../../shared/layout';
 import { t } from '../i18n';
 import { Worker } from './character';
@@ -160,6 +162,13 @@ export interface ChipBoard {
   setRows(rows: readonly ChipBoardRow[]): void;
 }
 
+/** The Crash scoreboard on the west wall next to the Crash screen: who's bet the most, and who's won the most, all-time. */
+export interface CrashBoardView {
+  mesh: THREE.Mesh;
+  /** Draws the board: the title, then the two rankings (the first 10 each), medals for the first three, your rows lit up. */
+  setBoard(board: CrashBoard): void;
+}
+
 export interface Casino {
   group: THREE.Group;
   colliders: Collider[];
@@ -172,6 +181,7 @@ export interface Casino {
   roulette: RouletteTableView;
   slots: SlotMachineView[];
   chipBoard: ChipBoard;
+  crashBoard: CrashBoardView;
   /** Where you stand at the cashier's window, and the cashier behind it. */
   cashier: { at: { x: number; z: number }; worker: Worker };
   update(t: number, dt: number): void;
@@ -1355,6 +1365,89 @@ export function buildCasino(): Casino {
   };
   chipBoard.setRows([]);
 
+  // The Crash scoreboard, next to the Crash screen on the west wall, in the chip board's colours.
+  const crashCanvas = document.createElement('canvas');
+  crashCanvas.width = 1024;
+  crashCanvas.height = Math.round((1024 * CRASH_BOARD.height) / CRASH_BOARD.width);
+  const crashTex = new THREE.CanvasTexture(crashCanvas);
+  crashTex.colorSpace = THREE.SRGBColorSpace;
+  crashTex.anisotropy = 8;
+  const crashMesh = mesh(new THREE.PlaneGeometry(CRASH_BOARD.width, CRASH_BOARD.height), glow('#ffffff', { map: crashTex }), CRASH_BOARD.x + 0.035, CRASH_BOARD.y, CRASH_BOARD.z, false);
+  crashMesh.rotation.y = Math.PI / 2;
+  group.add(crashMesh);
+  statics.add(mesh(new THREE.BoxGeometry(0.06, CRASH_BOARD.height + 0.16, CRASH_BOARD.width + 0.16), brass, CRASH_BOARD.x, CRASH_BOARD.y, CRASH_BOARD.z, false));
+  const crashBoard: CrashBoardView = {
+    mesh: crashMesh,
+    setBoard(board) {
+      const g = crashCanvas.getContext('2d')!;
+      const W = crashCanvas.width;
+      const Hh = crashCanvas.height;
+      g.fillStyle = '#0d0b10';
+      g.fillRect(0, 0, W, Hh);
+      g.strokeStyle = '#d4a84b';
+      g.lineWidth = 6;
+      g.strokeRect(10, 10, W - 20, Hh - 20);
+      g.textBaseline = 'middle';
+      g.textAlign = 'center';
+      g.fillStyle = '#ff5ca8';
+      fitFont(g, t('world.crashBoardTitle'), 60, W - 80);
+      g.fillText(t('world.crashBoardTitle'), W / 2, 62);
+      // One ranking: its heading, then a row each, the amount on the right (and on the most won, the biggest win).
+      const ranking = (top: number, title: string, empty: string, rows: readonly CrashBoardRow[], won: boolean) => {
+        g.textAlign = 'left';
+        g.fillStyle = '#ffd166';
+        fitFont(g, title, 42, W - 100);
+        g.fillText(title, 40, top);
+        g.fillStyle = '#d4a84b';
+        g.fillRect(40, top + 30, W - 80, 3);
+        if (!rows.length) {
+          g.textAlign = 'center';
+          g.fillStyle = '#c9c1d6';
+          fitFont(g, empty, 34, W - 120, 700);
+          g.fillText(empty, W / 2, top + 150);
+        }
+        rows.slice(0, 10).forEach((r, i) => {
+          const y = top + 80 + i * 50;
+          if (r.you) {
+            g.fillStyle = 'rgba(255, 209, 102, 0.22)';
+            g.strokeStyle = '#ffd166';
+            g.lineWidth = 3;
+            g.beginPath();
+            g.roundRect(28, y - 23, W - 56, 46, 12);
+            g.fill();
+            g.stroke();
+          }
+          g.textAlign = 'left';
+          g.fillStyle = i === 0 ? '#ffd166' : '#8d86a0';
+          fitFont(g, MEDALS[i] ?? `${i + 1}`, 32, 40);
+          g.fillText(MEDALS[i] ?? `${i + 1}`, 40 - (MEDALS[i] ? 6 : 0), y);
+          g.fillStyle = r.color ?? '#adb5bd';
+          g.beginPath();
+          g.arc(100, y, 11, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = '#f4efe1';
+          fitFont(g, r.name, 32, won ? 320 : 520, 800);
+          g.fillText(r.name, 124, y);
+          g.textAlign = 'right';
+          const amount = won ? `+${r.net.toLocaleString('en-US')}` : r.wagered.toLocaleString('en-US');
+          g.fillStyle = won ? '#7ae582' : '#ffd166';
+          fitFont(g, amount, 32, 210);
+          g.fillText(amount, W - 50, y);
+          if (won && r.best) {
+            const best = t('world.crashBoardBest', { won: r.best.won.toLocaleString('en-US'), m: multText(r.best.m) });
+            g.fillStyle = '#8d86a0';
+            fitFont(g, best, 26, 270, 700);
+            g.fillText(best, W - 280, y);
+          }
+        });
+      };
+      ranking(150, `🚀 ${t('world.crashBoardWagered')}`, t('world.crashBoardEmptyWagered'), board.wagered, false);
+      ranking(Math.round(Hh / 2) + 80, `💰 ${t('world.crashBoardWon')}`, t('world.crashBoardEmptyWon'), board.won, true);
+      crashTex.needsUpdate = true;
+    },
+  };
+  crashBoard.setBoard({ wagered: [], won: [] });
+
   // ---- The bar and the lounge ----------------------------------------------------------------------------------
   const B = CASINO_BAR;
   const blen = B.maxZ - B.minZ;
@@ -1466,6 +1559,7 @@ export function buildCasino(): Casino {
     roulette,
     slots,
     chipBoard,
+    crashBoard,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
     update(time, dt) {
       elevator.update(dt);
