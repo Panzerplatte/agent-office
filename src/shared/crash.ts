@@ -137,3 +137,74 @@ export function shownMultiplier(s: CrashState, since: number): number {
   if (s.phase !== 'running') return 1;
   return multiplierAt(s.elapsed + Math.max(0, since));
 }
+
+// ---- The scoreboard ---------------------------------------------------------------------------------
+
+/** How many places each of the scoreboard's two rankings has. */
+export const CRASH_TOP = 10;
+
+/**
+ * One person's Crash, all-time (see server/crashstats.ts): every chip they've bet (`wagered`), what
+ * that's come to (`net`: what cash-outs paid back, less every stake, so a loss takes it down), how
+ * many rounds they've played, and their biggest single win (`best`: what it made over the stake, at
+ * what multiplier).
+ */
+export interface CrashTotals {
+  wagered: number;
+  net: number;
+  rounds: number;
+  best?: { won: number; m: number };
+}
+
+export function emptyTotals(): CrashTotals {
+  return { wagered: 0, net: 0, rounds: 0 };
+}
+
+/** A bet of `bet` went down: it counts towards what they've wagered (and the round's lost until it's cashed out). */
+export function addWager(t: CrashTotals, bet: number): CrashTotals {
+  return { ...t, wagered: t.wagered + bet };
+}
+
+/** A bet of `bet` was taken back (or given back when the office stopped): it was never wagered after all. */
+export function takeWager(t: CrashTotals, bet: number): CrashTotals {
+  return { ...t, wagered: Math.max(0, t.wagered - bet) };
+}
+
+/**
+ * A bet of `bet` settled: cashed out at `m` for `won` (the stake and its winnings), or lost in the
+ * crash (`won` 0). The difference goes on `net`, and a bigger win than ever before is their `best`.
+ */
+export function settle(t: CrashTotals, bet: number, won: number, m: number): CrashTotals {
+  const profit = won - bet;
+  const best = profit > 0 && (!t.best || profit > t.best.won) ? { won: profit, m } : t.best;
+  return { ...t, net: t.net + profit, rounds: t.rounds + 1, ...(best ? { best } : {}) };
+}
+
+/** A place on the scoreboard: who (their name and colour, never their id) and their totals; `you` only on your own page's copy. */
+export interface CrashBoardRow extends CrashTotals {
+  name: string;
+  color?: string;
+  you?: boolean;
+}
+
+/** The scoreboard by the Crash screen: the most wagered and the most won, CRASH_TOP each, most first. */
+export interface CrashBoard {
+  wagered: CrashBoardRow[];
+  won: CrashBoardRow[];
+}
+
+export function emptyCrashBoard(): CrashBoard {
+  return { wagered: [], won: [] };
+}
+
+/**
+ * The two rankings from everyone's totals: the most wagered (anyone who's bet), and the most won
+ * (only who's up overall: net above 0). Of two the same, the one with more rounds, then by name.
+ */
+export function crashRanking<R extends CrashBoardRow>(rows: readonly R[], top = CRASH_TOP): { wagered: R[]; won: R[] } {
+  const tie = (a: R, b: R) => b.rounds - a.rounds || a.name.localeCompare(b.name);
+  return {
+    wagered: rows.filter((r) => r.wagered > 0).sort((a, b) => b.wagered - a.wagered || tie(a, b)).slice(0, top),
+    won: rows.filter((r) => r.net > 0).sort((a, b) => b.net - a.net || tie(a, b)).slice(0, top),
+  };
+}
