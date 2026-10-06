@@ -730,6 +730,67 @@ export class OfficeSound {
     }
   }
 
+  /**
+   * Crash, on the casino's wall screen: chips going down on the next round (`bet`), the round taking
+   * off (`start`, a rising whoosh), your cash-out (`cashout`, a bright ching), and the crash itself
+   * (`crash`, a burst of noise falling away). `at` is where the screen is.
+   */
+  crash(kind: 'bet' | 'start' | 'cashout' | 'crash', at?: Pos) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count(`crash-${kind}`);
+    const out = at ? this.panner(at, 4, 0.8) : ctx.createGain();
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    switch (kind) {
+      case 'bet':
+        this.clink(out, t0, rand(2300, 2700), 0.05);
+        this.clink(out, t0 + 0.04, rand(1900, 2300), 0.03);
+        break;
+      case 'start': {
+        // Lift-off: noise swept up through a band-pass, under a rising tone.
+        const air = this.noise(this.buf.white);
+        const band = biquad(ctx, 'bandpass', 300, 1.2);
+        band.frequency.setValueAtTime(300, t0);
+        band.frequency.exponentialRampToValueAtTime(2400, t0 + 0.9);
+        const g = ctx.createGain();
+        envelope(g.gain, t0, [
+          [0.15, 0.18],
+          [0.9, 0],
+        ]);
+        air.connect(band).connect(g).connect(out);
+        air.start(t0);
+        air.stop(t0 + 1);
+        this.blip(out, t0, 220, 3, 0.9, 0.05, 'sawtooth');
+        break;
+      }
+      case 'cashout':
+        [1047, 1319, 1568].forEach((f, i) => {
+          this.blip(out, t0 + i * 0.07, f, 1, i === 2 ? 0.5 : 0.12, 0.08, 'triangle');
+          this.blip(out, t0 + i * 0.07, f * 2, 1, 0.1, 0.02);
+        });
+        for (let i = 0; i < 4; i++) this.clink(out, t0 + 0.25 + i * 0.05, rand(2600, 3200), 0.03);
+        break;
+      case 'crash': {
+        // A bang, then the tone dropping away.
+        const bang = this.noise(this.buf.white);
+        const low = biquad(ctx, 'lowpass', 1800, 0.8);
+        low.frequency.setValueAtTime(1800, t0);
+        low.frequency.exponentialRampToValueAtTime(120, t0 + 0.8);
+        const g = ctx.createGain();
+        envelope(g.gain, t0, [
+          [0.01, 0.45],
+          [0.8, 0],
+        ]);
+        bang.connect(low).connect(g).connect(out);
+        bang.start(t0);
+        bang.stop(t0 + 0.9);
+        this.blip(out, t0, 440, 0.25, 0.7, 0.06, 'square');
+        break;
+      }
+    }
+  }
+
   /** Whoosh: the rush of air and the squeal of hands on brass, all the way down a fire pole. */
   slide(seconds = 1.6) {
     const ctx = this.ctx;

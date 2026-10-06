@@ -209,6 +209,13 @@ export const CASINO_ASHTRAY = { x: 10.9, z: 6.7, area: 3.4, reach: 1.6 } as cons
  */
 export const CASINO_JUKEBOX = { x: CASINO_ROOM.maxX - 0.42, y: 0.75, z: 10.4, width: 1.3, depth: 0.72, height: 1.85 } as const;
 
+/**
+ * The Crash screen (see shared/crash.ts): a big screen high on the west wall south of the slot
+ * machines, facing into the room (+x), where the whole casino can watch the round. Its middle is at
+ * (x, y, z), `width` × `height` meters; `reach` is how far out in front of it E opens the panel.
+ */
+export const CRASH_SCREEN = { x: CASINO_ROOM.minX + 0.07, y: 2.75, z: 8.3, width: 4.8, height: 2.7, reach: 7 } as const;
+
 /** A box on the floor that nobody walks through: the tables, the machines, the counters. */
 export interface Footprint {
   minX: number;

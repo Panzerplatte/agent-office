@@ -445,6 +445,25 @@ button { font-family: inherit; }
 .slots-pay { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
 .slots-pay-symbols { letter-spacing: 1px; }
 .slots-note { font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+/* Crash (E at the screen on the casino's wall): in the bottom right corner, no dimming, so the wall screen stays in view. */
+.backdrop.crash-backdrop { background: transparent; place-items: end end; pointer-events: none; }
+.crash-backdrop > .modal { pointer-events: auto; }
+.modal.crash-panel { width: min(420px, 100%); }
+.crash-panel footer .grow { font-size: 11px; }
+.crash-panel .body { display: flex; flex-direction: column; gap: 10px; }
+.crash-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.crash-status { font-weight: 800; }
+.crash-balance { font-size: 13px; color: var(--muted); font-weight: 700; }
+.crash-mult { font-size: 34px; font-weight: 900; font-variant-numeric: tabular-nums; color: #2a9d5c; }
+.crash-mult.crashed { color: #d1344f; }
+.crash-mult.waiting { color: var(--muted); }
+.crash-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.crash-chip { min-width: 46px; padding: 4px 8px; font-variant-numeric: tabular-nums; }
+.crash-chip.on { background: var(--ink); color: #fff; }
+.crash-row { display: flex; gap: 8px; align-items: center; }
+.crash-row input { flex: 1; min-width: 0; font: inherit; font-size: 15px; border: 3px solid var(--ink); border-radius: 12px; padding: 8px 10px; background: #fff; }
+.crash-cash { font-size: 18px; padding: 12px; }
+.crash-panel .setting-note { margin: 0; }
 /* At the roulette table (casino): the betting layout at the bottom, the clock and the last numbers over it, the chips under it. */
 .roulette { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); padding: 8px 12px 10px; display: grid; gap: 6px; font-size: 13px; font-weight: 800; }
 .rl-top { display: flex; align-items: center; gap: 10px; }
