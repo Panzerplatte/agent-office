@@ -31,7 +31,9 @@ test('the wheel turns faster once it is spun, then settles back', () => {
 test('a stack is drawn with the biggest chips first', () => {
   assert.deepEqual(chipStack(631), [500, 100, 25, 5, 1]);
   assert.deepEqual(chipStack(15), [5, 5, 5]);
-  assert.equal(chipStack(5000).length, 10);
+  assert.deepEqual(chipStack(6500), [5000, 1000, 500]);
+  assert.deepEqual(chipStack(10_000), [5000, 5000], 'a high roller’s spot');
+  assert.equal(chipStack(4999).length, 12);
   assert.equal(chipStack(99999).length, 12, 'never taller than that');
 });
 

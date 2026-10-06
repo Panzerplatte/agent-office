@@ -1,7 +1,8 @@
-import type { ServiceInfo, ServicesState } from '../../shared/protocol';
+import type { ClientMsg, ServiceInfo, ServicesState } from '../../shared/protocol';
 import { store } from '../state';
 import { h, openModal, timeAgo } from './dom';
 import { copy, copyButton, guessOs, openCommand, OS_LABEL, type Os } from './team';
+import { confirmDialog } from './prompt';
 import { t } from '../i18n';
 
 /** A text with `{name}` placeholders filled by elements (code snippets) rather than strings. */
@@ -44,7 +45,20 @@ function describe(svc: ServiceInfo): { who: string; color: string; branch?: stri
   return { who: w?.name ?? t('windows.services.someWorker'), color: w?.color ?? '#8d99ae', branch: w?.worktree?.branch };
 }
 
-export function openServices() {
+/** The 🖥 Preview window only loads on localhost (through the office's own port, see previewUrl): anywhere else the TV shows the site instead. */
+export function canPreview(here: Here = location): boolean {
+  return here.hostname === 'localhost';
+}
+
+/**
+ * 🚀 Live gehen, after a yes: the worker whose service it is publishes the website in the floor's
+ * Demo-Galerie (the office prompts it, see server/golive.ts). Also on the TV's toolbar.
+ */
+export function confirmGoLive(send: (msg: ClientMsg) => void, port: number) {
+  confirmDialog(t('windows.services.goLive'), t('windows.services.goLiveAsk'), t('windows.services.goLive'), () => send({ t: 'service.golive', port }));
+}
+
+export function openServices(send: (msg: ClientMsg) => void) {
   let os = guessOs();
   let picked: number | null = null;
   let copied: number | null = null;
@@ -74,6 +88,12 @@ export function openServices() {
     body.replaceChildren(
       h('p.note', { style: 'margin:0 0 12px' }, t('windows.services.intro')),
     );
+    // The floor's Demo-Galerie on Render: public, so it opens straight from anywhere.
+    const gallery = store.demoGallery;
+    if (gallery)
+      body.append(
+        h('div', { style: 'margin:0 0 12px' }, h('a.btn', { href: gallery, target: '_blank', rel: 'noopener', title: t('windows.services.galleryTitle', { url: gallery }) }, t('windows.services.gallery'))),
+      );
     if (!s.items.length) {
       body.append(
         h(
@@ -91,16 +111,31 @@ export function openServices() {
       const on = picked === svc.port;
       const open = h('a.btn', { href: serviceUrl(svc.port), target: '_blank', rel: 'noopener', title: t('windows.services.openTitle', { url: serviceUrl(svc.port) }) }, t('windows.services.open'));
       open.addEventListener('click', (e) => e.stopPropagation());
-      const url = previewUrl(svc.port);
-      const preview = h(
+      // The office's own browser shows it on the floor's TV, for everyone (see src/server/tvbrowser.ts).
+      const onTv = store.tvBrowser?.port === svc.port;
+      const tv = h(
         'button.btn',
-        { type: 'button', title: t(url === serviceUrl(svc.port) ? 'windows.services.previewTunnelTitle' : 'windows.services.previewTitle', { url }) },
-        t('windows.services.preview'),
+        { type: 'button', class: onTv ? '' : 'primary', title: t(onTv ? 'windows.services.tvOffTitle' : 'windows.services.tvTitle') },
+        t(onTv ? 'windows.services.tvOff' : 'windows.services.tv'),
       );
-      preview.addEventListener('click', (e) => {
+      tv.addEventListener('click', (e) => {
         e.stopPropagation();
-        window.open(url, PREVIEW_WINDOW, 'popup,width=1280,height=900');
+        send(onTv ? { t: 'tvbrowser.close' } : { t: 'tvbrowser.open', port: svc.port });
       });
+      const live = h('button.btn', { type: 'button', title: t('windows.services.goLiveTitle') }, t('windows.services.goLive'));
+      live.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmGoLive(send, svc.port);
+      });
+      const url = previewUrl(svc.port);
+      const preview =
+        canPreview() &&
+        h('button.btn', { type: 'button', title: t('windows.services.previewTitle', { url }) }, t('windows.services.preview'));
+      if (preview)
+        preview.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.open(url, PREVIEW_WINDOW, 'popup,width=1280,height=900');
+        });
       const li = h(
         'li',
         { class: on ? 'on' : '', tabindex: 0, role: 'button', title: t('windows.services.rowTitle') },
@@ -113,6 +148,8 @@ export function openServices() {
         ),
         h('span.svc-port', {}, `:${svc.port}`),
         open,
+        tv,
+        live,
         preview,
       );
       li.addEventListener('click', () => void pick(svc));
@@ -145,7 +182,7 @@ export function openServices() {
     );
   };
 
-  const unsubs = [store.on('services', render), store.on('workers', render)];
+  const unsubs = [store.on('services', render), store.on('workers', render), store.on('tvBrowser', render), store.on('demoGallery', render)];
   // Keeps "up 5m" fresh.
   const tick = setInterval(render, 30_000);
   const modal = openModal(el, {

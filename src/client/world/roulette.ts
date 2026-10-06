@@ -57,7 +57,7 @@ export function chipStack(amount: number, max = 12): number[] {
 }
 
 /** A chip's colour by its value, as on the panel. */
-export const CHIP_FACE: Record<number, string> = { 1: '#f4f1ea', 5: '#d62839', 25: '#16a34a', 100: '#111827', 500: '#7c3aed' };
+export const CHIP_FACE: Record<number, string> = { 1: '#f4f1ea', 5: '#d62839', 25: '#16a34a', 100: '#111827', 500: '#7c3aed', 1000: '#e0a91b', 5000: '#8a4b1f' };
 
 const CHIP_R = 0.025;
 const CHIP_H = 0.006;

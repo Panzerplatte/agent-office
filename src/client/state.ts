@@ -1,4 +1,4 @@
-import type { AccountsState, ChatLine, FloorInfo, FloorView, GhIssue, GhPull, GhState, LeaveOnMergeState, MachineState, MeetingState, NotifyState, PeerInfo, PlanLimits, Me, ProjectInfo, ProjectsDirState, PromptsState, QueueState, QueueTask, RepoChoice, ServerMsg, ServicesState, SkyState, TeamState, ThemeState, UpgradeState, Usage, UsageState, WorkerInfo } from '../shared/protocol';
+import type { AccountsState, ChatLine, FloorInfo, FloorView, GhIssue, GhPull, GhState, LeaveOnMergeState, MachineState, MeetingState, NotifyState, PeerInfo, PlanLimits, Me, ProjectInfo, ProjectsDirState, PromptsState, QueueState, QueueTask, RepoChoice, ServerMsg, ServicesState, SkyState, TvBrowserState, TeamState, ThemeState, UpgradeState, Usage, UsageState, WorkerInfo } from '../shared/protocol';
 import type { ScreenState } from './world/laptop';
 import { randomLook, sanitizeLook, type Look } from '../shared/avatar';
 import type { Decoration } from '../shared/decor';
@@ -8,15 +8,17 @@ import type { DogState } from '../shared/dog';
 import { JUKEBOX_DEFAULT, type JukeboxState } from '../shared/jukebox';
 import type { FloorStyle } from '../shared/floorstyle';
 import type { CabinetFrame, CabinetState } from '../shared/cabinet';
+import type { SnakeFrame, SnakeState } from '../shared/snake';
 import { emptyDarts, type DartsState } from '../shared/darts';
 import { emptyPool, type PoolPlayback, type PoolState } from '../shared/pool';
 import { emptyPoker, type PokerState } from '../shared/poker';
 import { emptyBlackjack, type BlackjackState } from '../shared/blackjack';
 import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } from '../shared/onlineblackjack';
 import { emptyRoulette, type RouletteState } from '../shared/roulette';
+import { emptyCrash, emptyCrashBoard, type CrashBoard, type CrashState } from '../shared/crash';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -151,6 +153,10 @@ class Store {
   team: TeamState | null = null;
   upgrade: UpgradeState = { available: false, phase: 'idle' };
   services: ServicesState = { items: [], port: 4600 };
+  /** A worker's site the office's own browser shows on the floor's TV (see tvbrowser.ts); null while it's off. */
+  tvBrowser: TvBrowserState | null = null;
+  /** The floor's Demo-Galerie address (its websites go live there), when one is set. */
+  demoGallery: string | null = null;
   /** Pictures on the walls. */
   decor: Decoration[] = [];
   /** What the lounge jukebox is playing; `since` is when the track started, on performance.now()'s clock. */
@@ -167,6 +173,10 @@ class Store {
   cabinet: CabinetState = { player: null, scores: [] };
   /** The game on the cabinet as its player last sent it; null while nobody plays. */
   cabinetFrame: CabinetFrame | null = null;
+  /** Who's at the Snake machine on your floor, and the building's Snake high scores. */
+  snake: SnakeState = { player: null, scores: [] };
+  /** The game on the Snake machine as its player last sent it; null while nobody plays. */
+  snakeFrame: SnakeFrame | null = null;
   usage: UsageState = { total: zeroUsage(), today: zeroUsage(), day: '', pauseHiring: false };
   /** The Claude plan's 5-hour and weekly limits. */
   limits: PlanLimits = { windows: [], at: 0 };
@@ -206,6 +216,11 @@ class Store {
   /** The casino's roulette table (see shared/roulette.ts), and when the office's news of it came (performance.now()), for its clock. */
   roulette: RouletteState = emptyRoulette();
   rouletteAt = 0;
+  /** The Crash round on the casino's wall screen (see shared/crash.ts), and when the office's news of it came (performance.now()), for the multiplier's clock. */
+  crash: CrashState = emptyCrash();
+  crashAt = 0;
+  /** The Crash scoreboard next to the screen: the most wagered and the most won, all-time (your own rows marked). */
+  crashBoard: CrashBoard = emptyCrashBoard();
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -277,10 +292,14 @@ class Store {
     this.meeting = v.meeting;
     this.decor = v.decor;
     this.services = v.services;
+    this.tvBrowser = v.tvBrowser ?? null;
+    this.demoGallery = v.demoGallery ?? null;
     this.whiteboard = new Map(v.whiteboard.elements.map((e) => [e.id, e]));
     this.drawing = v.whiteboard.people;
     this.cabinet = { player: v.cabinet.player, scores: v.cabinet.scores };
     this.cabinetFrame = v.cabinet.frame;
+    this.snake = { player: v.snake.player, scores: v.snake.scores };
+    this.snakeFrame = v.snake.frame;
     this.setDog(v.dog);
     this.setCat(v.cat);
     this.setJukebox(v.jukebox);
@@ -292,7 +311,10 @@ class Store {
     this.poolShot = undefined;
     this.roulette = v.roulette ?? emptyRoulette();
     this.rouletteAt = performance.now();
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette'] as Topic[]) this.emit(t);
+    this.crash = v.crash ?? emptyCrash();
+    this.crashAt = performance.now();
+    this.crashBoard = v.crashBoard ?? emptyCrashBoard();
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -416,6 +438,15 @@ class Store {
         this.services = msg.state;
         this.emit('services');
         break;
+      case 'tvbrowser':
+        this.tvBrowser = msg.state;
+        this.emit('tvBrowser');
+        break;
+      case 'demoGallery':
+        if (msg.floor !== this.floor) break;
+        this.demoGallery = msg.url;
+        this.emit('demoGallery');
+        break;
       case 'decor':
         this.decor = msg.items;
         this.emit('decor');
@@ -434,6 +465,11 @@ class Store {
         if (!msg.state.player || msg.state.player.id !== this.cabinet.player?.id) this.cabinetFrame = null;
         this.cabinet = msg.state;
         this.emit('cabinet');
+        break;
+      case 'snake':
+        if (!msg.state.player || msg.state.player.id !== this.snake.player?.id) this.snakeFrame = null;
+        this.snake = msg.state;
+        this.emit('snake');
         break;
       case 'darts':
         this.darts = msg.darts;
@@ -465,9 +501,22 @@ class Store {
         this.rouletteAt = performance.now();
         this.emit('roulette');
         break;
+      case 'crash':
+        this.crash = msg.crash;
+        this.crashAt = performance.now();
+        this.emit('crash');
+        break;
+      case 'crash.board':
+        this.crashBoard = msg.board;
+        this.emit('crashBoard');
+        break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;
         this.emit('cabinetFrame');
+        break;
+      case 'snake.frame':
+        this.snakeFrame = msg.frame;
+        this.emit('snakeFrame');
         break;
       case 'pong': {
         // The answer that came back quickest says best how the two clocks line up.

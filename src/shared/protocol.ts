@@ -2,6 +2,7 @@
 
 import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
+import type { SnakeFrame, SnakeResult, SnakeState, SnakeView } from './snake.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
 import type { ActionKind, PokerState } from './poker.js';
@@ -9,6 +10,7 @@ import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
+import type { CrashBoard, CrashState } from './crash.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -701,6 +703,10 @@ export interface FloorView {
   /** Pictures on this floor's walls. */
   decor: Decoration[];
   services: ServicesState;
+  /** What the lounge TV's browser shows (a worker's website, see server/tvbrowser.ts); null when it's off. */
+  tvBrowser: TvBrowserState | null;
+  /** The floor's Demo-Galerie: the public (Render) address its finished websites go live under; null when none is set. */
+  demoGallery: string | null;
   /** The floor's dog; null in a building with no floors yet. */
   dog: DogState | null;
   /** The floor's cat; null in a building with no floors yet. */
@@ -711,6 +717,8 @@ export interface FloorView {
   style: FloorStyle;
   /** Who's at the arcade cabinet, what's on its screen, and the building's high scores. */
   cabinet: CabinetView;
+  /** Who's at the Snake machine, what's on its screen, and the building's Snake high scores. */
+  snake: SnakeView;
   /** What's drawn on this floor's whiteboard, and who's drawing. */
   whiteboard: WhiteboardView;
   /** The meeting room: who's meeting about what, and the meetings before. */
@@ -725,6 +733,10 @@ export interface FloorView {
   blackjack?: BlackjackState;
   /** The casino's roulette table (only in the casino): who's at it, the chips on the layout, the round and the last numbers. */
   roulette?: RouletteState;
+  /** The Crash screen on the casino's wall (only in the casino): the round, who's in it and the last crash points. */
+  crash?: CrashState;
+  /** The Crash scoreboard next to the screen (only in the casino): the most wagered and the most won, all-time, your own rows marked. */
+  crashBoard?: CrashBoard;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -811,6 +823,41 @@ export interface ServicesState {
   port: number;
   /** user@host teammates tunnel to (offices deployed with deploy/aws.sh), e.g. office@203.0.113.7 */
   ssh?: string;
+}
+
+/**
+ * The lounge TV's browser: a worker's website (a service on this floor), opened by the office in its
+ * own headless Chromium and streamed to everyone on the floor as `tvbrowser.frame`s.
+ */
+export interface TvBrowserState {
+  port: number;
+  /** Where the page is now (always on http://localhost:<port>). */
+  url: string;
+  title: string;
+  /** Who put it on the TV. */
+  by: string;
+  /** The page's viewport in CSS pixels: 1280×720 (desktop) or 390×844 (mobile). */
+  width: number;
+  height: number;
+  loading: boolean;
+  /** Why it isn't showing (no Chromium, the page didn't load, the browser stopped), in English. */
+  error?: string;
+}
+
+export type TvBrowserView = 'desktop' | 'mobile';
+
+/** Mouse and keyboard on the TV's page: x and y are 0..1 of the viewport, mods a bitmask (1 Alt, 2 Ctrl, 4 Meta, 8 Shift). */
+export interface TvBrowserInput {
+  kind: 'move' | 'down' | 'up' | 'click' | 'wheel' | 'key' | 'text';
+  x?: number;
+  y?: number;
+  button?: 0 | 1 | 2;
+  dx?: number;
+  dy?: number;
+  key?: string;
+  code?: string;
+  text?: string;
+  mods?: number;
 }
 
 export type ChangeStatus = 'M' | 'A' | 'D' | 'R' | 'T' | '?';
@@ -1072,6 +1119,18 @@ export type ClientMsg =
   /** Admins: the most workers the office runs at once, across every floor; null takes the limit off. */
   | { t: 'machine.limit'; limit: number | null }
   | { t: 'voice'; voice: boolean; muted: boolean; sharing: boolean }
+  /** Put a worker's website on the floor's lounge TV: only a port the services board lists for this floor. */
+  | { t: 'tvbrowser.open'; port: number }
+  | { t: 'tvbrowser.close' }
+  | { t: 'tvbrowser.nav'; action: 'back' | 'forward' | 'reload' }
+  | { t: 'tvbrowser.view'; mode: TvBrowserView }
+  /** You opened the TV full screen (or closed it): frames come faster while anyone watches that way. */
+  | { t: 'tvbrowser.watch'; on: boolean }
+  | ({ t: 'tvbrowser.input' } & TvBrowserInput)
+  /** 🚀 Live gehen: prompts the Claude worker whose service this port is to publish its website in the Demo-Galerie. */
+  | { t: 'service.golive'; port: number }
+  /** Set the floor's Demo-Galerie address (an https URL); '' removes it. */
+  | { t: 'demoGallery.set'; url: string }
   | { t: 'rtc'; to: string; data: unknown }
   | { t: 'chat'; text: string }
   | { t: 'team.get' }
@@ -1097,9 +1156,9 @@ export type ClientMsg =
   | { t: 'upgrade.start' }
   /** Read the Claude plan limits again now, instead of at the next poll. */
   | { t: 'limits.refresh' }
-  /** Hang a picture on a wall. */
+  /** Hang a picture on a wall, or stand one in a frame on a desk (`on: 'desk'`). */
   | { t: 'decor.add'; decor: DecorPlacement }
-  /** Move, resize, re-frame or swap the image of a picture. */
+  /** Move (between walls and desks too: send `on` with the new spot), resize, re-frame or swap the image of a picture. */
   | { t: 'decor.update'; id: string; decor: Partial<DecorPlacement> }
   | { t: 'decor.remove'; id: string }
   /** Put a tune or a station on the jukebox (a JUKEBOX_TUNES or RADIO_STATIONS id), or a stream; with neither, turn it back on. */
@@ -1119,6 +1178,17 @@ export type ClientMsg =
    * how your score gets on the high-score table: the office follows the game frame by frame.
    */
   | { t: 'cabinet.frame'; frame: CabinetFrame }
+  /**
+   * Step up to the Snake machine on your floor to start a new game (even while you're at one, which
+   * then ends with no score); the office answers with `snake`, naming who got it and their game.
+   */
+  | { t: 'snake.play' }
+  /** Step away from the Snake machine: a game still on ends with no score (send `snake.over` first to keep it). */
+  | { t: 'snake.leave' }
+  /** Your Snake game as it looks now, for everyone else on the floor to watch; the office follows the game by them. */
+  | { t: 'snake.frame'; frame: SnakeFrame }
+  /** Your Snake game `game` is over at `result`: on the high-score table it goes if it adds up (and a good run pays chips), under `name` if you typed one in. */
+  | { t: 'snake.over'; game: string; result: SnakeResult; name?: string }
   /** You opened the whiteboard (or closed it): everyone on the floor sees who's drawing. */
   | { t: 'wb.open' }
   | { t: 'wb.close' }
@@ -1263,6 +1333,17 @@ export type ClientMsg =
   | { t: 'roulette.bet'; spot: string; amount: number }
   /** Pick your chips up off `spot`, or off the whole layout, while bets are open. */
   | { t: 'roulette.unbet'; spot?: string }
+  /** At the bank (the cashier), in the casino: a chip credit of `amount` (one of CREDIT_AMOUNTS in shared/chips.ts), once the last one's paid back. */
+  | { t: 'chips.credit'; amount: number }
+  /**
+   * Crash, at the big screen on the casino's wall: bet `amount` on the next round (while bets are
+   * open), take it back before the clock runs out, cash out while the multiplier climbs, or say this
+   * page has the panel open (so it's shown which player is you).
+   */
+  | { t: 'crash.bet'; amount: number }
+  | { t: 'crash.cancel' }
+  | { t: 'crash.cashout' }
+  | { t: 'crash.look' }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1365,6 +1446,12 @@ export type ServerMsg =
   | { t: 'team'; state: TeamState }
   | { t: 'upgrade'; state: UpgradeState }
   | { t: 'services'; state: ServicesState }
+  /** The lounge TV's browser was opened, closed, navigated, retitled or failed (to everyone on the floor). */
+  | { t: 'tvbrowser'; state: TvBrowserState | null }
+  /** What the TV's page looks like now: a base64 JPEG, w×h pixels; only while someone's on the floor. */
+  | { t: 'tvbrowser.frame'; data: string; w: number; h: number }
+  /** The floor's Demo-Galerie address changed (to everyone on the floor). */
+  | { t: 'demoGallery'; floor: string; url: string | null }
   | { t: 'decor'; items: Decoration[] }
   /** What the dog on your floor is up to now: sent at the start of each leg of its day. */
   | { t: 'dog'; dog: DogState }
@@ -1394,11 +1481,16 @@ export type ServerMsg =
   | { t: 'onlinebj.emote'; table: number; seat: number; emote: OnlineEmote }
   /** In the casino: someone sat down at the roulette table or got up, put chips down or picked them up, or the round moved on. */
   | { t: 'roulette'; roulette: RouletteState }
+  /** In the casino: someone bet on Crash or cashed out, or the round moved on (started, crashed, cleared). */
+  | { t: 'crash'; crash: CrashState }
+  /** In the casino: the Crash scoreboard changed (a bet went down or was taken back, or a round settled). */
+  | { t: 'crash.board'; board: CrashBoard }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).
    */
-  | { t: 'chips'; chips: ChipsState; change: ChipsEntry; quiet?: boolean }
+  /** Your chips: `change` is what changed (none when it's only your credit that work paid some of). */
+  | { t: 'chips'; chips: ChipsState; change?: ChipsEntry; quiet?: boolean }
   /** Chips: the top CHIPS_TOP balances changed (a new order, a balance, a name, someone came or went). */
   | { t: 'chips.top'; top: ChipsTopRow[] }
   | { t: 'jukebox'; state: JukeboxState }
@@ -1406,6 +1498,10 @@ export type ServerMsg =
   | { t: 'cabinet'; state: CabinetState }
   /** The game on your floor's cabinet, as its player sees it (sent to everyone else on the floor). */
   | { t: 'cabinet.frame'; frame: CabinetFrame }
+  /** Who's at the Snake machine on your floor now, and the building's Snake high scores. */
+  | { t: 'snake'; state: SnakeState }
+  /** The game on your floor's Snake machine, as its player sees it (sent to everyone else on the floor). */
+  | { t: 'snake.frame'; frame: SnakeFrame }
   /** Someone changed these elements on the floor's whiteboard (sent to everyone else on the floor). */
   | { t: 'wb.update'; elements: WbElement[] }
   /** Who has the floor's whiteboard open now. */

@@ -15,6 +15,7 @@ import { createOpenCodeModelCatalogue } from './models.js';
 import { Team } from './team.js';
 import { Upgrader } from './upgrade.js';
 import { Services } from './services.js';
+import { TvBrowsers } from './tvbrowser.js';
 import { ImageProxy } from './decor.js';
 import { Ledger } from './usage.js';
 import { PlanLimitsReader } from './limits.js';
@@ -29,17 +30,20 @@ import { LeaveOnMerge } from './leave-on-merge.js';
 import { RELAY_LOGIN, relayRequest, relayUpgrade, signInPage, stoppedPage, tunneledPort } from './relay.js';
 import { ChatLog } from './history.js';
 import { Arcade, HighScores } from './cabinet.js';
+import { GOOD_RUN, SnakeArcade, SnakeScores } from './snake.js';
 import type { ChatLine, ClientMsg, FloorInfo, FloorView, Me, MeetingRequest, PeerInfo, SearchResults, ServerMsg, ServicesState } from '../shared/protocol.js';
 import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider, isSmokable } from '../shared/protocol.js';
 import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layout.js';
 import { JUKEBOX_DEFAULT } from '../shared/jukebox.js';
 import { Jukebox } from './jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
+import { checkFrame as checkSnakeFrame, checkResult as checkSnakeResult, cleanName as cleanSnakeName, type SnakeFrame, type SnakeState } from '../shared/snake.js';
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
+import { isBusy } from '../shared/status.js';
 import { Chips, activeMsg, basketOf, chipsId, shotAtHoop, type ChipsTopEntry } from './chips.js';
 import { Poker } from './poker.js';
-import { ACTIVE_FOR, GOLF_CLOSE, type ChipsTopRow } from '../shared/chips.js';
+import { ACTIVE_FOR, GOLF_CLOSE, creditWork, workTime, type ChipsTopRow } from '../shared/chips.js';
 import { SEARCH_MAX, SEARCH_MIN, searchKey } from '../shared/search.js';
 import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
@@ -58,6 +62,9 @@ import { SLOT_MACHINES } from '../shared/casino.js';
 import { Slots } from './slots.js';
 import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 import { Roulette } from './roulette.js';
+import { Crash } from './crash.js';
+import { CrashStats, type CrashBoardEntry } from './crashstats.js';
+import type { CrashBoard, CrashBoardRow } from '../shared/crash.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -111,11 +118,18 @@ interface Client {
   /** Has the floor's whiteboard open. */
   whiteboard: boolean;
   lastWbPointerAt: number;
+  /** Has the floor's lounge TV open full screen (frames come faster then, see tvbrowser.ts). */
+  tvWatch: boolean;
   /** At the arcade cabinet on their floor, playing `game` (see Arcade); `frame` is it as it looks now. */
   playing: boolean;
   game?: string;
   frame?: CabinetFrame;
   lastFrameAt: number;
+  /** At the Snake machine on their floor; `snakeGame` is the game they're on (see SnakeArcade), `snakeFrame` how it looks now. */
+  snaking: boolean;
+  snakeGame?: string;
+  snakeFrame?: SnakeFrame;
+  lastSnakeFrameAt: number;
   /** When this client last said it was typing, per terminal (see 'term.typing'). */
   typingAt: Map<string, number>;
   /** Cleared at each heartbeat ping and set again by the pong; still clear at the next one means gone. */
@@ -214,6 +228,8 @@ export async function startServer(cfg: Config) {
   // The arcade's high scores: one table for the whole building, on every floor's cabinet. The office
   // follows every game and puts the scores up itself (see Arcade).
   const highScores = new HighScores(cfg.dataDir);
+  // And the Snake machine's, the same: one table for the building, the office checking every result.
+  const snakeScores = new SnakeScores(cfg.dataDir);
   // Chips: everyone's balance, kept on disk. A change goes to every page of theirs.
   const chips = new Chips(cfg.dataDir, {
     onChange: (who, state, change, quiet) => {
@@ -222,6 +238,9 @@ export async function startServer(cfg: Config) {
     // The leaderboard, for the casino's board: to everyone, each with their own row marked.
     onTop: (top) => {
       for (const c of clients.values()) sendTo(c, { t: 'chips.top', top: chipsTopFor(c, top) });
+    },
+    onCredit: (who) => {
+      for (const c of clients.values()) if (c.chips === who) sendTo(c, { t: 'toast', ...notice('chips.creditPaid'), level: 'info' });
     },
     nameOf: (who) => (who.startsWith('account:') ? accounts.get(who.slice('account:'.length))?.name : undefined),
     online: (who) => [...clients.values()].some((c) => c.chips === who),
@@ -283,10 +302,24 @@ export async function startServer(cfg: Config) {
   };
   /** The casino's roulette table, one for the building: bets and payouts go through the chips bank (see roulette.ts). */
   const roulette = new Roulette(chips);
+  /** The Crash screen on the casino's wall, one for the building: bets and cash-outs go through the chips bank (see crash.ts). */
+  // Its scoreboard: who's bet the most and won the most on it, all-time, kept on disk. Any change goes
+  // out to the casino once things have settled down for this tick (a round's crash settles everyone at once).
+  let crashBoardSoon: ReturnType<typeof setTimeout> | null = null;
+  const crashStats = new CrashStats(cfg.dataDir, {
+    onChange: () => {
+      crashBoardSoon ??= setTimeout(() => {
+        crashBoardSoon = null;
+        crashBoardChanged();
+      }, 0);
+    },
+  });
+  const crash = new Crash(chips, { stats: crashStats });
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
   });
+  const snakeArcade = new SnakeArcade(snakeScores);
   /** What the office is called where it has no project of its own to go by (webhooks, invites). */
   const officeName = cfg.project ? path.basename(cfg.project) : 'the office';
   const modelCommand = configuredProvider(cfg.agentCmd) === 'opencode' ? cfg.agentCmd : 'opencode';
@@ -502,6 +535,8 @@ export async function startServer(cfg: Config) {
     });
   };
 
+  // The lounge TVs' headless Chromium, shared by every floor and only running while one has a page on.
+  const tvBrowsers = new TvBrowsers();
   const floorContext: FloorContext = {
     agentCmd: cfg.agentCmd,
     agentArgs: cfg.agentArgs,
@@ -544,6 +579,12 @@ export async function startServer(cfg: Config) {
     peers: (floor) => [...clients.values()].filter((c) => c.peer.floor === floor.id).map((c) => c.peer),
     leaveOnMerge: () => leaveOnMerge.on,
     prMerged: (floor, n) => mergedChips(floor, n),
+    tvBrowsers,
+    service: (floor, port) => {
+      const svc = services.lookup(port);
+      return svc && svc !== 'gone' && floor.workers.get(svc.workerId) ? svc : undefined;
+    },
+    tvWatching: (floor) => [...clients.values()].some((c) => c.tvWatch && c.peer.floor === floor.id),
   };
   const openFloor = (def: FloorDef): Floor | undefined => {
     if (!existsSync(def.dir)) {
@@ -605,6 +646,24 @@ export async function startServer(cfg: Config) {
     c.frame = undefined;
     cabinetChanged(floor);
   };
+  /** Who's at the Snake machine on a floor. */
+  const snakePlayer = (floor: Floor): Client | undefined => [...clients.values()].find((c) => c.snaking && c.peer.floor === floor.id);
+  const snakeState = (floor: Floor | undefined): SnakeState => {
+    const p = floor && snakePlayer(floor);
+    return { player: p ? { id: p.id, name: p.peer.name, game: p.snakeGame ?? '' } : null, scores: snakeScores.top() };
+  };
+  const snakeChanged = (floor: Floor | undefined) => {
+    if (floor) toFloor(floor, { t: 'snake', state: snakeState(floor) });
+  };
+  /** `c` stepped away from the Snake machine (or left the floor, or the office): a game still on ends with no score. */
+  const stopSnake = (c: Client, floor = floorOf(c)) => {
+    if (!c.snaking) return;
+    snakeArcade.leave(c.snakeGame);
+    c.snaking = false;
+    c.snakeGame = undefined;
+    c.snakeFrame = undefined;
+    snakeChanged(floor);
+  };
 
   /** Everything on a floor, for whoever just arrived there. */
   const floorView = (floor: Floor | undefined): FloorView => ({
@@ -616,6 +675,8 @@ export async function startServer(cfg: Config) {
     queue: floor?.queue.state() ?? { tasks: [], maxWorkers: 0 },
     decor: floor?.decor.list() ?? [],
     services: servicesState(floor),
+    tvBrowser: floor?.tv.state() ?? null,
+    demoGallery: floor?.gallery.url ?? null,
     dog: floor?.dog.view() ?? null,
     cat: floor?.cat.view() ?? null,
     ball: floor?.court.state() ?? {},
@@ -626,13 +687,21 @@ export async function startServer(cfg: Config) {
     whiteboard: { elements: floor?.whiteboard.scene() ?? [], people: floor ? drawing(floor) : [] },
     meeting: floor?.meetings.state() ?? { current: null, past: [] },
     cabinet: { ...cabinetState(floor), frame: (floor && cabinetPlayer(floor)?.frame) ?? null },
+    snake: { ...snakeState(floor), frame: (floor && snakePlayer(floor)?.snakeFrame) ?? null },
   });
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), jukebox: casinoJukebox.state() });
+  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
+    // And what's on the lounge TV, which only sends a frame when the page changes.
+    const tv = floor?.tv.frame();
+    if (tv) sendTo(c, { t: 'tvbrowser.frame', ...tv });
+  };
+  /** Someone came onto a floor or left one: a floor's TV streams only while someone's there. */
+  const tvPeopleChanged = () => {
+    for (const f of floors.values()) f.tv.peopleChanged();
   };
   /** Where someone arriving goes: the floor they asked for, else the first one there is. */
   const arrivalFloor = (wanted: string | null): Floor | undefined => (wanted && floors.get(wanted)) || floors.values().next().value;
@@ -1024,8 +1093,11 @@ export async function startServer(cfg: Config) {
       emoting: false,
       whiteboard: false,
       lastWbPointerAt: 0,
+      tvWatch: false,
       playing: false,
       lastFrameAt: 0,
+      snaking: false,
+      lastSnakeFrameAt: 0,
       typingAt: new Map(),
       isAlive: true,
       peer: {
@@ -1074,9 +1146,10 @@ export async function startServer(cfg: Config) {
       theme: themes.state(),
       prompts: prompts.state(),
       leaveOnMerge: leaveOnMerge.state(),
-      ...(onRoof ? roofView() : inCasino ? casinoView() : floorView(floor)),
+      ...(onRoof ? roofView() : inCasino ? casinoView(client) : floorView(floor)),
     });
     screensOf(client, floor);
+    tvPeopleChanged();
     if (inCasino) pokerTo(client);
     broadcast({ t: 'peer.join', peer: client.peer }, id);
     if (account) accountsChanged(); // now online
@@ -1105,6 +1178,8 @@ export async function startServer(cfg: Config) {
       chips.topCheck(); // offline now, on the leaderboard
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
+      stopSnake(client);
+      tvPeopleChanged();
       // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
       if (blackjack.away(id)) blackjackChanged();
       // At an online table, likewise: their seat waits for them a while.
@@ -1139,6 +1214,26 @@ export async function startServer(cfg: Config) {
   const rouletteChanged = () => {
     const json = JSON.stringify({ t: 'roulette', roulette: roulette.state() } satisfies ServerMsg);
     for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+  };
+  /** To everyone in the casino: the Crash round, as it is now. */
+  const crashChanged = () => {
+    let json = '';
+    for (const o of clients.values()) {
+      if (o.peer.floor !== CASINO || o.ws.readyState !== WebSocket.OPEN) continue;
+      // Only put together when someone's down there to see it.
+      json ||= JSON.stringify({ t: 'crash', crash: crash.state() } satisfies ServerMsg);
+      o.ws.send(json);
+    }
+  };
+  /** The Crash scoreboard as `c` sees it: names and totals, their own rows marked, nobody's id. */
+  const crashBoardFor = (c: Client): CrashBoard => {
+    const mark = ({ id, ...row }: CrashBoardEntry): CrashBoardRow => (id === c.chips ? { ...row, you: true } : row);
+    const b = crashStats.board();
+    return { wagered: b.wagered.map(mark), won: b.won.map(mark) };
+  };
+  /** To everyone in the casino: the Crash scoreboard, each with their own rows marked. */
+  const crashBoardChanged = () => {
+    for (const o of clients.values()) if (o.peer.floor === CASINO) sendTo(o, { t: 'crash.board', board: crashBoardFor(o) });
   };
   // --- Poker: one table, down in the casino. Everyone down there sees it, each with only their own cards (see server/poker.ts).
   const poker = new Poker(chips);
@@ -1196,9 +1291,24 @@ export async function startServer(cfg: Config) {
     if (!chips.once(`pr:${floor.id}:${n}`)) return;
     const by = floor.queue.state().tasks.find((t) => t.pr?.number === n)?.addedBy ?? floor.workers.list().find((w) => w.pr?.number === n)?.createdBy.replace(/ \(queue\)$/, '');
     if (!by) return;
+    const owner = chipsOwners(by)[0];
+    if (!owner) return;
+    chips.earn(owner, 'merged');
+    chips.merged(owner);
+  };
+  /** Who `by` (a task's addedBy, a worker's hirer) is to the bank: their account, else whoever's in under that name without one. */
+  const chipsOwners = (by: string): string[] => {
     const account = accounts.byName(by);
-    const owner = account ? `account:${account.id}` : [...clients.values()].find((c) => !c.accountId && c.peer.name === by)?.chips;
-    if (owner) chips.earn(owner, 'merged');
+    return account ? [`account:${account.id}`] : [...clients.values()].filter((c) => !c.accountId && c.peer.name === by).map((c) => c.chips);
+  };
+  /** Everyone (by chips id) with a task or worker of theirs running right now, on any floor: project work, which pays off chip credit at the bank. */
+  const chipsWorking = (): Set<string> => {
+    const names = new Set<string>();
+    for (const f of floors.values()) {
+      for (const t of f.queue.state().tasks) if (t.status === 'running' && t.addedBy) names.add(t.addedBy);
+      for (const w of f.workers.list()) if (isBusy(w.status) && w.createdBy) names.add(w.createdBy.replace(/ \(queue\)$/, ''));
+    }
+    return new Set([...names].flatMap(chipsOwners));
   };
   const jukeboxChanged = (floor: Floor) => toFloor(floor, { t: 'jukebox', state: floor.jukebox.state() });
   /** The jukebox `c` hears: their floor's, or down in the casino the casino's (no floor); else a note that they have to be on a floor. */
@@ -1258,7 +1368,7 @@ export async function startServer(cfg: Config) {
     if (c.peer.floor === CASINO) return;
     const left = leave(c);
     c.peer.floor = CASINO;
-    sendTo(c, { t: 'floor.enter', peers: [...clients.values()].map((o) => o.peer), ...casinoView() });
+    sendTo(c, { t: 'floor.enter', peers: [...clients.values()].map((o) => o.peer), ...casinoView(c) });
     arrived(c, left);
     floorsChanged();
   };
@@ -1329,6 +1439,8 @@ export async function startServer(cfg: Config) {
     const wasDrawing = c.whiteboard;
     c.whiteboard = false;
     stopPlaying(c, was);
+    stopSnake(c, was);
+    c.tvWatch = false;
     const spot = at ?? { ...elevatorSpot(), y: 0, rotY: 0 };
     Object.assign(c.peer, { x: spot.x, y: spot.y, z: spot.z, rotY: spot.rotY, moving: false });
     delete c.peer.seat;
@@ -1341,6 +1453,7 @@ export async function startServer(cfg: Config) {
 
   const arrived = (c: Client, left: ReturnType<typeof leave>) => {
     broadcast({ t: 'peer.update', peer: c.peer }, c.id);
+    tvPeopleChanged();
     if (left.wasDrawing) drawingChanged(left.was);
     if (left.ballLeft && left.was) ballChanged(left.was);
     if (left.dartsLeft && left.was) dartsChanged(left.was);
@@ -1490,6 +1603,49 @@ export async function startServer(cfg: Config) {
         c.peer.sharing = !!msg.sharing;
         broadcast({ t: 'peer.update', peer: c.peer });
         break;
+      // The lounge TV: a worker's website from the services board, which anyone on the floor can put on and use.
+      case 'tvbrowser.open': {
+        const floor = floorOf(c);
+        if (!floor) return warn(c, notice('floor.pickOne'));
+        const err = floor.tv.open(num(msg.port), who);
+        if (err) warn(c, err);
+        break;
+      }
+      case 'tvbrowser.close':
+        floorOf(c)?.tv.close();
+        break;
+      case 'tvbrowser.nav':
+        if (msg.action === 'back' || msg.action === 'forward' || msg.action === 'reload') floorOf(c)?.tv.nav(msg.action);
+        break;
+      case 'tvbrowser.view':
+        if (msg.mode === 'desktop' || msg.mode === 'mobile') floorOf(c)?.tv.setView(msg.mode);
+        break;
+      case 'tvbrowser.watch':
+        c.tvWatch = !!msg.on;
+        floorOf(c)?.tv.watchChanged();
+        break;
+      case 'tvbrowser.input':
+        floorOf(c)?.tv.input(c.id, msg);
+        break;
+      // 🚀 Live gehen: the worker whose service it is publishes its website in the floor's Demo-Galerie.
+      case 'service.golive': {
+        const floor = floorOf(c);
+        if (!floor) return warn(c, notice('floor.pickOne'));
+        const r = floor.goLive.go(msg.port, who);
+        if ('error' in r) return warn(c, r.error);
+        toastFloor(floor, notice('golive.started', { name: r.worker.name, service: r.service }));
+        break;
+      }
+      case 'demoGallery.set': {
+        const floor = floorOf(c);
+        if (!floor) return warn(c, notice('floor.pickOne'));
+        const r = floor.gallery.set(msg.url, who);
+        if ('error' in r) return warn(c, r.error);
+        if (!r.changed) break;
+        toFloor(floor, { t: 'demoGallery', floor: floor.id, url: r.url });
+        toastFloor(floor, r.url ? notice('gallery.set', { who, url: r.url }) : notice('gallery.off', { who }));
+        break;
+      }
       case 'rtc': {
         const target = clients.get(str(msg.to, 32));
         if (target) sendTo(target, { t: 'rtc', from: c.id, data: msg.data });
@@ -1727,6 +1883,19 @@ export async function startServer(cfg: Config) {
         if (e) broadcast({ t: 'onlinebj.emote', ...e });
         break;
       }
+      case 'chips.credit': {
+        if (c.peer.floor !== CASINO) {
+          sendTo(c, { t: 'toast', ...notice('chips.creditCasino'), level: 'warn' });
+          break;
+        }
+        const why = chips.credit(c.chips, msg.amount);
+        if (why === 'owing') {
+          const owed = chips.owed(c.chips);
+          sendTo(c, { t: 'toast', ...notice('chips.creditOwed', { owed: owed.toLocaleString('en'), wait: workTime(creditWork(owed)) }), level: 'warn' });
+        }
+        else if (why) sendTo(c, { t: 'toast', ...notice('chips.creditAmount'), level: 'warn' });
+        break;
+      }
       case 'roulette.join':
       case 'roulette.away':
       case 'roulette.leave':
@@ -1744,6 +1913,21 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (bets closed, no chips, the table full) is told how it really is.
         if (changed) rouletteChanged();
         else sendTo(c, { t: 'roulette', roulette: roulette.state() });
+        break;
+      }
+      case 'crash.bet':
+      case 'crash.cancel':
+      case 'crash.cashout':
+      case 'crash.look': {
+        if (c.peer.floor !== CASINO) break;
+        const changed =
+          msg.t === 'crash.bet' ? crash.bet(c.id, c.chips, c.peer.name, msg.amount, c.peer.color)
+          : msg.t === 'crash.cancel' ? crash.cancel(c.chips)
+          : msg.t === 'crash.cashout' ? crash.cashOut(c.chips, c.id) > 0
+          : crash.look(c.id, c.chips);
+        // Whoever it didn't work for (bets closed, no chips, too late: it crashed) is told how it really is.
+        if (changed) crashChanged();
+        else sendTo(c, { t: 'crash', crash: crash.state() });
         break;
       }
       case 'dog.pet':
@@ -2234,7 +2418,8 @@ export async function startServer(cfg: Config) {
         const d = floor.decor.add(msg.decor, who);
         if (typeof d === 'string') return warn(c, d);
         decorChanged(floor);
-        toastFloor(floor, d.title ? notice('picture.hung', { who, title: d.title }) : notice('picture.hungUntitled', { who }));
+        if (d.on === 'desk') toastFloor(floor, d.title ? notice('picture.stood', { who, title: d.title }) : notice('picture.stoodUntitled', { who }));
+        else toastFloor(floor, d.title ? notice('picture.hung', { who, title: d.title }) : notice('picture.hungUntitled', { who }));
         break;
       }
       case 'decor.update': {
@@ -2332,6 +2517,52 @@ export async function startServer(cfg: Config) {
         if (now - c.lastFrameAt < 40) break;
         c.lastFrameAt = now;
         toNeighbors(c, { t: 'cabinet.frame', frame }, true);
+        break;
+      }
+      case 'snake.play': {
+        const floor = here();
+        if (!floor) break;
+        const at = snakePlayer(floor);
+        if (at && at !== c) {
+          warn(c, notice('snake.busy', { name: at.peer.name }));
+          sendTo(c, { t: 'snake', state: snakeState(floor) });
+          break;
+        }
+        c.snakeGame = snakeArcade.start({ owner: c.accountId ? `account:${c.accountId}` : `name:${who}`, name: who, color: c.peer.color });
+        c.snaking = true;
+        c.snakeFrame = undefined;
+        snakeChanged(floor);
+        break;
+      }
+      case 'snake.leave':
+        stopSnake(c);
+        break;
+      case 'snake.frame': {
+        const floor = floorOf(c);
+        const frame = checkSnakeFrame(msg.frame);
+        if (!c.snaking || !floor || !frame) break;
+        if (snakeArcade.frame(c.snakeGame, frame) === 'void') {
+          c.snakeGame = undefined;
+          warn(c, notice('snake.lost'));
+        }
+        c.snakeFrame = frame;
+        const now = Date.now();
+        if (now - c.lastSnakeFrameAt < 40) break;
+        c.lastSnakeFrameAt = now;
+        toNeighbors(c, { t: 'snake.frame', frame }, true);
+        break;
+      }
+      case 'snake.over': {
+        const floor = floorOf(c);
+        const result = checkSnakeResult(msg.result);
+        if (!c.snaking || !floor || msg.game !== c.snakeGame) break;
+        c.snakeGame = undefined;
+        const r = result ? snakeArcade.over(msg.game, result, cleanSnakeName(msg.name)) : (snakeArcade.leave(msg.game), { verdict: 'void' as const });
+        if (r.verdict === 'void') warn(c, notice('snake.lost'));
+        if (r.verdict !== 'ok' || !r.score) break;
+        if (r.score.score >= GOOD_RUN) chips.earn(c.chips, 'snakeScore');
+        if (r.changed) for (const f of floors.values()) snakeChanged(f);
+        if (r.first) toastFloor(floor, notice('snake.highScore', { name: r.score.name, score: scoreText(r.score.score) }));
         break;
       }
       case 'jukebox.stop': {
@@ -2433,7 +2664,11 @@ export async function startServer(cfg: Config) {
   // Chips: every minute, everyone who's been doing something (once per person, however many pages) gets a minute towards `online`.
   const chipsMinute = setInterval(() => {
     const now = Date.now();
-    chips.minute([...clients.values()].filter((c) => now - c.chipsActiveAt < ACTIVE_FOR).map((c) => c.chips));
+    const active = [...clients.values()].filter((c) => now - c.chipsActiveAt < ACTIVE_FOR).map((c) => c.chips);
+    chips.minute(active);
+    // Active with a task or worker of theirs running: a minute of project work, which pays off credit.
+    const working = chipsWorking();
+    chips.work(active.filter((id) => working.has(id)));
   }, 60_000);
 
   // The roulette table's clock: bets close, the wheel spins, the winners are paid, the layout's cleared.
@@ -2441,7 +2676,21 @@ export async function startServer(cfg: Config) {
     if (roulette.tick()) rouletteChanged();
   }, 200);
 
+  // The Crash round's clock, nonstop: bets close, the multiplier climbs, it crashes, bets open again.
+  // One timer, set for the next thing that happens (a few wake-ups a round), not a tick every frame.
+  let crashClock: ReturnType<typeof setTimeout>;
+  const crashLoop = () => {
+    if (crash.tick()) crashChanged();
+    crashClock = setTimeout(crashLoop, Math.max(0, crash.nextAt() - Date.now()));
+  };
+  crashLoop();
+
   const shutdown = (keep = false) => {
+    // Bets on a Crash round that hasn't crashed (and weren't cashed out) go back before the bank's written.
+    clearTimeout(crashClock);
+    crash.close();
+    if (crashBoardSoon) clearTimeout(crashBoardSoon);
+    crashStats.flush();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();
@@ -2458,6 +2707,7 @@ export async function startServer(cfg: Config) {
     arcade.flush();
     upgrader.stop();
     services.stop();
+    tvBrowsers.shutdown();
     webhook.stop();
     machine.stop();
     sky.stop();

@@ -207,12 +207,12 @@ export function payout(spot: Spot, amount: number, n: number): number {
 // ---- Chips and limits -------------------------------------------------------------------------------
 
 /** The chips you can put down, smallest first: each click on the layout puts one of these there. */
-export const DENOMINATIONS = [1, 5, 25, 100, 500] as const;
+export const DENOMINATIONS = [1, 5, 25, 100, 500, 1000, 5000] as const;
 
 /** The table's limits: the least that can go on a spot, the most on any one spot, and the most one player can have down in a round. */
 export const MIN_BET = 1;
-export const MAX_SPOT = 1000;
-export const MAX_TOTAL = 5000;
+export const MAX_SPOT = 10_000;
+export const MAX_TOTAL = 50_000;
 
 /** Whether `amount` is something that can go on a spot: a whole number of chips, within the table's limits. */
 export function amountOk(amount: unknown): amount is number {

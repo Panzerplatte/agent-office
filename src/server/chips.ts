@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HOOP, THREE_POINT, backboard, launch, simulate } from '../shared/hoop.js';
-import { CHIPS_TOP, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, STREAK_PAUSE, chipsAmountOk, chipsDay, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type ChipsTopRow, type EarnKind, type Earning } from '../shared/chips.js';
+import { CHIPS_TOP, CREDIT_GAMES, CREDIT_MAX, CREDIT_MERGED, CREDIT_PER_MINUTE, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, STREAK_PAUSE, chipsAmountOk, chipsDay, creditAmountOk, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type ChipsTopRow, type EarnKind, type Earning } from '../shared/chips.js';
 
 /** How long after a change the file is written, gathering a burst of changes into one write (ms). */
 const SAVE_AFTER = 1000;
@@ -27,6 +27,8 @@ interface Wallet {
   online: number;
   /** When they were last about. */
   seen: number;
+  /** Their credit from the bank while they still owe on it: when they took it, how much, and what's still owed (chips, not always whole: work pays it off by the minute). */
+  credit?: { at: number; amount: number; owed: number };
   /** What they were called, and their colour, when last about: for the leaderboard while they're away. */
   name?: string;
   color?: string;
@@ -45,8 +47,10 @@ interface Saved {
 
 export interface ChipsOptions {
   now?: () => number;
-  /** A balance changed: `entry` is the change, `quiet` if whoever made it asked for no toast. */
-  onChange?: (id: string, state: ChipsState, entry: ChipsEntry, quiet: boolean) => void;
+  /** A balance changed: `entry` is the change (none when only the credit's wait moved on), `quiet` if whoever made it asked for no toast. */
+  onChange?: (id: string, state: ChipsState, entry: ChipsEntry | undefined, quiet: boolean) => void;
+  /** `id`'s credit is paid back: the bank gives them another. */
+  onCredit?: (id: string) => void;
   /** How long after a change it's written to disk (ms); tests pass 0 and call flush. */
   saveAfter?: number;
   /** The leaderboard (see top) changed: sent at most once every `topAfter` ms, and only when it's different. */
@@ -85,6 +89,7 @@ export class Chips {
   private topAfter: number;
   private nameOf: ChipsOptions['nameOf'];
   private online: ChipsOptions['online'];
+  private onCredit: ChipsOptions['onCredit'];
   private topTimer: ReturnType<typeof setTimeout> | null = null;
   /** The leaderboard as last sent, to send it only when it's different. */
   private lastTop = '';
@@ -102,6 +107,7 @@ export class Chips {
     this.topAfter = opts.topAfter ?? TOP_AFTER;
     this.nameOf = opts.nameOf;
     this.online = opts.online;
+    this.onCredit = opts.onCredit;
     this.load();
   }
 
@@ -113,7 +119,46 @@ export class Chips {
   /** `id`'s balance and latest changes, newest first, for their page. */
   state(id: string): ChipsState {
     const w = this.data.wallets[id];
-    return w ? { balance: w.balance, ledger: w.ledger.map((e) => ({ ...e })) } : { balance: START_CHIPS, ledger: [] };
+    return w ? { balance: w.balance, ledger: w.ledger.map((e) => ({ ...e })), ...(w.credit ? { credit: { amount: w.credit.amount, owed: wholeChips(w.credit.owed) } } : {}) } : { balance: START_CHIPS, ledger: [] };
+  }
+
+  /** What `id` still owes on their credit, in whole chips (0: nothing, they can take one). */
+  owed(id: string): number {
+    const c = this.data.wallets[id]?.credit;
+    return c ? wholeChips(c.owed) : 0;
+  }
+
+  /**
+   * `id` takes a credit of `amount` chips at the bank (one of CREDIT_AMOUNTS): it goes on their
+   * balance, and they owe it until it's paid back (see work and earn). Says why not ('amount', or
+   * 'owing' while the last one isn't paid back yet), changing nothing, or null when they've had it.
+   */
+  credit(id: string, amount: number): 'amount' | 'owing' | null {
+    if (!creditAmountOk(amount) || !idOk(id)) return 'amount';
+    const w = this.wallet(id);
+    if (w.credit) return 'owing';
+    w.credit = { at: this.now(), amount, owed: amount };
+    this.change(id, w, amount, 'credit', false);
+    return null;
+  }
+
+  /**
+   * Project work, which pays off credit: `minutes` for each of `ids` (a minute active with a task or
+   * worker of theirs running, or CREDIT_MERGED for a merged pull request), CREDIT_PER_MINUTE chips of
+   * what they owe a minute. Only counts for someone who owes; their page hears what's left.
+   */
+  work(ids: Iterable<string>, minutes = 1) {
+    for (const id of new Set(ids)) {
+      const w = this.data.wallets[id];
+      if (!w?.credit) continue;
+      this.repay(id, w, minutes * CREDIT_PER_MINUTE);
+      this.onChange?.(id, this.state(id), undefined, true);
+    }
+  }
+
+  /** A pull request of `id`'s merged: a chunk of project work towards their credit (see CREDIT_MERGED). */
+  merged(id: string) {
+    this.work([id], CREDIT_MERGED);
   }
 
   /** `id`'s latest changes, newest first (at most LEDGER_SIZE). */
@@ -159,6 +204,12 @@ export class Chips {
     w.earned[kind] = (w.earned[kind] ?? 0) + pay;
     w.last[kind] = now;
     this.change(id, w, pay, kind, false, streak > 1 ? streak : undefined);
+    // Winnings at the mini games go to paying back a credit, while there's one owed.
+    if (w.credit && CREDIT_GAMES.includes(kind)) {
+      const back = Math.min(pay, wholeChips(w.credit.owed));
+      this.repay(id, w, back);
+      this.change(id, w, -back, 'credit.repay', true);
+    }
     return pay;
   }
 
@@ -283,6 +334,17 @@ export class Chips {
     this.topCheck();
   }
 
+  /** `chips` of `id`'s credit paid back: once it's all paid, it's gone, and the bank gives them another. */
+  private repay(id: string, w: Wallet, chips: number) {
+    if (!w.credit) return;
+    w.credit.owed -= chips;
+    this.dirty();
+    // (A sliver left over from adding up minutes of work is nothing.)
+    if (w.credit.owed > SLIVER) return;
+    delete w.credit;
+    this.onCredit?.(id);
+  }
+
   private dirty() {
     if (this.timer) return;
     this.timer = setTimeout(() => {
@@ -310,6 +372,7 @@ export class Chips {
           last: w.last && typeof w.last === 'object' ? w.last : {},
           online: Number.isInteger(w.online) ? w.online : 0,
           seen,
+          ...(w.credit && Number.isFinite(w.credit.at) && Number.isSafeInteger(w.credit.amount) && Number.isFinite(w.credit.owed) && w.credit.owed > SLIVER ? { credit: { at: w.credit.at, amount: w.credit.amount, owed: Math.min(w.credit.owed, CREDIT_MAX) } } : {}),
           ...(typeof w.name === 'string' && w.name ? { name: w.name.slice(0, 24) } : {}),
           ...(typeof w.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(w.color) ? { color: w.color } : {}),
         };
@@ -371,6 +434,14 @@ export function activeMsg(msg: { t: string; moving?: unknown }): boolean {
   return ACTIVE.has(msg.t) || /^(ball|darts|pool|golf|cabinet|wb)\./.test(msg.t);
 }
 const ACTIVE = new Set(['act', 'golf', 'emote', 'chat', 'term.input', 'term.typing', 'worker.prompt', 'worker.spawn', 'whistle']);
+
+/** Less than this owed on a credit is paid (chips). */
+const SLIVER = 1e-6;
+
+/** What's owed on a credit, in whole chips (rounded up, but not for a sliver). */
+function wholeChips(owed: number): number {
+  return Math.max(0, Math.ceil(owed - SLIVER));
+}
 
 /** Someone's id, as the office makes them (see Chips). */
 function idOk(id: unknown): id is string {

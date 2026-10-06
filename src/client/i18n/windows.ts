@@ -19,7 +19,9 @@ import search from './windows/search';
 import elevator from './windows/elevator';
 import decor from './windows/decor';
 import cabinet from './windows/cabinet';
+import snake from './windows/snake';
 import arcade from './windows/arcade';
+import tvbrowser from './windows/tvbrowser';
 import onlineblackjack from './windows/onlineblackjack';
 import minesweeper from './windows/minesweeper';
 import blocks from './windows/blocks';
@@ -52,7 +54,9 @@ export default {
     ...elevator.en,
     ...decor.en,
     ...cabinet.en,
+    ...snake.en,
     ...arcade.en,
+    ...tvbrowser.en,
     ...onlineblackjack.en,
     ...minesweeper.en,
     ...blocks.en,
@@ -79,7 +83,9 @@ export default {
     ...elevator.de,
     ...decor.de,
     ...cabinet.de,
+    ...snake.de,
     ...arcade.de,
+    ...tvbrowser.de,
     ...onlineblackjack.de,
     ...minesweeper.de,
     ...blocks.de,

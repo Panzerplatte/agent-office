@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { PICTURE_MAX, PICTURE_MIN, clampToWall, frameRect, overlaps, pictureSize, type WallId } from '../shared/decor';
+import { DESK_PICTURE_MAX, DESK_PICTURE_MIN, PICTURE_MAX, PICTURE_MIN, ROT_STEP, clampToDesk, clampToWall, deskFootprint, deskPictureSize, deskSpotFree, frameRect, normalizeRot, overlaps, pictureSize } from '../shared/decor';
 import type { Net } from './net';
 import type { PlayerController } from './player';
 import { store } from './state';
 import { openHangDialog, openPicture, type HangChoice } from './ui/decor';
 import { toast } from './ui/dom';
-import { Ghost, aimAtWall, brokenTexture, holdPicture, loadPicture, type Gallery } from './world/gallery';
+import { Ghost, aimAtDesk, aimAtWall, brokenTexture, holdPicture, loadPicture, type Gallery, type GhostSpot } from './world/gallery';
 import type { Office } from './world/office';
 import { t } from './i18n';
 
@@ -18,36 +18,39 @@ interface Hanging {
   aspect: number;
   /** The frame's width / height. */
   shape: number;
-  /** Longest side of the picture, in meters. */
+  /** Longest side of the picture on a wall, in meters. */
   size: number;
+  /** Longest side of the picture standing on a desk: desk frames have their own, smaller, sizes. */
+  deskSize: number;
+  /** Where you aimed last, so the wheel sizes that one when you're aiming at neither. */
+  on: 'wall' | 'desk';
+  /** How far it's turned within the wall, in degrees (see DecorPlacement.rot). */
+  rot: number;
   /** Set when moving a picture that's already up. */
   moving?: string;
   release(): void;
 }
 
-export interface Spot {
-  wall: WallId;
-  u: number;
-  y: number;
-  w: number;
-  h: number;
-  /** False when something else is on the wall there. */
-  ok: boolean;
-}
+/** Where the picture would go: on a wall or a desk top. `ok` is false when something else is there. */
+export type Spot = GhostSpot;
 
 const SIZE_KEY = 'agent-office.picture-size';
-function lastSize(): number {
+const DESK_SIZE_KEY = 'agent-office.desk-picture-size';
+function lastSize(key: string, min: number, max: number, fallback: number): number {
   try {
-    const n = Number(localStorage.getItem(SIZE_KEY));
-    return n >= PICTURE_MIN && n <= PICTURE_MAX ? n : 1.2;
+    const n = Number(localStorage.getItem(key));
+    return n >= min && n <= max ? n : fallback;
   } catch {
-    return 1.2;
+    return fallback;
   }
 }
+const lastWallSize = () => lastSize(SIZE_KEY, PICTURE_MIN, PICTURE_MAX, 1.2);
+const lastDeskSize = () => lastSize(DESK_SIZE_KEY, DESK_PICTURE_MIN, DESK_PICTURE_MAX, 0.2);
 
 /**
  * Hanging pictures: pick an image, then aim at a wall (the crosshair in first person, the mouse in
- * third) and click. Also looking at one closer, moving, editing and taking it down.
+ * third) and click. Aim at a desk top instead and it stands there in a small frame. Also looking at
+ * one closer, moving, editing and taking it down.
  */
 export class Hanger {
   readonly ghost = new Ghost();
@@ -106,17 +109,17 @@ export class Hanger {
     return !!this.cur?.moving;
   }
 
-  /** Where the picture would hang right now, if you're aiming at a wall. */
+  /** Where the picture would go right now, if you're aiming at a wall or a desk. */
   get spot(): Spot | null {
     return this.at;
   }
 
-  /** Pick an image, then a spot on the wall. */
+  /** Pick an image, then a spot on a wall or a desk. */
   start() {
-    openHangDialog({ onDone: (c) => this.begin(c, lastSize()) });
+    openHangDialog({ onDone: (c) => this.begin(c) });
   }
 
-  /** A closer look at a picture on the wall. */
+  /** A closer look at a picture. */
   view(id: string) {
     const d = store.decor.find((x) => x.id === id);
     if (!d) return;
@@ -134,7 +137,9 @@ export class Hanger {
     const go = (texture: THREE.Texture, aspect: number) => {
       if (!store.decor.some((x) => x.id === id)) return release();
       this.stop();
-      this.cur = { url: d.url, title: d.title ?? '', frame: d.frame, texture, aspect, shape: d.w / d.h, size: Math.max(d.w, d.h), moving: id, release };
+      const desk = d.on === 'desk';
+      const size = Math.max(d.w, d.h);
+      this.cur = { url: d.url, title: d.title ?? '', frame: d.frame, texture, aspect, shape: d.w / d.h, size: desk ? lastWallSize() : size, deskSize: desk ? size : lastDeskSize(), on: desk ? 'desk' : 'wall', rot: d.rot ?? 0, moving: id, release };
       this.gallery.hide(id);
       this.onChange();
     };
@@ -152,18 +157,31 @@ export class Hanger {
       initial: d,
       onDone: (c) => {
         // A new image keeps the picture's size along its longest side, in the new image's shape.
-        const { w, h } = c.picture.url === d.url ? d : pictureSize(Math.max(d.w, d.h), c.picture.aspect);
-        this.net.send({ t: 'decor.update', id, decor: { url: c.picture.url, title: c.title, frame: c.frame, w, h } });
+        const { w, h } = c.picture.url === d.url ? d : d.on === 'desk' ? deskPictureSize(Math.max(d.w, d.h), c.picture.aspect) : pictureSize(Math.max(d.w, d.h), c.picture.aspect, c.rot);
+        this.net.send({ t: 'decor.update', id, decor: { url: c.picture.url, title: c.title, frame: c.frame, w, h, rot: c.rot } });
       },
     });
   }
 
-  /** Bigger (+1) or smaller (-1). */
+  /** Bigger (+1) or smaller (-1): on a desk, the desk frame; otherwise the poster. */
   resize(dir: number) {
-    if (!this.cur) return;
+    const cur = this.cur;
+    if (!cur) return;
+    const k = dir > 0 ? 1.1 : 1 / 1.1;
+    if ((this.at?.on ?? cur.on) === 'desk') {
+      const { w, h } = deskPictureSize(cur.deskSize * k, cur.shape);
+      cur.deskSize = Math.max(w, h);
+      return;
+    }
     // A tall picture tops out below PICTURE_MAX; start shrinking from where it stopped growing.
-    const { w, h } = pictureSize(this.cur.size * (dir > 0 ? 1.1 : 1 / 1.1), this.cur.shape);
-    this.cur.size = Math.max(w, h);
+    const { w, h } = pictureSize(cur.size * k, cur.shape, cur.rot);
+    cur.size = Math.max(w, h);
+  }
+
+  /** Turns the picture one step: counterclockwise (+1) or clockwise (-1). */
+  rotate(dir: number) {
+    if (!this.cur) return;
+    this.cur.rot = normalizeRot(this.cur.rot + (dir > 0 ? ROT_STEP : -ROT_STEP));
   }
 
   /** Hangs the picture where you aim. `ndc` is where you clicked, in third person. */
@@ -174,8 +192,8 @@ export class Hanger {
     this.update();
     const at = this.at;
     if (!at) return toast(t('notices.hangAim'));
-    if (!at.ok) return toast(t('notices.hangTaken'), 'warn');
-    const spot = { wall: at.wall, u: at.u, y: at.y, w: at.w, h: at.h };
+    if (!at.ok) return toast(t(at.on === 'desk' ? 'notices.hangTakenDesk' : 'notices.hangTaken'), 'warn');
+    const spot = at.on === 'desk' ? { on: 'desk' as const, desk: at.desk, dx: at.dx, dz: at.dz, w: at.w, h: at.h, rot: at.rot } : { on: 'wall' as const, wall: at.wall, u: at.u, y: at.y, w: at.w, h: at.h, rot: at.rot };
     if (cur.moving) {
       this.net.send({ t: 'decor.update', id: cur.moving, decor: spot });
       // Reveal it when the office says where it went (or soon anyway, if it refused).
@@ -184,7 +202,8 @@ export class Hanger {
       this.net.send({ t: 'decor.add', decor: { url: cur.url, title: cur.title || undefined, frame: cur.frame, ...spot } });
     }
     try {
-      localStorage.setItem(SIZE_KEY, String(cur.size));
+      if (at.on === 'desk') localStorage.setItem(DESK_SIZE_KEY, String(cur.deskSize));
+      else localStorage.setItem(SIZE_KEY, String(cur.size));
     } catch {
       // storage blocked
     }
@@ -201,24 +220,37 @@ export class Hanger {
     const cur = this.cur;
     if (!cur) return;
     this.raycaster.setFromCamera(this.player.view === 'first' ? new THREE.Vector2(0, 0) : this.mouse, this.camera);
-    const hit = aimAtWall(this.raycaster.ray);
-    const { w, h } = pictureSize(cur.size, cur.shape);
-    const on = hit && clampToWall(hit.wall, hit.u, hit.y, w, h);
+    // A desk top in front of the wall you're aiming past takes the picture instead, in a standing frame.
+    const desk = aimAtDesk(this.raycaster.ray);
+    const hit = aimAtWall(this.raycaster.ray, desk?.t);
+    if (desk && !hit) {
+      const { w, h } = deskPictureSize(cur.deskSize, cur.shape);
+      const on = clampToDesk(desk.dx, desk.dz, w, h, cur.rot);
+      const ok = deskSpotFree(deskFootprint({ ...on, w, h, rot: cur.rot }), this.gallery.deskRects(desk.desk, cur.moving));
+      this.at = { on: 'desk', desk: desk.desk, dx: on.dx, dz: on.dz, w, h, rot: cur.rot, ok };
+      cur.on = 'desk';
+      this.ghost.show(this.at, cur.frame, cur.texture, cur.aspect);
+      return;
+    }
+    // Turned, a picture may have to hang smaller to fit under the ceiling; `size` stays as you set it.
+    const { w, h } = pictureSize(cur.size, cur.shape, cur.rot);
+    const on = hit && clampToWall(hit.wall, hit.u, hit.y, w, h, cur.rot);
     if (!hit || !on) {
       this.at = null;
       this.ghost.hide();
       return;
     }
-    const rect = frameRect({ wall: hit.wall, u: on.u, y: on.y, w, h });
+    const rect = frameRect({ wall: hit.wall, u: on.u, y: on.y, w, h, rot: cur.rot });
     const ok = ![...this.office.fixtures(), ...this.gallery.rects(cur.moving)].some((r) => overlaps(rect, r));
-    this.at = { wall: hit.wall, u: on.u, y: on.y, w, h, ok };
+    this.at = { on: 'wall', wall: hit.wall, u: on.u, y: on.y, w, h, rot: cur.rot, ok };
+    cur.on = 'wall';
     this.ghost.show(this.at, cur.frame, cur.texture, cur.aspect);
   }
 
-  private begin(c: HangChoice, size: number) {
+  private begin(c: HangChoice) {
     this.stop();
     const aspect = c.picture.aspect;
-    this.cur = { url: c.picture.url, title: c.title, frame: c.frame, texture: c.picture.texture, aspect, shape: aspect, size, release: holdPicture(c.picture.url) };
+    this.cur = { url: c.picture.url, title: c.title, frame: c.frame, texture: c.picture.texture, aspect, shape: aspect, size: lastWallSize(), deskSize: lastDeskSize(), on: 'wall', rot: c.rot, release: holdPicture(c.picture.url) };
     this.onChange();
   }
 

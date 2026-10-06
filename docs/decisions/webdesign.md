@@ -3,7 +3,7 @@
 Debatte im Besprechungsraum, 4 Runden (Vorsitz, Pragmatiker, Skeptiker, Vereinfacher), 2026-10-04.
 
 ## Die Frage
-1. Der Nutzer sagt „Baue eine Webseite für Unternehmen X aus Y“ oder schickt einen Link zur alten Seite. Dabei sollen die vier Design-Skills (`design-taste-frontend`, `emil-design-eng`, `web-design-guidelines`, `taste`) genutzt werden, und jede Seite soll anders aussehen.
+1. Der Nutzer sagt „Baue eine Webseite für Unternehmen X aus Y“ oder schickt einen Link zur alten Seite. Dabei sollen die drei Design-Skills (`design-taste-frontend`, `emil-design-eng`, `web-design-guidelines`) genutzt werden, und jede Seite soll anders aussehen.
 2. Die Seite soll während des Baus sichtbar sein. Ein Klick in der Dienste-Tafel öffnet sie in einem eigenen Fenster daneben. Dieses Fenster kann man im Meeting teilen, und es zeigt Änderungen der Worker sofort.
 
 ## Entschieden
@@ -83,7 +83,7 @@ Aufwand für Punkt 2 und 3 in **einem PR**: etwa 1 Tag.
 ## Offen
 - **Office über eine öffentliche Domain** (TLS, kein localhost-Tunnel): `p<port>.localhost` greift dort nicht. Lösen ließe sich das mit Wildcard-DNS + Wildcard-Zertifikat (`p5173.office.example`). Erst angehen, wenn jemand so arbeitet.
 - **„Vorschau folgt“:** Das Popup springt von selbst zum neuen Dienst des Workers (BroadcastChannel). Nur bauen, wenn es im Alltag fehlt. Ein Auto-Popup ohne Klick blockieren Browser ohnehin.
-- **Inhalt der Stil-Achsen:** festgelegt im Skill (`~/.claude/skills/webseite/achsen/*.txt`): 12 Layout-Archetypen, 10 Schriftpaare (Google Fonts), 8 Palette-Typen, 6 Bildsprachen. Offen bleibt: nach 5–10 Seiten prüfen, ob die Seiten wirklich verschieden wirken.
+- **Inhalt der Stil-Achsen:** festgelegt im Skill (`~/.claude/skills/webseite/achsen/*.txt`): 12 Layout-Archetypen, 12 Schriftpaare (selbst gehostet über `@fontsource`), 9 Palette-Typen, 6 Bildsprachen; seit dem Nachtrag „Modern-Regel“ nur zeitgemäße Optionen. Offen bleibt: nach 5–10 Seiten prüfen, ob die Seiten wirklich verschieden wirken.
 - **Reihenfolge bei Konflikten zwischen den Skills** (`design-taste-frontend` gegen `web-design-guidelines`): Faustregel „Richtung vor Regeln, Regeln vor Abgabe“. Bei Barrierefreiheit gewinnen die Guidelines. Am ersten echten Auftrag nachschärfen.
 - **Ob ein Worker die synchronisierten Skills (`synced/<uuid>`) auch unter ihrem Namen findet**, ist ungeklärt. Bis dahin gilt die Installation unter `~/.claude/skills/<name>/` aus Schritt 0.
 
@@ -118,3 +118,23 @@ Drei Abweichungen vom Meeting-Stand, alle im Ablauf oben schon eingearbeitet:
     | `design-taste-frontend` | Leonxlnx/taste-skill, `skills/taste-skill` | MIT |
     | `emil-design-eng` | emilkowalski/skills | MIT |
     | `web-design-guidelines` | vercel-labs/agent-skills | keine Lizenzdatei |
+
+## Nachtrag: Vorschau auf dem Office-TV (2026-10-04)
+- **Drei Skills statt vier.** Das Meeting nannte zusätzlich `taste`. Gemeint ist `design-taste-frontend` (aus Leonxlnx/taste-skill), kein eigener Skill. Der einzige Skill, der wirklich `taste` heißt, kopiert das Design einer URL, hat keine Lizenz und widerspricht der Regel „das Design der Altseite nicht kopieren“. Die Zahlen oben sind entsprechend korrigiert.
+- **Die Vorschau aus Punkt 2 und 3 lädt bei uns nicht.** `p<port>.localhost` funktioniert nur, wenn das Office über `localhost` geöffnet wird (lokal oder per SSH-Tunnel). Unsere Leute öffnen das Office remote, also bleibt das Popup leer. Das war unter „Offen“ (öffentliche Domain) schon absehbar; es ist der Normalfall.
+- **Neu: Der Office-SERVER öffnet die Seite selbst** und zeigt sie auf dem Lounge-TV der Etage im 3D-Office.
+  - `src/server/tvbrowser.ts`: ein headless Chromium (playwright-core) auf dem Office-Rechner. Dort funktioniert `http://localhost:<port>` einfach, HMR inklusive, weil es ein normaler Browser ist.
+  - Gestreamt per DevTools-Screencast als JPEG an alle auf der Etage: ~8 Bilder/s, ~15 während jemand das TV im Vollbild hat, nichts, wenn niemand auf der Etage ist.
+  - Bedienen darf jeder auf der Etage (Maus, Tastatur, zurück/vor/neu laden, Desktop 1280×720 oder Mobil 390×844). Es ist ein gemeinsamer Fernseher.
+  - Nur Dienste, die die Dienste-Tafel als Worker-Dienst dieser Etage listet. Navigation nur innerhalb von `localhost:<port>`; Popups, Downloads und andere Ursprünge sind gesperrt.
+  - Eine laufende Bildschirmfreigabe hat auf dem TV Vorrang.
+  - Chromium: `AGENT_OFFICE_CHROMIUM`, sonst `<Office-Home>/chromium/chromium`, sonst `~/.local/share/agent-office/chromium/chromium` (ein eigenständiges Chromium, das keine Systembibliotheken braucht), sonst das von Playwright (`npx playwright-core install chromium`), sonst ein System-Chrome/Chromium. Eins, das nicht startet, wird übersprungen.
+- Das Popup aus Punkt 2 bleibt für den lokalen Fall. Ins Meeting-Tool teilen ist damit nicht mehr nötig: Wer auf der Etage ist, sieht die Seite auf dem TV.
+
+## Nachtrag: Modern-Regel (2026-10-05)
+Rückmeldung: Einige Seiten wirkten veraltet, vor allem durch klassische Serifen. Seitdem gilt im Skill eine **Modern-Regel** (Web 2025/2026: Linear, Vercel, Stripe, Framer-Agenturseiten), egal was gezogen wird:
+- **Schriftpaare:** nur moderne Groteskschriften (Inter Tight, Geist, Plus Jakarta Sans, Sora, Space Grotesk, Unbounded, Syne, Bricolage Grotesque, Archivo, Outfit, Familjen Grotesk, Instrument Sans …). Playfair Display, Cormorant Garamond, DM Serif Display, Newsreader und Fraunces sind raus. Einzige Serife: Instrument Serif, nur kursiv für einzelne Wörter in Headlines, nie im Fließtext.
+- **Achsen:** „Long-Read“ (Marginalien) und „Sidebar“ (wie ein Handbuch) sind durch **Product-Showcase** und **Stat-Hero** ersetzt; „Erdtöne“ wird zu „Warme Neutrale“, neu ist „Hell + Verlauf“; „Schwarzweiß körnig“ wird zu „Schwarzweiß kontrastreich“ (ohne Korn).
+- **Gestaltung:** große, selbstbewusste Typo-Skala, viel Weißraum, dezente Radien, aktuelle UI-Muster. Keine Drop Caps, Kapitälchen-Köpfe, Papier- oder Korn-Texturen, Ornamente oder skeuomorphen Rahmen. Die Regel geht an `design-taste-frontend` mit.
+- **Prüfung vor „Live gehen“:** `schrift-pruefen.mjs` (in `live-pruefen.sh`) verweigert jede Schriftfamilie im gebauten CSS, die nicht in `achsen/schrift.txt` steht oder verboten ist. Seiten mit einem alten Schriftpaar müssen vor dem Livegang auf ein aktuelles Paar umgestellt werden.
+- Alte Namen im Verlauf brechen die Ziehung nicht: Sie zählen in der Sperre mit, gleichen aber keiner neuen Option.

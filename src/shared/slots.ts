@@ -86,7 +86,7 @@ export function linePays(s: readonly SlotSymbol[]): number | 'jackpot' {
 // ---- Bets and the jackpot ---------------------------------------------------------------------------
 
 /** What a spin can cost, in chips: always all five lines, a fifth of it on each. */
-export const BETS = [5, 10, 25, 50, 100] as const;
+export const BETS = [5, 10, 25, 50, 100, 250, 500, 1000] as const;
 export type SlotBet = (typeof BETS)[number];
 export const MAX_BET: SlotBet = BETS[BETS.length - 1];
 
@@ -94,8 +94,11 @@ export function isBet(v: unknown): v is SlotBet {
   return typeof v === 'number' && (BETS as readonly number[]).includes(v);
 }
 
-/** What the jackpot starts at, and goes back to once it's won. */
-export const JACKPOT_SEED = 500;
+/**
+ * What the jackpot starts at, and goes back to once it's won: five times the biggest bet, so a win at
+ * 100 a spin is still worth at least 500 now that the top bet is 1,000 (see jackpotWin).
+ */
+export const JACKPOT_SEED = 5 * MAX_BET;
 /** How much of every bet goes into the jackpot. */
 export const JACKPOT_SHARE = 0.025;
 

@@ -51,11 +51,12 @@ import { SlotScreens } from './world/slots';
 import type { SlotMachineView } from './world/casino';
 import { SLOT_MACHINES as SLOT_BANK } from '../shared/casino';
 import { emptySlots, type SlotsState } from '../shared/slots';
+import { multText } from '../shared/crash';
 import { locale as slotsLocale } from './i18n';
 import { Hands } from './world/hands';
 import { Basketball, IN_HANDS } from './world/hoop';
 import { HOOP, SWEET, idealSpeed, lookAtRim, meter, shotSpeed, throwPitch, tossSpeed, underCeiling } from '../shared/hoop';
-import { STREAK_PAUSE } from '../shared/chips';
+import { STREAK_PAUSE, creditWork, workTime } from '../shared/chips';
 import { Smoke } from './world/smoke';
 import { HAZE_MAX, Sky, describeSky } from './world/sky';
 import { Laptop } from './world/laptop';
@@ -91,6 +92,7 @@ import { localizeHud, openHelp, renderCaffeine, renderChat, renderPeople, render
 import { Compass, type Bearing } from './ui/compass';
 import { chips } from './chips';
 import { chipsToast, mountChips } from './ui/chips';
+import { openCredit } from './ui/credit';
 import { openCharacter } from './ui/character';
 import { openSettings } from './ui/settings';
 import { hiringPaused, renderUsage, usageLabel, usageTitle } from './ui/usage';
@@ -103,13 +105,19 @@ import { MachineTexture, officeFull, pressureNote } from './world/machine';
 import { mountHud } from './ui/menu';
 import { openJukebox } from './ui/jukebox';
 import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
+import { addCrashScreen, type CrashScreen } from './world/crashscreen';
+import { CrashPanel, mine as myCrashBet } from './ui/crash';
 import type { JukeboxView } from './world/jukebox';
 import { openBookshelf } from './ui/bookshelf';
 import { Arcade } from './ui/arcade';
+import { TvBrowser } from './tvbrowser';
+import { TvViewer } from './ui/tvbrowser';
 import { OnlineBlackjack } from './ui/onlineblackjack';
 import { Cabinet } from './ui/cabinet';
+import { SnakeMachine } from './ui/snake';
 import { trackTitle } from '../shared/jukebox';
 import { GAME, scoreText } from '../shared/cabinet';
+import { SNAKE_GAME } from '../shared/snake';
 import { EMOTES, EMOTE_BY_ID, EMOTE_EASE_OUT, EmoteBucket, type EmoteId } from '../shared/emotes';
 import { EmoteWheel } from './ui/emotes';
 import { WHISTLE_MAX_SECS, WhistleGate } from '../shared/whistle';
@@ -291,6 +299,9 @@ const tvMat = office.tvScreen.material as THREE.MeshBasicMaterial;
 tvMat.color.set('#ffffff');
 tvMat.map = tvIdle;
 tvMat.toneMapped = false;
+// A worker's site from the office's own browser, on the TV while no screen is shared (see tvbrowser.ts), and up close with E.
+const tvBrowser = new TvBrowser();
+const tvViewer = new TvViewer(office.tvScreen, tvBrowser, (msg) => net.send(msg));
 // The boss's monitor upstairs: Minesweeper, from the boss's chair.
 // Online blackjack on it too, at a table with everyone else at a PC on any floor (net and sound come up below).
 const onlineBlackjack = new OnlineBlackjack(
@@ -348,6 +359,12 @@ function theCasino(): Casino {
     scene.add(casino.group);
     casinoJukebox = addCasinoJukebox(casino);
     casinoJukebox.show(store.jukebox.on, trackTitle(store.jukebox));
+    crashScreen = addCrashScreen(casino);
+    // And the Crash scoreboard next to it: the most wagered and the most won, all-time.
+    const crashBoard = casino.crashBoard;
+    crashBoard.setBoard(store.crashBoard);
+    store.on('crashBoard', () => crashBoard.setBoard(store.crashBoard));
+    crashDrawnAt = -Infinity;
     noOutline(casino.group);
   }
   return casino;
@@ -430,6 +447,8 @@ store.on('jukebox', () => {
 });
 // The arcade cabinet next to it: BLOCKFALL up close, and on its screen for everyone else on the floor.
 const cabinet = new Cabinet(office.cabinet.screen, net, { openTerminal: (id) => openWorkerTerminal(id), sound: (kind, lines) => sound.arcade(kind, lines) });
+// The Snake machine between the TV and the jukebox: Snake up close, and on its screen for everyone else on the floor.
+const snakeMachine = new SnakeMachine(office.snakeCabinet.screen, net, { sound: (kind) => sound.snake(kind) });
 const notifier = new DesktopNotifier(() => settings.notify, (id) => openWorkerTerminal(id));
 
 // ---- Golf off the balcony --------------------------------------------------------------------------
@@ -531,7 +550,7 @@ function theirShot(id: string, shot: Shot, from?: [number, number]) {
   const floor = store.floor;
   setTimeout(() => {
     if (store.floor !== floor || upTop) return;
-    if (bunker.on) return putts.launch(putt({ yaw: shot.yaw, power: shot.power, from: from ? { x: from[0], z: from[1] } : PUTT_TEE }), p.name, false);
+    if (bunker.on) return putts.launch(putt({ yaw: shot.yaw, power: shot.power, from: from ? { x: from[0], z: from[1] } : PUTT_TEE }), p.name, false, id);
     balls.launch(shotHere(shot), p.name, false);
     teeEmptyUntil = performance.now() + 1800;
     sound.golf('hit', TEE_BALL);
@@ -846,6 +865,63 @@ store.on('roulette', () => {
   if (down > rouletteBets && rouletteWheel && downstairs) sound.roulette('chip', rouletteWheel.where);
   rouletteBets = down;
 });
+
+// ---- Crash ------------------------------------------------------------------------------------------
+// The big screen on the casino's west wall, for everyone down there: the round's countdown, the curve
+// climbing, who cashed out where, and the crash (see world/crashscreen.ts). E at it opens the panel to
+// bet and cash out (see ui/crash.ts). The office runs the rounds and pays; this follows what it says.
+let crashScreen: CrashScreen | null = null;
+/** When the screen was last drawn (performance.now()), to draw it only as often as it changes. */
+let crashDrawnAt = -Infinity;
+const crashPanel = new CrashPanel({
+  bet: (amount) => net.send({ t: 'crash.bet', amount }),
+  cancel: () => net.send({ t: 'crash.cancel' }),
+  cashOut: () => net.send({ t: 'crash.cashout' }),
+  opened: () => net.send({ t: 'crash.look' }),
+  closed: () => (hintKey = 'stale'),
+  balance: () => chips.balance,
+  state: () => ({ s: store.crash, since: performance.now() - store.crashAt, you: store.you }),
+});
+/** The round as last heard, to hear it take off, crash, and your cash-out. */
+let crashWas = { round: -1, phase: '', players: 0, out: false };
+store.on('crash', () => {
+  const c = store.crash;
+  const me = myCrashBet(c, store.you);
+  const at = crashScreen?.where;
+  if (downstairs && at && crashWas.round >= 0) {
+    if (c.round === crashWas.round && c.players.length > crashWas.players && c.phase !== 'crashed') sound.crash('bet', at);
+    if (c.phase !== crashWas.phase && c.phase === 'running') sound.crash('start', at);
+    if (c.phase !== crashWas.phase && c.phase === 'crashed') sound.crash('crash', at);
+    if (me?.out !== undefined && !crashWas.out) sound.crash('cashout');
+  }
+  crashWas = { round: c.round, phase: c.phase, players: c.players.length, out: me?.out !== undefined };
+  crashDrawnAt = -Infinity;
+});
+const crashView = new THREE.Frustum();
+const crashViewMatrix = new THREE.Matrix4();
+/**
+ * Keeps the wall screen (and the panel, while it's open) up to date: every frame while the curve
+ * climbs, a few times a second otherwise, and not at all while it's out of view (the game runs
+ * nonstop, so that's most of the time: it's drawn again the moment it comes into view).
+ */
+function updateCrash(now: number) {
+  if (!downstairs) {
+    if (crashPanel.open) crashPanel.close();
+    return;
+  }
+  const c = store.crash;
+  const every = c.phase === 'running' ? 0 : c.phase === 'betting' ? 100 : 1000;
+  if (crashScreen && now - crashDrawnAt >= every) {
+    crashView.setFromProjectionMatrix(crashViewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    if (!crashView.intersectsObject(crashScreen.mesh)) {
+      crashPanel.update();
+      return;
+    }
+    crashDrawnAt = now;
+    crashScreen.draw(c, now - store.crashAt, store.you);
+  }
+  crashPanel.update();
+}
 
 // ---- Slot machines ----------------------------------------------------------------------------------
 // The casino's slot machines: the reels on every machine's screen, for everyone down there, and you at
@@ -1206,6 +1282,8 @@ net.onMessage((msg) => {
           if (msg.golf) p.golfing = true;
           else delete p.golfing;
         }
+        // Off the tee: their ball doesn't stay lying on the carpet.
+        if (!msg.golf) putts.forget(msg.id);
         r?.person.setGolf(msg.golf);
         break;
       }
@@ -1230,7 +1308,7 @@ net.onMessage((msg) => {
       break;
     case 'chips':
       chips.set(msg.chips, msg.change);
-      if (!msg.quiet) chipsToast(msg.change);
+      if (!msg.quiet && msg.change) chipsToast(msg.change);
       break;
     case 'chips.top':
       chips.setTop(msg.top);
@@ -1573,6 +1651,7 @@ function syncPeers() {
   for (const [id, r] of remotes) {
     const peer = store.peers.get(id);
     if (!peer || !store.onMyFloor(peer)) {
+      putts.forget(id);
       scene.remove(r.person.root);
       remotes.delete(id);
     }
@@ -2236,9 +2315,9 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   if (key !== 'E') return;
   if (target.kind === 'elevator') showElevator();
   else if (target.kind === 'issues' || target.kind === 'pulls') openBoard(target.kind, net, boardActions());
-  else if (target.kind === 'services') openServices();
+  else if (target.kind === 'services') openServices((msg) => net.send(msg));
   else if (target.kind === 'queue') showQueue();
-  else if (target.kind === 'tv') watchShare();
+  else if (target.kind === 'tv') watchTv();
   else if (target.kind === 'jukebox') showJukebox();
   else if (target.kind === 'bookshelf') showBookshelf();
   else if (target.kind === 'decor' && target.decorId) hanger.view(target.decorId);
@@ -2250,15 +2329,18 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'gong') hitGong();
   else if (target.kind === 'whiteboard') openWhiteboard(net);
   else if (target.kind === 'cabinet') cabinet.play();
+  else if (target.kind === 'snake') snakeMachine.play();
   else if (target.kind === 'ladder') grabLadder();
   else if (target.kind === 'pole' && target.pole !== undefined) usePole(target.pole);
   else if (target.kind === 'meeting') showMeeting();
   else if (target.kind === 'bar') showBar();
+  else if (target.kind === 'bank') openCredit((amount) => net.send({ t: 'chips.credit', amount }));
   else if (target.kind === 'dj') blowHorn();
   else if (target.kind === 'golf') teeOff();
   else if (target.kind === 'ball') takeBall();
   else if (target.kind === 'darts') stepUpToDarts();
   else if (target.kind === 'pool') stepUpToPool();
+  else if (target.kind === 'crash') crashPanel.show();
 }
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
@@ -2802,6 +2884,12 @@ function tvShowing(): boolean {
   return currentShares().some(([who]) => who !== 'You');
 }
 
+/** E at the TV (or on the couch facing it): a shared screen full screen, else the website on it up close, else share yours. */
+function watchTv() {
+  if (!currentShares().length && store.tvBrowser) tvViewer.show();
+  else watchShare();
+}
+
 /** E at a seat: sit down on it. Sitting there already, get up, or on the couch facing the TV, watch it. */
 function useSeat(seatId: string) {
   const seat = SEATING_BY_ID.get(seatId);
@@ -2809,7 +2897,7 @@ function useSeat(seatId: string) {
   if (player.seat?.seatId === seatId) {
     // On a slot machine's stool, E plays it (again): it never gets you up, Esc or walking off does.
     if (seat.play === 'slots' && seat.spot !== undefined) playSlots(seat.spot);
-    else if (seat.tv && tvShowing()) watchShare();
+    else if (seat.tv && (tvShowing() || store.tvBrowser)) watchTv();
     else if (seat.game) arcade.play();
     else if (seat.play === 'roulette') playRoulette();
     else if (seat.bar) showBar();
@@ -2827,8 +2915,8 @@ function useSeat(seatId: string) {
   me.sit(place.hips);
   net.send({ t: 'sit', seat: place.key });
   if (seat.play === 'roulette') playRoulette();
-  // The couch in front of the TV is where you watch whoever's sharing.
-  if (seat.tv && tvShowing()) watchShare();
+  // The couch in front of the TV is where you watch whoever's sharing, or the website on it.
+  if (seat.tv && (tvShowing() || store.tvBrowser)) watchTv();
   // Sitting down at a slot machine is to play it.
   if (seat.play === 'slots' && seat.spot !== undefined) playSlots(seat.spot);
 }
@@ -3033,6 +3121,8 @@ function hintFor(it: Interactable): Hint {
     }
     case 'tv': {
       const any = currentShares().length > 0;
+      const site = !any && store.tvBrowser;
+      if (site) return { k: `site|${site.title}`, parts: [title(t('main.officeTv')), aside(site.title || site.url), key('E', t('main.useWebsite'))] };
       return { k: String(any), parts: [title(t('main.officeTv')), key('E', t(any ? 'main.watchFull' : 'main.shareYourScreen'))] };
     }
     case 'coffee': {
@@ -3085,6 +3175,16 @@ function hintFor(it: Interactable): Hint {
             : t('main.poolAbout');
       return { k: `${about}|${full}`, parts: [title(t('main.poolTable')), aside(about), full ? aside(t('main.poolFull')) : key('E', t('main.playPool'))] };
     }
+    case 'crash': {
+      const c = store.crash;
+      const me = myCrashBet(c, store.you);
+      const about =
+        c.phase === 'running' ? t('main.crashRunning', { n: c.players.length })
+        : c.phase === 'betting' ? t('main.crashBetting', { n: c.players.length })
+        : c.phase === 'crashed' && c.crash !== null ? t('main.crashCrashed', { m: multText(c.crash) })
+        : t('main.crashAbout');
+      return { k: `${about}|${!!me}`, parts: [title(t('main.crash')), aside(about), key('E', t(me && c.phase === 'running' && me.out === undefined ? 'main.crashCashOut' : 'main.crashPlay'))] };
+    }
     case 'jukebox': {
       const j = store.jukebox;
       const what = j.on ? trackTitle(j) : '';
@@ -3101,6 +3201,17 @@ function hintFor(it: Interactable): Hint {
       const best = c.scores[0];
       const about = left !== null ? t('main.gamePaused', { score: scoreText(left) }) : best ? `🏆 ${clip(best.name, 24)} · ${scoreText(best.score)}` : t('main.noHighScore');
       return { k: `${left}|${best?.name}|${best?.score}`, parts: [title(`🕹️ ${GAME}`), aside(about), key('E', t(left !== null ? 'main.carryOn' : 'main.play'))] };
+    }
+    case 'snake': {
+      const s = store.snake;
+      const f = store.snakeFrame;
+      if (s.player && s.player.id !== store.you) {
+        const who = s.player.name;
+        return { k: `${who}|${f?.score}`, parts: [title(`🐍 ${SNAKE_GAME}`), aside(`${t('main.playing', { name: clip(who, 24) })}${f ? ` · ${scoreText(f.score)}` : ''}`), key('E', t('main.watch'))] };
+      }
+      const best = s.scores[0];
+      const about = best ? `🏆 ${clip(best.name, 24)} · ${scoreText(best.score)}` : t('main.noHighScore');
+      return { k: `${best?.name}|${best?.score}`, parts: [title(`🐍 ${SNAKE_GAME}`), aside(about), key('E', t('main.play'))] };
     }
     case 'bookshelf': {
       const names = [...store.peers.values()].filter((p) => p.reading && p.id !== store.you && store.onMyFloor(p)).map((p) => p.name).join(', ');
@@ -3123,7 +3234,7 @@ function hintFor(it: Interactable): Hint {
     }
     case 'decor': {
       const d = store.decor.find((x) => x.id === it.decorId);
-      return { k: `${d?.title}|${d?.by}`, parts: [title(`🖼️ ${d?.title || t('main.aPicture')}`), d ? aside(t('main.hungBy', { name: d.by })) : '', key('E', t('main.lookCloser'))] };
+      return { k: `${d?.title}|${d?.by}|${d?.on}`, parts: [title(`🖼️ ${d?.title || t('main.aPicture')}`), d ? aside(t(d.on === 'desk' ? 'main.placedBy' : 'main.hungBy', { name: d.by })) : '', key('E', t('main.lookCloser'))] };
     }
     case 'seat': {
       const seat = SEATING_BY_ID.get(it.seatId ?? '');
@@ -3154,6 +3265,11 @@ function hintFor(it: Interactable): Hint {
       }
       const up = floorThere(1)?.name;
       return { k: `landing|${up}`, parts: [title(t('main.firePole')), aside(up ? t('main.comesDownFrom', { floor: up }) : t('main.comesDownAbove')), key('E', t('main.twirl'))] };
+    }
+    case 'bank': {
+      const c = chips.state.credit;
+      const what = c ? t('main.bankOwed', { owed: c.owed.toLocaleString(slotsLocale()), wait: workTime(creditWork(c.owed)) }) : t('main.bankCredit');
+      return { k: what, parts: [title(t('main.bank')), aside(what), key('E', t(c ? 'main.bankLook' : 'main.askCredit'))] };
     }
     case 'bar': {
       const cut = booze.cutOff(performance.now() / 1000);
@@ -3433,11 +3549,18 @@ function renderBlackjackHint(el: HTMLElement) {
 
 function renderHangHint(el: HTMLElement) {
   const spot = hanger.spot;
-  const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}`;
+  const desk = spot?.on === 'desk';
+  const k = `hang|${hanger.moving}|${spot ? spot.ok : '-'}|${desk}`;
   if (k === hintKey) return;
   hintKey = k;
-  const title = t(!spot ? 'main.aimAtWall' : !spot.ok ? 'main.inTheWay' : hanger.moving ? 'main.movingPicture' : 'main.hangingPicture');
-  el.replaceChildren(h('span.title', {}, title), key(t('main.keyClick'), t('main.hang')), key(t('main.keyScroll'), t('main.size')), key('Esc', t('main.cancel')));
+  const title = t(!spot ? 'main.aimAtWall' : !spot.ok ? 'main.inTheWay' : hanger.moving ? 'main.movingPicture' : desk ? 'main.standingPicture' : 'main.hangingPicture');
+  el.replaceChildren(
+    h('span.title', {}, title),
+    key(t('main.keyClick'), t(desk ? 'main.standIt' : 'main.hang')),
+    key(t('main.keyScroll'), t('main.size')),
+    key(t('main.keyQR'), t(desk ? 'main.turnStanding' : 'main.turn')),
+    key('Esc', t('main.cancel')),
+  );
   el.classList.remove('hidden');
 }
 
@@ -3698,6 +3821,12 @@ function hangingKey(code: string): boolean {
     case 'Equal':
       hanger.resize(1);
       return true;
+    case 'KeyQ':
+      hanger.rotate(1);
+      return true;
+    case 'KeyR':
+      hanger.rotate(-1);
+      return true;
   }
   return false;
 }
@@ -3777,7 +3906,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -3894,6 +4023,22 @@ function currentShares(): [string, MediaStream][] {
 }
 
 let tvStream: MediaStream | null = null;
+/** A shared screen wins the TV; without one it shows the TV browser's site, if one's on. */
+function showOnTv() {
+  const map = tvStream ? tvTexture : store.tvBrowser ? tvBrowser.texture : tvIdle;
+  if (tvMat.map === map) return;
+  tvMat.map = map;
+  tvMat.needsUpdate = true;
+}
+store.on('tvBrowser', () => {
+  tvBrowser.setState(store.tvBrowser);
+  if (!store.tvBrowser) tvViewer.close();
+  showOnTv();
+  hintKey = '';
+});
+net.onMessage((msg) => {
+  if (msg.t === 'tvbrowser.frame') tvBrowser.frame(msg.data);
+});
 function refreshShares() {
   const shares = currentShares();
   // Remote shares win the TV; your own share is what others see anyway.
@@ -3903,8 +4048,7 @@ function refreshShares() {
     tvStream = stream;
     tvVideo.srcObject = stream;
     if (stream) void tvVideo.play().catch(() => {});
-    tvMat.map = stream ? tvTexture : tvIdle;
-    tvMat.needsUpdate = true;
+    showOnTv();
   }
   const box = $('shares');
   box.replaceChildren(
@@ -3943,7 +4087,7 @@ const hud = mountHud(
     { id: 'issues', icon: '📌', label: t('menus.issues'), section: 'Open', count: () => store.issues.items.filter((i) => i.state === 'OPEN').length, run: () => openBoard('issues', net, boardActions()) },
     { id: 'pulls', icon: '🔀', label: t('menus.pulls'), section: 'Open', count: () => store.pulls.items.filter((p) => p.state === 'OPEN').length, run: () => openBoard('pulls', net, boardActions()) },
     { id: 'queue', icon: '📋', label: t('menus.queue'), section: 'Open', count: () => store.queue.tasks.filter((task) => task.status !== 'done').length, title: () => t('menus.queueTitle'), run: showQueue },
-    { id: 'services', icon: '🌐', label: t('menus.services'), section: 'Open', count: () => store.services.items.length, title: () => t('menus.servicesTitle'), run: () => openServices() },
+    { id: 'services', icon: '🌐', label: t('menus.services'), section: 'Open', count: () => store.services.items.length, title: () => t('menus.servicesTitle'), run: () => openServices((msg) => net.send(msg)) },
     { id: 'whiteboard', icon: '📝', label: t('menus.whiteboard'), section: 'Open', title: () => t('menus.whiteboardTitle'), run: () => openWhiteboard(net) },
     // Up on the top bar while a meeting is on: what's being worked through in the meeting room.
     {
@@ -4108,7 +4252,9 @@ function frame(ts?: number) {
   const hole = office.stack.polesGoDown() ? office.stack.poles().find((s) => Math.hypot(player.pos.x - s.x, player.pos.z - s.z) < POLE.hole - 0.15) : undefined;
   if (hole && !climber.active && !trip && !player.seat && player.enabled && player.pos.y > -1.35 && player.pos.y < 0.6) climber.slide(hole);
   arcade.update(camera, dt);
+  tvViewer.update(camera, dt);
   cabinet.update(camera, dt);
+  snakeMachine.update(camera, dt);
   // Pulled away from the tee (sat down, off up the ladder, into the elevator): the club goes back.
   if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) golf.stop();
   golf.update(dt);
@@ -4264,6 +4410,7 @@ function frame(ts?: number) {
     casino.update(t, dt);
     casinoAshtray?.update(t, dt, (smoking ? 1 : 0) + [...remotes.values()].filter((r) => r.person.smoking).length);
     casinoJukebox?.update(t, dt, sound.beat());
+    updateCrash(performance.now());
     if (!pokerFelt) {
       pokerFelt = new PokerFelt(casino.poker);
       pokerFelt.render(store.poker, true);
@@ -4311,7 +4458,7 @@ function frame(ts?: number) {
   effect.render(scene, camera);
   pointToWaiting(now);
   // Not while the camera's up at the boss's monitor or the arcade, where they'd cover the screen.
-  if (firstPerson && !arcade.zoomed && !cabinet.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
+  if (firstPerson && !arcade.zoomed && !tvViewer.zoomed && !cabinet.zoomed && !snakeMachine.zoomed && !golf.active && !darter.active && !cueist.active && !blackjack.active && !slotter.active && !roulettePlayer.active) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
@@ -4365,7 +4512,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

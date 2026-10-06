@@ -48,6 +48,10 @@ export default strings(
     'settings.styleBunker': '🛢️ Bunker',
     'settings.floorStyleNote': 'The bunker is this same floor, underground: the same desks, seats and games, only the look changes. It’s the same for everyone on this floor.',
     'settings.floorStyleNone': 'Only on a project’s floor, not on the roof or down in the casino.',
+    'settings.demoGallery': 'Demo gallery (Render URL)',
+    'settings.demoGalleryUrl': 'The Demo gallery’s address',
+    'settings.demoGalleryNote': 'Where this floor’s websites go live with 🚀 Go live: {url}. The 🌐 Services board links to it. The same for everyone on this floor.',
+    'settings.demoGalleryNone': 'None yet. Paste the Render URL of the gallery (https://…) and the 🌐 Services board links to it.',
 
     'settings.desktopNotifications': 'Desktop notifications',
     'settings.notifyTurnOn': '🔔 Turn on notifications',
@@ -174,6 +178,10 @@ export default strings(
     'settings.styleBunker': '🛢️ Bunker',
     'settings.floorStyleNote': 'Der Bunker ist dieselbe Etage, nur unter der Erde: dieselben Schreibtische, Plätze und Spiele, nur das Aussehen ändert sich. Das gilt für alle auf dieser Etage.',
     'settings.floorStyleNone': 'Nur auf der Etage eines Projekts, nicht auf dem Dach oder unten im Casino.',
+    'settings.demoGallery': 'Demo-Galerie (Render-URL)',
+    'settings.demoGalleryUrl': 'Adresse der Demo-Galerie',
+    'settings.demoGalleryNote': 'Hier gehen die Webseiten dieser Etage mit 🚀 Live gehen online: {url}. Das 🌐 Services-Board verlinkt sie. Gilt für alle auf dieser Etage.',
+    'settings.demoGalleryNone': 'Noch keine. Füge die Render-URL der Galerie ein (https://…), dann verlinkt das 🌐 Services-Board sie.',
 
     'settings.desktopNotifications': 'Desktop-Benachrichtigungen',
     'settings.notifyTurnOn': '🔔 Benachrichtigungen an',

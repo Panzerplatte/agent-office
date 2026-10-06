@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BALCONY, BALCONY_DOOR, BOARDS, DARTBOARD, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, MEETING_ROOM, MEETING_SEATS, PARACHUTE, POOL_TABLE, ROAD, SEATS, STATIONS, TV, WINDOWS } from '../src/shared/layout.js';
+import { BALCONY, BALCONY_DOOR, BOARDS, DARTBOARD, ELEVATOR, ELEVATOR_FRONT, EXIT_DOOR, EXIT_STAIRS, FLOOR, JUKEBOX, MEETING_ROOM, MEETING_SEATS, PARACHUTE, POOL_TABLE, ROAD, SEATS, SNAKE_CABINET, STATIONS, TV, WINDOWS } from '../src/shared/layout.js';
 import { walkable, wayHome, wayIn, wayToBalcony, type Pt } from '../src/shared/nav.js';
 
 test('a worker sent home walks round the furniture, out the exit door and off along the sidewalk', () => {
@@ -93,6 +93,15 @@ test('the dartboard hangs at regulation height between the Services board and th
   // The dog keeps out of the lane, but you can walk up to the oche and stand behind it to throw.
   for (let x = DARTBOARD.oche.x + 0.3; x < FLOOR.maxX; x += 0.1) assert.ok(!walkable(x, DARTBOARD.z), `the lane at x ${x.toFixed(2)} is kept clear`);
   assert.ok(walkable(DARTBOARD.oche.x - 0.3, DARTBOARD.oche.z), 'you can stand at the oche');
+});
+
+test('the Snake machine stands against the east wall between the TV and the jukebox, with room to play it', () => {
+  const half = SNAKE_CABINET.width / 2 + 0.13;
+  assert.ok(SNAKE_CABINET.z - half > TV.z + (TV.width + 0.3) / 2, 'clear of the TV');
+  assert.ok(SNAKE_CABINET.z + half < JUKEBOX.z - JUKEBOX.width / 2 - 0.05, 'clear of the jukebox');
+  assert.ok(!walkable(SNAKE_CABINET.x, SNAKE_CABINET.z), 'nobody walks through it');
+  // The floor in front of it, where you stand to play and others watch over your shoulder, is open.
+  for (const dz of [-0.4, 0, 0.4]) assert.ok(walkable(SNAKE_CABINET.x - 1, SNAKE_CABINET.z + dz), `you can stand in front of it at ${dz}`);
 });
 
 test('the pool table stands out on open floor, with room to cue from every side', () => {

@@ -208,6 +208,32 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   };
   paintStyle();
 
+  // This floor's Demo-Galerie on Render, where 🚀 Live gehen publishes its websites; the services board links it.
+  const galleryInput = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://…onrender.com/', 'aria-label': t('windows.settings.demoGalleryUrl'), spellcheck: 'false', autocomplete: 'off' }) as HTMLInputElement;
+  const gallerySave = h('button.btn.primary', { type: 'button' }, t('windows.settings.save'));
+  const galleryRemove = h('button.btn.danger', { type: 'button' }, t('windows.settings.remove'));
+  const galleryNote = h('p.setting-note');
+  const paintGallery = () => {
+    const onFloor = !!store.floor && store.floor !== ROOF && store.floor !== CASINO;
+    const url = store.demoGallery;
+    galleryInput.disabled = gallerySave.disabled = !onFloor;
+    galleryRemove.classList.toggle('hidden', !onFloor || !url);
+    gallerySave.textContent = url ? t('windows.settings.replace') : t('windows.settings.save');
+    galleryNote.textContent = !onFloor ? t('windows.settings.floorStyleNone') : url ? t('windows.settings.demoGalleryNote', { url }) : t('windows.settings.demoGalleryNone');
+  };
+  paintGallery();
+  const saveGallery = () => {
+    const url = galleryInput.value.trim();
+    if (!url) return galleryInput.focus();
+    net.send({ t: 'demoGallery.set', url });
+    galleryInput.value = '';
+  };
+  gallerySave.addEventListener('click', saveGallery);
+  galleryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveGallery();
+  });
+  galleryRemove.addEventListener('click', () => net.send({ t: 'demoGallery.set', url: '' }));
+
   // Desktop notifications: this browser's permission, then your own on/off.
   const notifyRow = h('div.seg');
   const notifyNote = h('p.setting-note');
@@ -540,6 +566,9 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
       h('label', { style: 'margin-top:18px' }, t('windows.settings.floorStyle')),
       styleRow,
       styleNote,
+      h('label', { style: 'margin-top:18px' }, t('windows.settings.demoGallery')),
+      h('div.webhook', {}, galleryInput, gallerySave, galleryRemove),
+      galleryNote,
       h('label', { style: 'margin-top:18px' }, t('windows.settings.desktopNotifications')),
       notifyRow,
       notifyNote,
@@ -579,6 +608,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   const offCat = store.on('cat', paintCat);
   const offTheme = store.on('theme', paintTheme);
   const offStyle = [store.on('style', paintStyle), store.on('floor', paintStyle)];
+  const offGallery = [store.on('demoGallery', paintGallery), store.on('floor', paintGallery)];
   const offLeave = store.on('leaveOnMerge', paintLeave);
   const offLimit = [store.on('machine', paintLimit), store.on('me', paintLimit)];
   const offDir = [store.on('projectsDir', paintDir), store.on('me', paintDir)];
@@ -591,6 +621,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
       offCat();
       offTheme();
       offStyle.forEach((off) => off());
+      offGallery.forEach((off) => off());
       offLeave();
       offLimit.forEach((off) => off());
       offDir.forEach((off) => off());
