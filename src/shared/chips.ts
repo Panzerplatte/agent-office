@@ -59,6 +59,45 @@ export type EarnKind = keyof typeof EARN;
 export const ONLINE_EVERY = 10;
 export const ACTIVE_FOR = 5 * MIN;
 
+/**
+ * Chip credit at the bank (the cashier at the chip board): one of CREDIT_AMOUNTS (CREDIT_MAX at most)
+ * on your balance, as a debt. It's paid back two ways: project work (minutes you're active in the
+ * office while a task or worker of yours, queued or hired by you, is running, and CREDIT_MERGED
+ * minutes for each merged pull request of yours), CREDIT_PAYOFF minutes of it paying off a whole
+ * CREDIT_MAX (so CREDIT_PER_MINUTE a minute, and a smaller credit goes faster); and chips won at
+ * the office's mini games (CREDIT_GAMES), which go to the debt until it's paid. The next credit is
+ * there once the last one is paid back in full.
+ */
+export const CREDIT_AMOUNTS = [500, 1000, 2500, 5000, 10_000] as const;
+export const CREDIT_MAX = 10_000;
+export const CREDIT_PAYOFF = 4 * 60;
+export const CREDIT_PER_MINUTE = CREDIT_MAX / CREDIT_PAYOFF;
+export const CREDIT_MERGED = 30;
+export const CREDIT_GAMES: readonly EarnKind[] = ['basket', 'three', 'dartsWin', 'dartsSolo', 'poolWin', 'poolSolo', 'golfHole', 'golfClose', 'snakeScore'];
+
+/** Whether `n` is a credit the bank gives (one of CREDIT_AMOUNTS). */
+export function creditAmountOk(n: unknown): n is number {
+  return typeof n === 'number' && (CREDIT_AMOUNTS as readonly number[]).includes(n) && n <= CREDIT_MAX;
+}
+
+/** Your credit at the bank, as the page sees it: what you took, and how much of it is still owed (whole chips). */
+export interface CreditState {
+  amount: number;
+  owed: number;
+}
+
+/** Minutes of project work that pay off `owed` chips of a credit. */
+export function creditWork(owed: number): number {
+  return Math.ceil(owed / CREDIT_PER_MINUTE);
+}
+
+/** Minutes of work as "1 h 20 min" (the same in English and German). */
+export function workTime(min: number): string {
+  const m = Math.max(0, Math.ceil(min));
+  const h = Math.floor(m / 60);
+  return h ? (m % 60 ? `${h} h ${m % 60} min` : `${h} h`) : `${m} min`;
+}
+
 /** A streak of baskets ends with a shot of yours that misses, leaving the floor, or this long (ms) without a basket. */
 export const STREAK_PAUSE = 2 * MIN;
 
@@ -86,6 +125,8 @@ export interface ChipsEntry {
 export interface ChipsState {
   balance: number;
   ledger: ChipsEntry[];
+  /** Your credit at the bank while you still owe on it (none: you can take one). */
+  credit?: CreditState;
 }
 
 /** How many people the casino's chips board (and the HUD's chips window) ranks. */

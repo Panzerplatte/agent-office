@@ -1331,6 +1331,8 @@ export type ClientMsg =
   | { t: 'roulette.bet'; spot: string; amount: number }
   /** Pick your chips up off `spot`, or off the whole layout, while bets are open. */
   | { t: 'roulette.unbet'; spot?: string }
+  /** At the bank (the cashier), in the casino: a chip credit of `amount` (one of CREDIT_AMOUNTS in shared/chips.ts), once the last one's paid back. */
+  | { t: 'chips.credit'; amount: number }
   /**
    * Crash, at the big screen on the casino's wall: bet `amount` on the next round (while bets are
    * open), take it back before the clock runs out, cash out while the multiplier climbs, or say this
@@ -1483,7 +1485,8 @@ export type ServerMsg =
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).
    */
-  | { t: 'chips'; chips: ChipsState; change: ChipsEntry; quiet?: boolean }
+  /** Your chips: `change` is what changed (none when it's only your credit that work paid some of). */
+  | { t: 'chips'; chips: ChipsState; change?: ChipsEntry; quiet?: boolean }
   /** Chips: the top CHIPS_TOP balances changed (a new order, a balance, a name, someone came or went). */
   | { t: 'chips.top'; top: ChipsTopRow[] }
   | { t: 'jukebox'; state: JukeboxState }

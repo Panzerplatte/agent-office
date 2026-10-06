@@ -40,9 +40,10 @@ import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../
 import { checkFrame as checkSnakeFrame, checkResult as checkSnakeResult, cleanName as cleanSnakeName, type SnakeFrame, type SnakeState } from '../shared/snake.js';
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
+import { isBusy } from '../shared/status.js';
 import { Chips, activeMsg, basketOf, chipsId, shotAtHoop, type ChipsTopEntry } from './chips.js';
 import { Poker } from './poker.js';
-import { ACTIVE_FOR, GOLF_CLOSE, type ChipsTopRow } from '../shared/chips.js';
+import { ACTIVE_FOR, GOLF_CLOSE, creditWork, workTime, type ChipsTopRow } from '../shared/chips.js';
 import { SEARCH_MAX, SEARCH_MIN, searchKey } from '../shared/search.js';
 import { WB_MAX_FILE_BYTES } from '../shared/whiteboard.js';
 import { MAX_FLOORS } from '../shared/floors.js';
@@ -235,6 +236,9 @@ export async function startServer(cfg: Config) {
     // The leaderboard, for the casino's board: to everyone, each with their own row marked.
     onTop: (top) => {
       for (const c of clients.values()) sendTo(c, { t: 'chips.top', top: chipsTopFor(c, top) });
+    },
+    onCredit: (who) => {
+      for (const c of clients.values()) if (c.chips === who) sendTo(c, { t: 'toast', ...notice('chips.creditPaid'), level: 'info' });
     },
     nameOf: (who) => (who.startsWith('account:') ? accounts.get(who.slice('account:'.length))?.name : undefined),
     online: (who) => [...clients.values()].some((c) => c.chips === who),
@@ -1259,9 +1263,24 @@ export async function startServer(cfg: Config) {
     if (!chips.once(`pr:${floor.id}:${n}`)) return;
     const by = floor.queue.state().tasks.find((t) => t.pr?.number === n)?.addedBy ?? floor.workers.list().find((w) => w.pr?.number === n)?.createdBy.replace(/ \(queue\)$/, '');
     if (!by) return;
+    const owner = chipsOwners(by)[0];
+    if (!owner) return;
+    chips.earn(owner, 'merged');
+    chips.merged(owner);
+  };
+  /** Who `by` (a task's addedBy, a worker's hirer) is to the bank: their account, else whoever's in under that name without one. */
+  const chipsOwners = (by: string): string[] => {
     const account = accounts.byName(by);
-    const owner = account ? `account:${account.id}` : [...clients.values()].find((c) => !c.accountId && c.peer.name === by)?.chips;
-    if (owner) chips.earn(owner, 'merged');
+    return account ? [`account:${account.id}`] : [...clients.values()].filter((c) => !c.accountId && c.peer.name === by).map((c) => c.chips);
+  };
+  /** Everyone (by chips id) with a task or worker of theirs running right now, on any floor: project work, which pays off chip credit at the bank. */
+  const chipsWorking = (): Set<string> => {
+    const names = new Set<string>();
+    for (const f of floors.values()) {
+      for (const t of f.queue.state().tasks) if (t.status === 'running' && t.addedBy) names.add(t.addedBy);
+      for (const w of f.workers.list()) if (isBusy(w.status) && w.createdBy) names.add(w.createdBy.replace(/ \(queue\)$/, ''));
+    }
+    return new Set([...names].flatMap(chipsOwners));
   };
   const jukeboxChanged = (floor: Floor) => toFloor(floor, { t: 'jukebox', state: floor.jukebox.state() });
   /** The jukebox `c` hears: their floor's, or down in the casino the casino's (no floor); else a note that they have to be on a floor. */
@@ -1834,6 +1853,19 @@ export async function startServer(cfg: Config) {
       case 'onlinebj.emote': {
         const e = onlinebj.emote(c.id, msg.emote);
         if (e) broadcast({ t: 'onlinebj.emote', ...e });
+        break;
+      }
+      case 'chips.credit': {
+        if (c.peer.floor !== CASINO) {
+          sendTo(c, { t: 'toast', ...notice('chips.creditCasino'), level: 'warn' });
+          break;
+        }
+        const why = chips.credit(c.chips, msg.amount);
+        if (why === 'owing') {
+          const owed = chips.owed(c.chips);
+          sendTo(c, { t: 'toast', ...notice('chips.creditOwed', { owed: owed.toLocaleString('en'), wait: workTime(creditWork(owed)) }), level: 'warn' });
+        }
+        else if (why) sendTo(c, { t: 'toast', ...notice('chips.creditAmount'), level: 'warn' });
         break;
       }
       case 'roulette.join':
@@ -2604,7 +2636,11 @@ export async function startServer(cfg: Config) {
   // Chips: every minute, everyone who's been doing something (once per person, however many pages) gets a minute towards `online`.
   const chipsMinute = setInterval(() => {
     const now = Date.now();
-    chips.minute([...clients.values()].filter((c) => now - c.chipsActiveAt < ACTIVE_FOR).map((c) => c.chips));
+    const active = [...clients.values()].filter((c) => now - c.chipsActiveAt < ACTIVE_FOR).map((c) => c.chips);
+    chips.minute(active);
+    // Active with a task or worker of theirs running: a minute of project work, which pays off credit.
+    const working = chipsWorking();
+    chips.work(active.filter((id) => working.has(id)));
   }, 60_000);
 
   // The roulette table's clock: bets close, the wheel spins, the winners are paid, the layout's cleared.

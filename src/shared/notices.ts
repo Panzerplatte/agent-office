@@ -192,6 +192,10 @@ export const NOTICES = table(
     'snake.busy': '{name} is playing Snake — press E there to watch',
     'snake.lost': "🐍 The office couldn't follow this game, so its score won't go on the high-score table",
     'snake.highScore': '🐍 {name} set a new Snake high score: {score}',
+    'chips.creditOwed': '🏦 You still owe {owed} chips on your credit (about {wait} of project work): pay it back before the next one',
+    'chips.creditAmount': '🏦 The bank gives credit in set amounts only (10,000 chips at most)',
+    'chips.creditCasino': '🏦 Credit is at the cashier, down in the casino',
+    'chips.creditPaid': '🏦 Your credit is paid back: the bank will give you another one',
   },
   {
     'floor.removed': '🛗 {who} hat {name} aus dem Gebäude genommen',
@@ -351,6 +355,10 @@ export const NOTICES = table(
     'snake.busy': '{name} spielt gerade Snake — drück dort E zum Zuschauen',
     'snake.lost': '🐍 Das Büro konnte diesem Spiel nicht folgen, deshalb kommt der Punktestand nicht in die Highscore-Liste',
     'snake.highScore': '🐍 {name} hat einen neuen Snake-Highscore aufgestellt: {score}',
+    'chips.creditOwed': '🏦 Auf deinem Kredit sind noch {owed} Chips offen (ca. {wait} Projektarbeit): erst abbezahlen, dann gibt’s den nächsten',
+    'chips.creditAmount': '🏦 Die Bank gibt Kredit nur in festen Beträgen (höchstens 10.000 Chips)',
+    'chips.creditCasino': '🏦 Kredit gibt’s an der Kasse, unten im Casino',
+    'chips.creditPaid': '🏦 Dein Kredit ist abbezahlt: die Bank gibt dir wieder einen',
   },
 );
 
