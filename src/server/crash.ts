@@ -13,6 +13,15 @@ export interface CrashOptions {
   point?: (odds: CrashOdds) => number;
   /** A new series' odds: drawn from cryptographically random numbers unless a test says otherwise. */
   series?: () => CrashOdds;
+  /** Who's bet what and won what, all-time, for the scoreboard (server/crashstats.ts): told when a bet goes down, goes back, and settles. */
+  stats?: CrashTally;
+}
+
+/** What the game tells the scoreboard's totals (see server/crashstats.ts). */
+export interface CrashTally {
+  bet(id: string, amount: number, name: string, color?: string): void;
+  refund(id: string, amount: number): void;
+  settle(id: string, bet: number, won: number, m: number): void;
 }
 
 /** In someone's round: whose wallet the bet came out of (and the winnings go back into). */
@@ -57,6 +66,7 @@ export class Crash {
   private now: () => number;
   private pick: (odds: CrashOdds) => number;
   private draw: () => CrashOdds;
+  private stats: CrashTally | undefined;
 
   constructor(
     private readonly bank: CrashBank,
@@ -64,6 +74,7 @@ export class Crash {
   ) {
     this.now = opts.now ?? Date.now;
     this.pick = opts.point ?? ((odds) => crashPoint(random(), odds));
+    this.stats = opts.stats;
     this.draw = opts.series ?? (() => drawSeries(random(), random()));
     // The first series, and bets open for its first round straight away.
     this.odds = this.draw();
@@ -103,6 +114,7 @@ export class Crash {
     if (this.players.some((p) => p.wallet === wallet) || this.players.length >= MAX_PLAYERS) return false;
     if (!this.bank.bet(wallet, amount, 'crash.bet', { quiet: true })) return false;
     this.players.push({ id: `c${++this.ids}`, name: name.slice(0, 24), ...(color ? { color } : {}), peer, bet: amount, wallet });
+    this.stats?.bet(wallet, amount, name, color);
     return true;
   }
 
@@ -113,6 +125,7 @@ export class Crash {
     if (!p) return false;
     this.players = this.players.filter((o) => o !== p);
     this.bank.award(wallet, p.bet, 'crash.refund', { quiet: true });
+    this.stats?.refund(wallet, p.bet);
     return true;
   }
 
@@ -132,6 +145,7 @@ export class Crash {
     p.won = won;
     if (peer) p.peer = peer;
     this.bank.award(wallet, won, 'crash.win', { quiet: true });
+    this.stats?.settle(wallet, p.bet, won, m);
     return won;
   }
 
@@ -192,7 +206,11 @@ export class Crash {
   /** The office is shutting down: bets of a round that hasn't crashed, and not cashed out, go back to whoever made them. */
   close() {
     if (this.phase === 'betting' || this.phase === 'running') {
-      for (const p of this.players) if (p.out === undefined) this.bank.award(p.wallet, p.bet, 'crash.refund', { quiet: true });
+      for (const p of this.players) {
+        if (p.out !== undefined) continue;
+        this.bank.award(p.wallet, p.bet, 'crash.refund', { quiet: true });
+        this.stats?.refund(p.wallet, p.bet);
+      }
     }
     this.players = [];
   }
@@ -201,5 +219,7 @@ export class Crash {
     this.phase = 'crashed';
     this.endsAt = now + CRASHED_TIME;
     this.history = [this.point, ...this.history].slice(0, HISTORY);
+    // Whoever's still in lost their bet.
+    for (const p of this.players) if (p.out === undefined) this.stats?.settle(p.wallet, p.bet, 0, this.point);
   }
 }

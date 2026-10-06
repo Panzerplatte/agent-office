@@ -360,6 +360,10 @@ function theCasino(): Casino {
     casinoJukebox = addCasinoJukebox(casino);
     casinoJukebox.show(store.jukebox.on, trackTitle(store.jukebox));
     crashScreen = addCrashScreen(casino);
+    // And the Crash scoreboard next to it: the most wagered and the most won, all-time.
+    const crashBoard = casino.crashBoard;
+    crashBoard.setBoard(store.crashBoard);
+    store.on('crashBoard', () => crashBoard.setBoard(store.crashBoard));
     crashDrawnAt = -Infinity;
     noOutline(casino.group);
   }

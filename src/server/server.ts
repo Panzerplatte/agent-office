@@ -63,6 +63,8 @@ import { Slots } from './slots.js';
 import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 import { Roulette } from './roulette.js';
 import { Crash } from './crash.js';
+import { CrashStats, type CrashBoardEntry } from './crashstats.js';
+import type { CrashBoard, CrashBoardRow } from '../shared/crash.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -301,7 +303,18 @@ export async function startServer(cfg: Config) {
   /** The casino's roulette table, one for the building: bets and payouts go through the chips bank (see roulette.ts). */
   const roulette = new Roulette(chips);
   /** The Crash screen on the casino's wall, one for the building: bets and cash-outs go through the chips bank (see crash.ts). */
-  const crash = new Crash(chips);
+  // Its scoreboard: who's bet the most and won the most on it, all-time, kept on disk. Any change goes
+  // out to the casino once things have settled down for this tick (a round's crash settles everyone at once).
+  let crashBoardSoon: ReturnType<typeof setTimeout> | null = null;
+  const crashStats = new CrashStats(cfg.dataDir, {
+    onChange: () => {
+      crashBoardSoon ??= setTimeout(() => {
+        crashBoardSoon = null;
+        crashBoardChanged();
+      }, 0);
+    },
+  });
+  const crash = new Crash(chips, { stats: crashStats });
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -679,7 +692,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), jukebox: casinoJukebox.state() });
+  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
     // And what's on the lounge TV, which only sends a frame when the page changes.
@@ -1133,7 +1146,7 @@ export async function startServer(cfg: Config) {
       theme: themes.state(),
       prompts: prompts.state(),
       leaveOnMerge: leaveOnMerge.state(),
-      ...(onRoof ? roofView() : inCasino ? casinoView() : floorView(floor)),
+      ...(onRoof ? roofView() : inCasino ? casinoView(client) : floorView(floor)),
     });
     screensOf(client, floor);
     tvPeopleChanged();
@@ -1211,6 +1224,16 @@ export async function startServer(cfg: Config) {
       json ||= JSON.stringify({ t: 'crash', crash: crash.state() } satisfies ServerMsg);
       o.ws.send(json);
     }
+  };
+  /** The Crash scoreboard as `c` sees it: names and totals, their own rows marked, nobody's id. */
+  const crashBoardFor = (c: Client): CrashBoard => {
+    const mark = ({ id, ...row }: CrashBoardEntry): CrashBoardRow => (id === c.chips ? { ...row, you: true } : row);
+    const b = crashStats.board();
+    return { wagered: b.wagered.map(mark), won: b.won.map(mark) };
+  };
+  /** To everyone in the casino: the Crash scoreboard, each with their own rows marked. */
+  const crashBoardChanged = () => {
+    for (const o of clients.values()) if (o.peer.floor === CASINO) sendTo(o, { t: 'crash.board', board: crashBoardFor(o) });
   };
   // --- Poker: one table, down in the casino. Everyone down there sees it, each with only their own cards (see server/poker.ts).
   const poker = new Poker(chips);
@@ -1345,7 +1368,7 @@ export async function startServer(cfg: Config) {
     if (c.peer.floor === CASINO) return;
     const left = leave(c);
     c.peer.floor = CASINO;
-    sendTo(c, { t: 'floor.enter', peers: [...clients.values()].map((o) => o.peer), ...casinoView() });
+    sendTo(c, { t: 'floor.enter', peers: [...clients.values()].map((o) => o.peer), ...casinoView(c) });
     arrived(c, left);
     floorsChanged();
   };
@@ -2666,6 +2689,8 @@ export async function startServer(cfg: Config) {
     // Bets on a Crash round that hasn't crashed (and weren't cashed out) go back before the bank's written.
     clearTimeout(crashClock);
     crash.close();
+    if (crashBoardSoon) clearTimeout(crashBoardSoon);
+    crashStats.flush();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();

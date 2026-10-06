@@ -10,7 +10,7 @@ import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
-import type { CrashState } from './crash.js';
+import type { CrashBoard, CrashState } from './crash.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -735,6 +735,8 @@ export interface FloorView {
   roulette?: RouletteState;
   /** The Crash screen on the casino's wall (only in the casino): the round, who's in it and the last crash points. */
   crash?: CrashState;
+  /** The Crash scoreboard next to the screen (only in the casino): the most wagered and the most won, all-time, your own rows marked. */
+  crashBoard?: CrashBoard;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1481,6 +1483,8 @@ export type ServerMsg =
   | { t: 'roulette'; roulette: RouletteState }
   /** In the casino: someone bet on Crash or cashed out, or the round moved on (started, crashed, cleared). */
   | { t: 'crash'; crash: CrashState }
+  /** In the casino: the Crash scoreboard changed (a bet went down or was taken back, or a round settled). */
+  | { t: 'crash.board'; board: CrashBoard }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).
