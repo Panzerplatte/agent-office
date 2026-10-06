@@ -2,6 +2,7 @@
 
 import type { Look } from './avatar.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
+import type { SnakeFrame, SnakeResult, SnakeState, SnakeView } from './snake.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
 import type { ActionKind, PokerState } from './poker.js';
@@ -9,6 +10,7 @@ import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
+import type { CrashState } from './crash.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -715,6 +717,8 @@ export interface FloorView {
   style: FloorStyle;
   /** Who's at the arcade cabinet, what's on its screen, and the building's high scores. */
   cabinet: CabinetView;
+  /** Who's at the Snake machine, what's on its screen, and the building's Snake high scores. */
+  snake: SnakeView;
   /** What's drawn on this floor's whiteboard, and who's drawing. */
   whiteboard: WhiteboardView;
   /** The meeting room: who's meeting about what, and the meetings before. */
@@ -729,6 +733,8 @@ export interface FloorView {
   blackjack?: BlackjackState;
   /** The casino's roulette table (only in the casino): who's at it, the chips on the layout, the round and the last numbers. */
   roulette?: RouletteState;
+  /** The Crash screen on the casino's wall (only in the casino): the round, who's in it and the last crash points. */
+  crash?: CrashState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1148,9 +1154,9 @@ export type ClientMsg =
   | { t: 'upgrade.start' }
   /** Read the Claude plan limits again now, instead of at the next poll. */
   | { t: 'limits.refresh' }
-  /** Hang a picture on a wall. */
+  /** Hang a picture on a wall, or stand one in a frame on a desk (`on: 'desk'`). */
   | { t: 'decor.add'; decor: DecorPlacement }
-  /** Move, resize, re-frame or swap the image of a picture. */
+  /** Move (between walls and desks too: send `on` with the new spot), resize, re-frame or swap the image of a picture. */
   | { t: 'decor.update'; id: string; decor: Partial<DecorPlacement> }
   | { t: 'decor.remove'; id: string }
   /** Put a tune or a station on the jukebox (a JUKEBOX_TUNES or RADIO_STATIONS id), or a stream; with neither, turn it back on. */
@@ -1170,6 +1176,17 @@ export type ClientMsg =
    * how your score gets on the high-score table: the office follows the game frame by frame.
    */
   | { t: 'cabinet.frame'; frame: CabinetFrame }
+  /**
+   * Step up to the Snake machine on your floor to start a new game (even while you're at one, which
+   * then ends with no score); the office answers with `snake`, naming who got it and their game.
+   */
+  | { t: 'snake.play' }
+  /** Step away from the Snake machine: a game still on ends with no score (send `snake.over` first to keep it). */
+  | { t: 'snake.leave' }
+  /** Your Snake game as it looks now, for everyone else on the floor to watch; the office follows the game by them. */
+  | { t: 'snake.frame'; frame: SnakeFrame }
+  /** Your Snake game `game` is over at `result`: on the high-score table it goes if it adds up (and a good run pays chips), under `name` if you typed one in. */
+  | { t: 'snake.over'; game: string; result: SnakeResult; name?: string }
   /** You opened the whiteboard (or closed it): everyone on the floor sees who's drawing. */
   | { t: 'wb.open' }
   | { t: 'wb.close' }
@@ -1316,6 +1333,15 @@ export type ClientMsg =
   | { t: 'roulette.unbet'; spot?: string }
   /** At the bank (the cashier), in the casino: a chip credit of `amount` (one of CREDIT_AMOUNTS in shared/chips.ts), once the last one's paid back. */
   | { t: 'chips.credit'; amount: number }
+  /**
+   * Crash, at the big screen on the casino's wall: bet `amount` on the next round (while bets are
+   * open), take it back before the clock runs out, cash out while the multiplier climbs, or say this
+   * page has the panel open (so it's shown which player is you).
+   */
+  | { t: 'crash.bet'; amount: number }
+  | { t: 'crash.cancel' }
+  | { t: 'crash.cashout' }
+  | { t: 'crash.look' }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1453,6 +1479,8 @@ export type ServerMsg =
   | { t: 'onlinebj.emote'; table: number; seat: number; emote: OnlineEmote }
   /** In the casino: someone sat down at the roulette table or got up, put chips down or picked them up, or the round moved on. */
   | { t: 'roulette'; roulette: RouletteState }
+  /** In the casino: someone bet on Crash or cashed out, or the round moved on (started, crashed, cleared). */
+  | { t: 'crash'; crash: CrashState }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).
@@ -1466,6 +1494,10 @@ export type ServerMsg =
   | { t: 'cabinet'; state: CabinetState }
   /** The game on your floor's cabinet, as its player sees it (sent to everyone else on the floor). */
   | { t: 'cabinet.frame'; frame: CabinetFrame }
+  /** Who's at the Snake machine on your floor now, and the building's Snake high scores. */
+  | { t: 'snake'; state: SnakeState }
+  /** The game on your floor's Snake machine, as its player sees it (sent to everyone else on the floor). */
+  | { t: 'snake.frame'; frame: SnakeFrame }
   /** Someone changed these elements on the floor's whiteboard (sent to everyone else on the floor). */
   | { t: 'wb.update'; elements: WbElement[] }
   /** Who has the floor's whiteboard open now. */

@@ -80,7 +80,7 @@ export const CUT_CARD = Math.round((DECKS * 52) / 4);
 export const MAX_SEATS = 5;
 /** The smallest and biggest bet on one hand, in chips. */
 export const MIN_BET = 5;
-export const MAX_BET = 500;
+export const MAX_BET = 10_000;
 
 /** Whether `bet` is a bet the table takes (a whole number of chips, MIN_BET to MAX_BET). */
 export function betOk(bet: unknown): bet is number {

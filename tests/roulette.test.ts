@@ -6,7 +6,7 @@ import path from 'node:path';
 import { Chips } from '../src/server/chips.js';
 import { AWAY_KEEP, Roulette } from '../src/server/roulette.js';
 import { START_CHIPS } from '../src/shared/chips.js';
-import { BET_TIME, MAX_SEATS, MAX_SPOT, MAX_TOTAL, RESULT_TIME, SPIN_TIME, PAYS, POCKETS, REDS, SPOTS, WHEEL, amountOk, colorOf, insideSpot, isPocket, numberAt, payout, settle, spotAt, spotOf, spotPlace, staked, type BetKind } from '../src/shared/roulette.js';
+import { BET_TIME, DENOMINATIONS, MAX_SEATS, MAX_SPOT, MAX_TOTAL, RESULT_TIME, SPIN_TIME, PAYS, POCKETS, REDS, SPOTS, WHEEL, amountOk, colorOf, insideSpot, isPocket, numberAt, payout, settle, spotAt, spotOf, spotPlace, staked, type BetKind } from '../src/shared/roulette.js';
 
 const spot = (id: string) => {
   const s = spotOf(id);
@@ -135,8 +135,11 @@ test('settling a spin adds up each player’s chips', () => {
 });
 
 test('an amount is a whole number of chips within the table limits', () => {
-  for (const a of [1, 5, 1000]) assert.ok(amountOk(a));
-  for (const a of [0, -5, 1.5, 1001, NaN, Infinity, '5', null]) assert.ok(!amountOk(a), String(a));
+  for (const a of [1, 5, 1000, 5000, 10_000]) assert.ok(amountOk(a));
+  for (const a of [0, -5, 1.5, 10_001, NaN, Infinity, '5', null]) assert.ok(!amountOk(a), String(a));
+  assert.deepEqual([...DENOMINATIONS], [1, 5, 25, 100, 500, 1000, 5000]);
+  assert.equal(MAX_SPOT, 10_000);
+  assert.equal(MAX_TOTAL, 50_000);
 });
 
 // ---- Where chips go on the layout -------------------------------------------------------------------
@@ -260,7 +263,7 @@ test('a bet never goes over your balance, or the table limits, and only real spo
   for (const amount of [0, -5, 2.5, NaN, '5', MAX_SPOT + 1]) assert.ok(!r.bet('p1', 'red', amount), String(amount));
   assert.equal(chips.balance('account:ada'), START_CHIPS, 'nothing taken');
   assert.equal(r.state().phase, 'idle', 'and nothing started');
-  chips.award('account:ada', 10_000, 'test');
+  chips.award('account:ada', MAX_TOTAL, 'test');
   assert.ok(r.bet('p1', 'red', MAX_SPOT));
   assert.ok(!r.bet('p1', 'red', 1), 'over the most on one spot');
   for (const spot of ['black', 'odd', 'even', 'low']) assert.ok(r.bet('p1', spot, MAX_SPOT));

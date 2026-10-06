@@ -50,6 +50,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 /** The chips' colours by what they're worth, biggest first (as on the panel's chips). */
 const CHIP_VALUES = [
+  [5000, '#8a4b1f'],
+  [1000, '#e0a91b'],
   [500, '#7b3fbf'],
   [100, '#22232e'],
   [25, '#2a9d4b'],

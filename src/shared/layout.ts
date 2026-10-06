@@ -203,6 +203,13 @@ export const MACHINE_MONITOR = { x: FLOOR.minX, y: 2.2, z: -6, width: 2.3, heigh
 export const JUKEBOX = { x: FLOOR.maxX - 0.42, y: 0.75, z: 5.4, width: 1.3, depth: 0.72, height: 1.85 } as const;
 /** The arcade cabinet, against the east wall between the jukebox and the loft, facing into the room. `width` runs along the wall. */
 export const CABINET = { x: FLOOR.maxX - 0.42, z: 7.05, width: 0.8, depth: 0.8, height: 1.9 } as const;
+/**
+ * The Snake arcade machine, against the east wall between the TV and the jukebox, facing into the
+ * room: clear of the TV's frame on one side and the jukebox on the other, and out of the couch's and
+ * the bean bag's view of the TV. `width` runs along the wall; `height` is up to the top of the snake's
+ * head on it.
+ */
+export const SNAKE_CABINET = { x: FLOOR.maxX - 0.42, z: 4, width: 0.8, depth: 0.8, height: 2.3 } as const;
 
 /**
  * The dartboard: on the east wall in the lounge, in the 1.7 m of wall between the Services board and

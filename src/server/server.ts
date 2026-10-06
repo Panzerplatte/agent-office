@@ -30,12 +30,14 @@ import { LeaveOnMerge } from './leave-on-merge.js';
 import { RELAY_LOGIN, relayRequest, relayUpgrade, signInPage, stoppedPage, tunneledPort } from './relay.js';
 import { ChatLog } from './history.js';
 import { Arcade, HighScores } from './cabinet.js';
+import { GOOD_RUN, SnakeArcade, SnakeScores } from './snake.js';
 import type { ChatLine, ClientMsg, FloorInfo, FloorView, Me, MeetingRequest, PeerInfo, SearchResults, ServerMsg, ServicesState } from '../shared/protocol.js';
 import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider, isSmokable } from '../shared/protocol.js';
 import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layout.js';
 import { JUKEBOX_DEFAULT } from '../shared/jukebox.js';
 import { Jukebox } from './jukebox.js';
 import { checkFrame, scoreText, type CabinetFrame, type CabinetState } from '../shared/cabinet.js';
+import { checkFrame as checkSnakeFrame, checkResult as checkSnakeResult, cleanName as cleanSnakeName, type SnakeFrame, type SnakeState } from '../shared/snake.js';
 import { emptyDarts } from '../shared/darts.js';
 import { emptyPool, isSolo, type PoolPlayback } from '../shared/pool.js';
 import { isBusy } from '../shared/status.js';
@@ -60,6 +62,7 @@ import { SLOT_MACHINES } from '../shared/casino.js';
 import { Slots } from './slots.js';
 import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 import { Roulette } from './roulette.js';
+import { Crash } from './crash.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -120,6 +123,11 @@ interface Client {
   game?: string;
   frame?: CabinetFrame;
   lastFrameAt: number;
+  /** At the Snake machine on their floor; `snakeGame` is the game they're on (see SnakeArcade), `snakeFrame` how it looks now. */
+  snaking: boolean;
+  snakeGame?: string;
+  snakeFrame?: SnakeFrame;
+  lastSnakeFrameAt: number;
   /** When this client last said it was typing, per terminal (see 'term.typing'). */
   typingAt: Map<string, number>;
   /** Cleared at each heartbeat ping and set again by the pong; still clear at the next one means gone. */
@@ -218,6 +226,8 @@ export async function startServer(cfg: Config) {
   // The arcade's high scores: one table for the whole building, on every floor's cabinet. The office
   // follows every game and puts the scores up itself (see Arcade).
   const highScores = new HighScores(cfg.dataDir);
+  // And the Snake machine's, the same: one table for the building, the office checking every result.
+  const snakeScores = new SnakeScores(cfg.dataDir);
   // Chips: everyone's balance, kept on disk. A change goes to every page of theirs.
   const chips = new Chips(cfg.dataDir, {
     onChange: (who, state, change, quiet) => {
@@ -290,10 +300,13 @@ export async function startServer(cfg: Config) {
   };
   /** The casino's roulette table, one for the building: bets and payouts go through the chips bank (see roulette.ts). */
   const roulette = new Roulette(chips);
+  /** The Crash screen on the casino's wall, one for the building: bets and cash-outs go through the chips bank (see crash.ts). */
+  const crash = new Crash(chips);
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
   });
+  const snakeArcade = new SnakeArcade(snakeScores);
   /** What the office is called where it has no project of its own to go by (webhooks, invites). */
   const officeName = cfg.project ? path.basename(cfg.project) : 'the office';
   const modelCommand = configuredProvider(cfg.agentCmd) === 'opencode' ? cfg.agentCmd : 'opencode';
@@ -620,6 +633,24 @@ export async function startServer(cfg: Config) {
     c.frame = undefined;
     cabinetChanged(floor);
   };
+  /** Who's at the Snake machine on a floor. */
+  const snakePlayer = (floor: Floor): Client | undefined => [...clients.values()].find((c) => c.snaking && c.peer.floor === floor.id);
+  const snakeState = (floor: Floor | undefined): SnakeState => {
+    const p = floor && snakePlayer(floor);
+    return { player: p ? { id: p.id, name: p.peer.name, game: p.snakeGame ?? '' } : null, scores: snakeScores.top() };
+  };
+  const snakeChanged = (floor: Floor | undefined) => {
+    if (floor) toFloor(floor, { t: 'snake', state: snakeState(floor) });
+  };
+  /** `c` stepped away from the Snake machine (or left the floor, or the office): a game still on ends with no score. */
+  const stopSnake = (c: Client, floor = floorOf(c)) => {
+    if (!c.snaking) return;
+    snakeArcade.leave(c.snakeGame);
+    c.snaking = false;
+    c.snakeGame = undefined;
+    c.snakeFrame = undefined;
+    snakeChanged(floor);
+  };
 
   /** Everything on a floor, for whoever just arrived there. */
   const floorView = (floor: Floor | undefined): FloorView => ({
@@ -643,11 +674,12 @@ export async function startServer(cfg: Config) {
     whiteboard: { elements: floor?.whiteboard.scene() ?? [], people: floor ? drawing(floor) : [] },
     meeting: floor?.meetings.state() ?? { current: null, past: [] },
     cabinet: { ...cabinetState(floor), frame: (floor && cabinetPlayer(floor)?.frame) ?? null },
+    snake: { ...snakeState(floor), frame: (floor && snakePlayer(floor)?.snakeFrame) ?? null },
   });
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), jukebox: casinoJukebox.state() });
+  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
     // And what's on the lounge TV, which only sends a frame when the page changes.
@@ -1051,6 +1083,8 @@ export async function startServer(cfg: Config) {
       tvWatch: false,
       playing: false,
       lastFrameAt: 0,
+      snaking: false,
+      lastSnakeFrameAt: 0,
       typingAt: new Map(),
       isAlive: true,
       peer: {
@@ -1131,6 +1165,7 @@ export async function startServer(cfg: Config) {
       chips.topCheck(); // offline now, on the leaderboard
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
+      stopSnake(client);
       tvPeopleChanged();
       // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
       if (blackjack.away(id)) blackjackChanged();
@@ -1165,6 +1200,11 @@ export async function startServer(cfg: Config) {
   /** To everyone in the casino: the roulette table, as it is now. */
   const rouletteChanged = () => {
     const json = JSON.stringify({ t: 'roulette', roulette: roulette.state() } satisfies ServerMsg);
+    for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+  };
+  /** To everyone in the casino: the Crash round, as it is now. */
+  const crashChanged = () => {
+    const json = JSON.stringify({ t: 'crash', crash: crash.state() } satisfies ServerMsg);
     for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
   };
   // --- Poker: one table, down in the casino. Everyone down there sees it, each with only their own cards (see server/poker.ts).
@@ -1371,6 +1411,7 @@ export async function startServer(cfg: Config) {
     const wasDrawing = c.whiteboard;
     c.whiteboard = false;
     stopPlaying(c, was);
+    stopSnake(c, was);
     c.tvWatch = false;
     const spot = at ?? { ...elevatorSpot(), y: 0, rotY: 0 };
     Object.assign(c.peer, { x: spot.x, y: spot.y, z: spot.z, rotY: spot.rotY, moving: false });
@@ -1844,6 +1885,21 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (bets closed, no chips, the table full) is told how it really is.
         if (changed) rouletteChanged();
         else sendTo(c, { t: 'roulette', roulette: roulette.state() });
+        break;
+      }
+      case 'crash.bet':
+      case 'crash.cancel':
+      case 'crash.cashout':
+      case 'crash.look': {
+        if (c.peer.floor !== CASINO) break;
+        const changed =
+          msg.t === 'crash.bet' ? crash.bet(c.id, c.chips, c.peer.name, msg.amount, c.peer.color)
+          : msg.t === 'crash.cancel' ? crash.cancel(c.chips)
+          : msg.t === 'crash.cashout' ? crash.cashOut(c.chips, c.id) > 0
+          : crash.look(c.id, c.chips);
+        // Whoever it didn't work for (bets closed, no chips, too late: it crashed) is told how it really is.
+        if (changed) crashChanged();
+        else sendTo(c, { t: 'crash', crash: crash.state() });
         break;
       }
       case 'dog.pet':
@@ -2334,7 +2390,8 @@ export async function startServer(cfg: Config) {
         const d = floor.decor.add(msg.decor, who);
         if (typeof d === 'string') return warn(c, d);
         decorChanged(floor);
-        toastFloor(floor, d.title ? notice('picture.hung', { who, title: d.title }) : notice('picture.hungUntitled', { who }));
+        if (d.on === 'desk') toastFloor(floor, d.title ? notice('picture.stood', { who, title: d.title }) : notice('picture.stoodUntitled', { who }));
+        else toastFloor(floor, d.title ? notice('picture.hung', { who, title: d.title }) : notice('picture.hungUntitled', { who }));
         break;
       }
       case 'decor.update': {
@@ -2432,6 +2489,52 @@ export async function startServer(cfg: Config) {
         if (now - c.lastFrameAt < 40) break;
         c.lastFrameAt = now;
         toNeighbors(c, { t: 'cabinet.frame', frame }, true);
+        break;
+      }
+      case 'snake.play': {
+        const floor = here();
+        if (!floor) break;
+        const at = snakePlayer(floor);
+        if (at && at !== c) {
+          warn(c, notice('snake.busy', { name: at.peer.name }));
+          sendTo(c, { t: 'snake', state: snakeState(floor) });
+          break;
+        }
+        c.snakeGame = snakeArcade.start({ owner: c.accountId ? `account:${c.accountId}` : `name:${who}`, name: who, color: c.peer.color });
+        c.snaking = true;
+        c.snakeFrame = undefined;
+        snakeChanged(floor);
+        break;
+      }
+      case 'snake.leave':
+        stopSnake(c);
+        break;
+      case 'snake.frame': {
+        const floor = floorOf(c);
+        const frame = checkSnakeFrame(msg.frame);
+        if (!c.snaking || !floor || !frame) break;
+        if (snakeArcade.frame(c.snakeGame, frame) === 'void') {
+          c.snakeGame = undefined;
+          warn(c, notice('snake.lost'));
+        }
+        c.snakeFrame = frame;
+        const now = Date.now();
+        if (now - c.lastSnakeFrameAt < 40) break;
+        c.lastSnakeFrameAt = now;
+        toNeighbors(c, { t: 'snake.frame', frame }, true);
+        break;
+      }
+      case 'snake.over': {
+        const floor = floorOf(c);
+        const result = checkSnakeResult(msg.result);
+        if (!c.snaking || !floor || msg.game !== c.snakeGame) break;
+        c.snakeGame = undefined;
+        const r = result ? snakeArcade.over(msg.game, result, cleanSnakeName(msg.name)) : (snakeArcade.leave(msg.game), { verdict: 'void' as const });
+        if (r.verdict === 'void') warn(c, notice('snake.lost'));
+        if (r.verdict !== 'ok' || !r.score) break;
+        if (r.score.score >= GOOD_RUN) chips.earn(c.chips, 'snakeScore');
+        if (r.changed) for (const f of floors.values()) snakeChanged(f);
+        if (r.first) toastFloor(floor, notice('snake.highScore', { name: r.score.name, score: scoreText(r.score.score) }));
         break;
       }
       case 'jukebox.stop': {
@@ -2545,7 +2648,15 @@ export async function startServer(cfg: Config) {
     if (roulette.tick()) rouletteChanged();
   }, 200);
 
+  // The Crash round's clock: bets close, the multiplier climbs, it crashes, the screen's cleared.
+  const crashClock = setInterval(() => {
+    if (crash.tick()) crashChanged();
+  }, 50);
+
   const shutdown = (keep = false) => {
+    // Bets on a Crash round that hasn't crashed (and weren't cashed out) go back before the bank's written.
+    clearInterval(crashClock);
+    crash.close();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();

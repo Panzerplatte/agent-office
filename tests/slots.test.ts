@@ -145,10 +145,24 @@ test('the window and the lines', () => {
 test('every bet splits evenly over the lines, and the jackpot pays a share as big as the bet', () => {
   for (const b of BETS) assert.equal(b % LINES.length, 0);
   assert.equal(jackpotWin(1000, MAX_BET), 1000);
-  assert.equal(jackpotWin(1000, 50), 500);
-  assert.equal(jackpotWin(1001, 5), 50);
+  assert.equal(jackpotWin(1000, 500), 500);
+  assert.equal(jackpotWin(10_001, 5), 50);
   assert.ok(isBet(25));
-  for (const v of [0, 7, -5, 1000, '25', NaN, null, undefined, 25.5]) assert.equal(isBet(v), false, String(v));
+  for (const v of [0, 7, -5, 2000, 10_000, '25', NaN, null, undefined, 25.5]) assert.equal(isBet(v), false, String(v));
+});
+
+test('high rollers: spins up to 1,000, the whole jackpot only at the top bet, and the seed scaled to match', () => {
+  assert.deepEqual([...BETS], [5, 10, 25, 50, 100, 250, 500, 1000]);
+  assert.equal(MAX_BET, 1000);
+  for (const b of [250, 500, 1000]) assert.ok(isBet(b), String(b));
+  // A 100 spin wins a tenth of the pot now, so the seed is ten times what it was: still 500 at least.
+  assert.equal(JACKPOT_SEED, 5 * MAX_BET);
+  assert.equal(jackpotWin(JACKPOT_SEED, 100), 500);
+  // A spin costs no more than the player has, whatever the bet.
+  const { s } = casino({ start: 999 });
+  s.join('a', 0, 'Ann', 'ka');
+  assert.equal(s.spin('a', 1000), false);
+  assert.ok(s.spin('a', 500));
 });
 
 // ---- The machines --------------------------------------------------------------------------------------
@@ -224,28 +238,29 @@ test('spins that are not allowed: no machine, a bet not on it, more than you hav
 
 test('the jackpot: won by three stars, a share by the bet, back to its seed at least, and shared by every machine', () => {
   const stars = [stopFor(0, 'star'), stopFor(1, 'star'), stopFor(2, 'star')];
-  const { s, b, tick } = casino({ stops: [[1, 1, 1], [1, 1, 1], stars, stars] });
+  const { s, b, tick } = casino({ stops: [[1, 1, 1], [1, 1, 1], stars, stars], start: 10_000 });
   s.join('a', 0, 'Ann', 'ka');
   s.join('b', 3, 'Bob', 'kb');
-  assert.ok(s.spin('a', 100));
-  assert.ok(s.spin('b', 100));
-  const pot = JACKPOT_SEED + 200 * JACKPOT_SHARE;
+  assert.ok(s.spin('a', MAX_BET));
+  assert.ok(s.spin('b', MAX_BET));
+  const pot = JACKPOT_SEED + 2 * MAX_BET * JACKPOT_SHARE;
   assert.equal(s.state().jackpot, Math.floor(pot));
   tick(SPIN_MS);
   // Bob hits it at half the biggest bet: half the pot.
-  assert.ok(s.spin('b', 50));
-  const won = jackpotWin(pot + 50 * JACKPOT_SHARE, 50);
+  assert.ok(s.spin('b', 500));
+  const won = jackpotWin(pot + 500 * JACKPOT_SHARE, 500);
+  assert.equal(won, Math.floor((pot + 500 * JACKPOT_SHARE) / 2));
   const spin = s.state().machines[3].spin!;
   assert.equal(spin.jackpot, won);
   // The other lines pay as well (cherries under the stars).
-  assert.equal(spin.win, won + evaluate(stars, 50).win);
+  assert.equal(spin.win, won + evaluate(stars, 500).win);
   assert.ok(b.log.includes(`slots.jackpot ${spin.win}`));
   assert.deepEqual({ ...s.state().last, at: 0 }, { name: 'Bob', amount: won, machine: 3, at: 0 });
   assert.equal(s.state().jackpot, JACKPOT_SEED);
   // Ann hits it at the biggest bet: all of it.
   tick(SPIN_MS);
-  assert.ok(s.spin('a', 100));
-  assert.equal(s.state().machines[0].spin!.jackpot, Math.floor(JACKPOT_SEED + 100 * JACKPOT_SHARE));
+  assert.ok(s.spin('a', MAX_BET));
+  assert.equal(s.state().machines[0].spin!.jackpot, Math.floor(JACKPOT_SEED + MAX_BET * JACKPOT_SHARE));
 });
 
 test('winnings wait for the reels, and are paid when the office stops; the jackpot is kept across restarts', () => {
