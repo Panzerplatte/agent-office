@@ -1468,3 +1468,16 @@ a.when:hover { text-decoration: underline; }
   .prompts-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 180px minmax(0, 1fr); }
   .prompt-list { border-right: 0; border-bottom: 3px solid var(--ink); }
 }
+.modal.plinko-panel { width: min(440px, 100%); }
+.plinko-canvas { width: 100%; aspect-ratio: 840 / 560; border-radius: 12px; display: block; background: #140b20; }
+.plinko-balance { font-size: 13px; color: var(--muted); font-weight: 700; }
+.plinko-result { font-weight: 800; font-variant-numeric: tabular-nums; }
+.plinko-result.up { color: #2a9d5c; }
+.plinko-row { display: flex; gap: 10px; align-items: center; }
+.plinko-row input[type='range'] { flex: 1; min-width: 0; }
+.plinko-label { font-weight: 700; min-width: 76px; }
+.plinko-rows-n { font-variant-numeric: tabular-nums; }
+.plinko-risks { display: flex; gap: 6px; flex: 1; }
+.plinko-risk { flex: 1; padding: 4px 8px; }
+.plinko-risk.on, .plinko-auto.on { background: var(--ink); color: #fff; }
+.plinko-drop { flex: 1; font-size: 16px; padding: 10px; }

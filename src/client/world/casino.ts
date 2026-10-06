@@ -9,6 +9,7 @@ import {
   CASINO_SEATING,
   CHIP_BOARD,
   CRASH_BOARD,
+  PLINKO_MACHINE,
   POKER_TABLE,
   ROULETTE_TABLE,
   ROULETTE_WHEEL,
@@ -31,8 +32,9 @@ import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
 // The casino in the basement (see shared/casino.ts): dark patterned carpet under a low ceiling,
 // warm light pooled over green felt, and a neon sign on the far wall facing the elevator. A poker
 // table and a blackjack table along the north side, the roulette wheel to the south-west, a bank of
-// slot machines down the west wall, the cashier's cage in the north-east corner with the chip board
-// over it, and a bar with a lounge in the south-east. Only the room and its furniture: the games
+// slot machines down the west wall, a Plinko machine standing in the middle of the hall, the
+// cashier's cage in the north-east corner with the chip board over it, and a bar with a lounge in
+// the south-east. Only the room and its furniture: the games
 // put their cards, chips and balls on it through the views below (each table's toWorld, the
 // roulette wheel, each slot machine's screen and lever, the chip board).
 
@@ -169,6 +171,18 @@ export interface CrashBoardView {
   setBoard(board: CrashBoard): void;
 }
 
+/** The Plinko machine in the middle of the hall: its big screen (a canvas everyone down there watches), and where E is. */
+export interface PlinkoMachineView {
+  group: THREE.Group;
+  /** The screen: draw on `canvas`, then set `texture.needsUpdate`. */
+  screen: THREE.Mesh;
+  canvas: HTMLCanvasElement;
+  texture: THREE.CanvasTexture;
+  interactable: Interactable;
+  /** Where the screen is, for its sounds. */
+  where: { x: number; y: number; z: number };
+}
+
 export interface Casino {
   group: THREE.Group;
   colliders: Collider[];
@@ -182,6 +196,7 @@ export interface Casino {
   slots: SlotMachineView[];
   chipBoard: ChipBoard;
   crashBoard: CrashBoardView;
+  plinko: PlinkoMachineView;
   /** Where you stand at the cashier's window, and the cashier behind it. */
   cashier: { at: { x: number; z: number }; worker: Worker };
   update(t: number, dt: number): void;
@@ -1448,6 +1463,75 @@ export function buildCasino(): Casino {
   };
   crashBoard.setBoard({ wagered: [], won: [] });
 
+  // ---- The Plinko machine ---------------------------------------------------------------------------------------
+  // A tall cabinet in black lacquer and brass standing on its own in the middle of the hall, the
+  // board on a big screen in its front (see world/plinkoboard.ts), a pink neon PLINKO over it, and a
+  // brass shelf under the screen. Built facing +z in its own frame, then turned to face north.
+  const plinko = ((): PlinkoMachineView => {
+    const P = PLINKO_MACHINE;
+    const m = new THREE.Group();
+    m.name = 'plinko-machine';
+    const body = P.height - 0.45;
+    const front = P.depth / 2;
+    const lacquer = toon('#16121c');
+    m.add(mesh(new THREE.BoxGeometry(P.width + 0.12, 0.14, P.depth + 0.12), toon(WOOD_DARK), 0, 0.07, 0));
+    m.add(mesh(roundedBox(P.width, body - 0.14, P.depth, 0.08), lacquer, 0, 0.14 + (body - 0.14) / 2, 0));
+    // Brass down the front edges and round the screen.
+    for (const sx of [-1, 1]) m.add(mesh(new THREE.BoxGeometry(0.05, body - 0.14, 0.05), brass, (sx * (P.width - 0.02)) / 2, 0.14 + (body - 0.14) / 2, front, false));
+    const sw = P.screen.width;
+    const sh = P.screen.height;
+    m.add(mesh(new THREE.BoxGeometry(sw + 0.12, sh + 0.12, 0.04), brass, 0, P.screenY, front + 0.005, false));
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = Math.round((1024 * sh) / sw);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    const screen = mesh(new THREE.PlaneGeometry(sw, sh), glow('#ffffff', { map: texture }), 0, P.screenY, front + 0.03, false);
+    m.add(screen);
+    // The shelf under the screen, where you'd lean while you play.
+    m.add(mesh(new THREE.BoxGeometry(sw + 0.1, 0.05, 0.22), brass, 0, P.screenY - sh / 2 - 0.12, front + 0.1, false));
+    // The sign on top: a lacquer box with the neon on its front, and a line of bulbs under it.
+    const sign = canvasTexture(1024, 256, (c) => {
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      fitFont(c, 'PLINKO', 170, 900);
+      for (const [blur, color] of [
+        [40, '#ff2bd6'],
+        [14, '#ff6be6'],
+        [0, '#ffe3fb'],
+      ] as const) {
+        c.shadowColor = '#ff2bd6';
+        c.shadowBlur = blur;
+        c.fillStyle = color;
+        c.fillText('PLINKO', 512, 136);
+      }
+    });
+    m.add(mesh(new THREE.BoxGeometry(P.width + 0.1, 0.45, P.depth * 0.7), lacquer, 0, body + 0.225, -0.04));
+    m.add(mesh(new THREE.BoxGeometry(P.width + 0.14, 0.035, P.depth * 0.7 + 0.04), brass, 0, body + 0.02, -0.04, false));
+    const signMat = glow('#ffffff', { map: sign, transparent: true });
+    m.add(mesh(new THREE.PlaneGeometry(P.width - 0.1, 0.42), signMat, 0, body + 0.24, P.depth * 0.31 + 0.002, false));
+    // A neon strip down each side of the screen, in the board's colours.
+    const strip = glow('#ff9f43');
+    for (const sx of [-1, 1]) m.add(mesh(new THREE.BoxGeometry(0.03, sh, 0.03), strip, sx * (sw / 2 + 0.11), P.screenY, front + 0.02, false));
+    m.position.set(P.x, 0, P.z);
+    m.rotation.y = P.rotY;
+    group.add(m);
+    // Its front, on the floor (it faces -z): where you stand to play.
+    const out = P.depth / 2 + 1.1;
+    const interactable: Interactable = { kind: 'plinko', x: P.x + Math.sin(P.rotY) * out, z: P.z + Math.cos(P.rotY) * out, radius: 1.6 };
+    interactables.push(interactable);
+    // E by crosshair anywhere on the cabinet: a box round it that's never drawn.
+    const aim = new THREE.Mesh(new THREE.BoxGeometry(P.width, P.height, P.depth + 0.1), new THREE.MeshBasicMaterial({ visible: false }));
+    aim.position.set(0, P.height / 2, 0.05);
+    aim.userData.interact = interactable;
+    screen.userData.interact = interactable;
+    m.add(aim);
+    return { group: m, screen, canvas, texture, interactable, where: { x: P.x + Math.sin(P.rotY) * front, y: P.screenY, z: P.z + Math.cos(P.rotY) * front } };
+  })();
+  // A warm light on the machine's front.
+  light('#ffb3e6', 2.5, PLINKO_MACHINE.x, 2.6, PLINKO_MACHINE.z - 1.6, 5);
+
   // ---- The bar and the lounge ----------------------------------------------------------------------------------
   const B = CASINO_BAR;
   const blen = B.maxZ - B.minZ;
@@ -1560,6 +1644,7 @@ export function buildCasino(): Casino {
     slots,
     chipBoard,
     crashBoard,
+    plinko,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
     update(time, dt) {
       elevator.update(dt);
