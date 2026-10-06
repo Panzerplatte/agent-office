@@ -15,9 +15,10 @@ import { emptyPoker, type PokerState } from '../shared/poker';
 import { emptyBlackjack, type BlackjackState } from '../shared/blackjack';
 import { emptyOnlineBlackjack, type OnlineBlackjackState, type OnlineEmote } from '../shared/onlineblackjack';
 import { emptyRoulette, type RouletteState } from '../shared/roulette';
+import { emptyCrash, type CrashState } from '../shared/crash';
 import type { BallState } from '../shared/hoop';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -215,6 +216,9 @@ class Store {
   /** The casino's roulette table (see shared/roulette.ts), and when the office's news of it came (performance.now()), for its clock. */
   roulette: RouletteState = emptyRoulette();
   rouletteAt = 0;
+  /** The Crash round on the casino's wall screen (see shared/crash.ts), and when the office's news of it came (performance.now()), for the multiplier's clock. */
+  crash: CrashState = emptyCrash();
+  crashAt = 0;
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -305,7 +309,9 @@ class Store {
     this.poolShot = undefined;
     this.roulette = v.roulette ?? emptyRoulette();
     this.rouletteAt = performance.now();
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette'] as Topic[]) this.emit(t);
+    this.crash = v.crash ?? emptyCrash();
+    this.crashAt = performance.now();
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -491,6 +497,11 @@ class Store {
         this.roulette = msg.roulette;
         this.rouletteAt = performance.now();
         this.emit('roulette');
+        break;
+      case 'crash':
+        this.crash = msg.crash;
+        this.crashAt = performance.now();
+        this.emit('crash');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

@@ -10,6 +10,7 @@ import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
+import type { CrashState } from './crash.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -732,6 +733,8 @@ export interface FloorView {
   blackjack?: BlackjackState;
   /** The casino's roulette table (only in the casino): who's at it, the chips on the layout, the round and the last numbers. */
   roulette?: RouletteState;
+  /** The Crash screen on the casino's wall (only in the casino): the round, who's in it and the last crash points. */
+  crash?: CrashState;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1328,6 +1331,15 @@ export type ClientMsg =
   | { t: 'roulette.bet'; spot: string; amount: number }
   /** Pick your chips up off `spot`, or off the whole layout, while bets are open. */
   | { t: 'roulette.unbet'; spot?: string }
+  /**
+   * Crash, at the big screen on the casino's wall: bet `amount` on the next round (while bets are
+   * open), take it back before the clock runs out, cash out while the multiplier climbs, or say this
+   * page has the panel open (so it's shown which player is you).
+   */
+  | { t: 'crash.bet'; amount: number }
+  | { t: 'crash.cancel' }
+  | { t: 'crash.cashout' }
+  | { t: 'crash.look' }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1465,6 +1477,8 @@ export type ServerMsg =
   | { t: 'onlinebj.emote'; table: number; seat: number; emote: OnlineEmote }
   /** In the casino: someone sat down at the roulette table or got up, put chips down or picked them up, or the round moved on. */
   | { t: 'roulette'; roulette: RouletteState }
+  /** In the casino: someone bet on Crash or cashed out, or the round moved on (started, crashed, cleared). */
+  | { t: 'crash'; crash: CrashState }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

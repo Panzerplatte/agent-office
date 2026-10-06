@@ -61,6 +61,7 @@ import { SLOT_MACHINES } from '../shared/casino.js';
 import { Slots } from './slots.js';
 import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 import { Roulette } from './roulette.js';
+import { Crash } from './crash.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -295,6 +296,8 @@ export async function startServer(cfg: Config) {
   };
   /** The casino's roulette table, one for the building: bets and payouts go through the chips bank (see roulette.ts). */
   const roulette = new Roulette(chips);
+  /** The Crash screen on the casino's wall, one for the building: bets and cash-outs go through the chips bank (see crash.ts). */
+  const crash = new Crash(chips);
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -672,7 +675,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), jukebox: casinoJukebox.state() });
+  const casinoView = (): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
     // And what's on the lounge TV, which only sends a frame when the page changes.
@@ -1193,6 +1196,11 @@ export async function startServer(cfg: Config) {
   /** To everyone in the casino: the roulette table, as it is now. */
   const rouletteChanged = () => {
     const json = JSON.stringify({ t: 'roulette', roulette: roulette.state() } satisfies ServerMsg);
+    for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
+  };
+  /** To everyone in the casino: the Crash round, as it is now. */
+  const crashChanged = () => {
+    const json = JSON.stringify({ t: 'crash', crash: crash.state() } satisfies ServerMsg);
     for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
   };
   // --- Poker: one table, down in the casino. Everyone down there sees it, each with only their own cards (see server/poker.ts).
@@ -1845,6 +1853,21 @@ export async function startServer(cfg: Config) {
         // Whoever it didn't work for (bets closed, no chips, the table full) is told how it really is.
         if (changed) rouletteChanged();
         else sendTo(c, { t: 'roulette', roulette: roulette.state() });
+        break;
+      }
+      case 'crash.bet':
+      case 'crash.cancel':
+      case 'crash.cashout':
+      case 'crash.look': {
+        if (c.peer.floor !== CASINO) break;
+        const changed =
+          msg.t === 'crash.bet' ? crash.bet(c.id, c.chips, c.peer.name, msg.amount, c.peer.color)
+          : msg.t === 'crash.cancel' ? crash.cancel(c.chips)
+          : msg.t === 'crash.cashout' ? crash.cashOut(c.chips, c.id) > 0
+          : crash.look(c.id, c.chips);
+        // Whoever it didn't work for (bets closed, no chips, too late: it crashed) is told how it really is.
+        if (changed) crashChanged();
+        else sendTo(c, { t: 'crash', crash: crash.state() });
         break;
       }
       case 'dog.pet':
@@ -2589,7 +2612,15 @@ export async function startServer(cfg: Config) {
     if (roulette.tick()) rouletteChanged();
   }, 200);
 
+  // The Crash round's clock: bets close, the multiplier climbs, it crashes, the screen's cleared.
+  const crashClock = setInterval(() => {
+    if (crash.tick()) crashChanged();
+  }, 50);
+
   const shutdown = (keep = false) => {
+    // Bets on a Crash round that hasn't crashed (and weren't cashed out) go back before the bank's written.
+    clearInterval(crashClock);
+    crash.close();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();

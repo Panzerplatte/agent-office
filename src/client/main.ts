@@ -51,6 +51,7 @@ import { SlotScreens } from './world/slots';
 import type { SlotMachineView } from './world/casino';
 import { SLOT_MACHINES as SLOT_BANK } from '../shared/casino';
 import { emptySlots, type SlotsState } from '../shared/slots';
+import { multText } from '../shared/crash';
 import { locale as slotsLocale } from './i18n';
 import { Hands } from './world/hands';
 import { Basketball, IN_HANDS } from './world/hoop';
@@ -103,6 +104,8 @@ import { MachineTexture, officeFull, pressureNote } from './world/machine';
 import { mountHud } from './ui/menu';
 import { openJukebox } from './ui/jukebox';
 import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
+import { addCrashScreen, type CrashScreen } from './world/crashscreen';
+import { CrashPanel, mine as myCrashBet } from './ui/crash';
 import type { JukeboxView } from './world/jukebox';
 import { openBookshelf } from './ui/bookshelf';
 import { Arcade } from './ui/arcade';
@@ -355,6 +358,8 @@ function theCasino(): Casino {
     scene.add(casino.group);
     casinoJukebox = addCasinoJukebox(casino);
     casinoJukebox.show(store.jukebox.on, trackTitle(store.jukebox));
+    crashScreen = addCrashScreen(casino);
+    crashDrawnAt = -Infinity;
     noOutline(casino.group);
   }
   return casino;
@@ -855,6 +860,52 @@ store.on('roulette', () => {
   if (down > rouletteBets && rouletteWheel && downstairs) sound.roulette('chip', rouletteWheel.where);
   rouletteBets = down;
 });
+
+// ---- Crash ------------------------------------------------------------------------------------------
+// The big screen on the casino's west wall, for everyone down there: the round's countdown, the curve
+// climbing, who cashed out where, and the crash (see world/crashscreen.ts). E at it opens the panel to
+// bet and cash out (see ui/crash.ts). The office runs the rounds and pays; this follows what it says.
+let crashScreen: CrashScreen | null = null;
+/** When the screen was last drawn (performance.now()), to draw it only as often as it changes. */
+let crashDrawnAt = -Infinity;
+const crashPanel = new CrashPanel({
+  bet: (amount) => net.send({ t: 'crash.bet', amount }),
+  cancel: () => net.send({ t: 'crash.cancel' }),
+  cashOut: () => net.send({ t: 'crash.cashout' }),
+  opened: () => net.send({ t: 'crash.look' }),
+  closed: () => (hintKey = 'stale'),
+  balance: () => chips.balance,
+  state: () => ({ s: store.crash, since: performance.now() - store.crashAt, you: store.you }),
+});
+/** The round as last heard, to hear it take off, crash, and your cash-out. */
+let crashWas = { round: -1, phase: '', players: 0, out: false };
+store.on('crash', () => {
+  const c = store.crash;
+  const me = myCrashBet(c, store.you);
+  const at = crashScreen?.where;
+  if (downstairs && at && crashWas.round >= 0) {
+    if (c.round === crashWas.round && c.players.length > crashWas.players && c.phase !== 'crashed') sound.crash('bet', at);
+    if (c.phase !== crashWas.phase && c.phase === 'running') sound.crash('start', at);
+    if (c.phase !== crashWas.phase && c.phase === 'crashed') sound.crash('crash', at);
+    if (me?.out !== undefined && !crashWas.out) sound.crash('cashout');
+  }
+  crashWas = { round: c.round, phase: c.phase, players: c.players.length, out: me?.out !== undefined };
+  crashDrawnAt = -Infinity;
+});
+/** Keeps the wall screen (and the panel, while it's open) up to date: every frame while the curve climbs, a few times a second otherwise. */
+function updateCrash(now: number) {
+  if (!downstairs) {
+    if (crashPanel.open) crashPanel.close();
+    return;
+  }
+  const c = store.crash;
+  const every = c.phase === 'running' ? 0 : c.phase === 'betting' ? 100 : 1000;
+  if (crashScreen && now - crashDrawnAt >= every) {
+    crashDrawnAt = now;
+    crashScreen.draw(c, now - store.crashAt, store.you);
+  }
+  crashPanel.update();
+}
 
 // ---- Slot machines ----------------------------------------------------------------------------------
 // The casino's slot machines: the reels on every machine's screen, for everyone down there, and you at
@@ -2272,6 +2323,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'ball') takeBall();
   else if (target.kind === 'darts') stepUpToDarts();
   else if (target.kind === 'pool') stepUpToPool();
+  else if (target.kind === 'crash') crashPanel.show();
 }
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
@@ -3106,6 +3158,16 @@ function hintFor(it: Interactable): Hint {
             : t('main.poolAbout');
       return { k: `${about}|${full}`, parts: [title(t('main.poolTable')), aside(about), full ? aside(t('main.poolFull')) : key('E', t('main.playPool'))] };
     }
+    case 'crash': {
+      const c = store.crash;
+      const me = myCrashBet(c, store.you);
+      const about =
+        c.phase === 'running' ? t('main.crashRunning', { n: c.players.length })
+        : c.phase === 'betting' ? t('main.crashBetting', { n: c.players.length })
+        : c.phase === 'crashed' && c.crash !== null ? t('main.crashCrashed', { m: multText(c.crash) })
+        : t('main.crashAbout');
+      return { k: `${about}|${!!me}`, parts: [title(t('main.crash')), aside(about), key('E', t(me && c.phase === 'running' && me.out === undefined ? 'main.crashCashOut' : 'main.crashPlay'))] };
+    }
     case 'jukebox': {
       const j = store.jukebox;
       const what = j.on ? trackTitle(j) : '';
@@ -3822,7 +3884,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -4326,6 +4388,7 @@ function frame(ts?: number) {
     casino.update(t, dt);
     casinoAshtray?.update(t, dt, (smoking ? 1 : 0) + [...remotes.values()].filter((r) => r.person.smoking).length);
     casinoJukebox?.update(t, dt, sound.beat());
+    updateCrash(performance.now());
     if (!pokerFelt) {
       pokerFelt = new PokerFelt(casino.poker);
       pokerFelt.render(store.poker, true);
