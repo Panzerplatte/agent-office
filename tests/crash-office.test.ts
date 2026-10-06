@@ -130,6 +130,30 @@ test('Crash in the running office: everyone in the casino sees the round, only t
     assert.ok(['running', 'crashed'].includes(off.crash.phase));
     assert.deepEqual(off.crash.players, []);
     assert.equal(off.crash.of, 1);
+
+    // Auto-Start runs in the office, for as long as they're in the casino.
+    const upstairs: string = ann.msgs.find((m) => m.t === 'welcome').floor;
+    const dee = await join('Dee', CASINO);
+    await dee.next('welcome');
+    dee.send({ t: 'crash.autobet', auto: { base: 10, target: 2, onLoss: 100, onWin: 0 } });
+    assert.equal((await dee.next('crash.auto')).auto.on, true);
+    dee.send({ t: 'floor.go', floor: upstairs });
+    const enter = await dee.next('floor.enter');
+    assert.notEqual(enter.floor, CASINO);
+    // Back down: it stopped as they left, and says why.
+    dee.send({ t: 'floor.go', floor: CASINO });
+    const back = await dee.next('floor.enter', (m) => m.floor === CASINO);
+    assert.deepEqual([back.crashAuto.on, back.crashAuto.stopped], [false, 'left']);
+    // Going offline stops it too.
+    const eve = await join('Eve', CASINO);
+    await eve.next('welcome');
+    eve.send({ t: 'crash.autobet', auto: { base: 10, onLoss: 0, onWin: 0 } });
+    assert.equal((await eve.next('crash.auto')).auto.on, true);
+    eve.close();
+    await new Promise((r) => setTimeout(r, 300));
+    const eve2 = await join('Eve', CASINO);
+    const again = await eve2.next('welcome');
+    assert.deepEqual([again.crashAuto.on, again.crashAuto.stopped], [false, 'left']);
   } finally {
     for (const p of people) p.close();
     office.shutdown();

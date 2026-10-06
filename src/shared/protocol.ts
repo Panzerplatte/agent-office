@@ -10,7 +10,7 @@ import type { BjAction, BlackjackState } from './blackjack.js';
 import type { SlotsState } from './slots.js';
 import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
-import type { CrashBoard, CrashState } from './crash.js';
+import type { CrashAutoBet, CrashAutoState, CrashBoard, CrashState } from './crash.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -737,6 +737,8 @@ export interface FloorView {
   crash?: CrashState;
   /** The Crash scoreboard next to the screen (only in the casino): the most wagered and the most won, all-time, your own rows marked. */
   crashBoard?: CrashBoard;
+  /** Your Crash auto-bet (only in the casino): running, or the last one and why it stopped. */
+  crashAuto?: CrashAutoState | null;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1338,9 +1340,12 @@ export type ClientMsg =
   /**
    * Crash, at the big screen on the casino's wall: bet `amount` on the next round (while bets are
    * open), take it back before the clock runs out, cash out while the multiplier climbs, or say this
-   * page has the panel open (so it's shown which player is you).
+   * page has the panel open (so it's shown which player is you). A bet with `auto` is cashed out by
+   * the office at exactly that multiplier, if the round gets there. `crash.autobet` starts an auto-bet
+   * (see CrashAutoBet), or stops it (null); it stops by itself when they leave the casino or go offline.
    */
-  | { t: 'crash.bet'; amount: number }
+  | { t: 'crash.bet'; amount: number; auto?: number }
+  | { t: 'crash.autobet'; auto: CrashAutoBet | null }
   | { t: 'crash.cancel' }
   | { t: 'crash.cashout' }
   | { t: 'crash.look' }
@@ -1485,6 +1490,8 @@ export type ServerMsg =
   | { t: 'crash'; crash: CrashState }
   /** In the casino: the Crash scoreboard changed (a bet went down or was taken back, or a round settled). */
   | { t: 'crash.board'; board: CrashBoard }
+  /** To your pages in the casino: your Crash auto-bet changed (it bet, a round settled, it stopped and why). */
+  | { t: 'crash.auto'; auto: CrashAutoState | null }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

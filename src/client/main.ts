@@ -874,7 +874,9 @@ let crashScreen: CrashScreen | null = null;
 /** When the screen was last drawn (performance.now()), to draw it only as often as it changes. */
 let crashDrawnAt = -Infinity;
 const crashPanel = new CrashPanel({
-  bet: (amount) => net.send({ t: 'crash.bet', amount }),
+  bet: (amount, auto) => net.send({ t: 'crash.bet', amount, ...(auto ? { auto } : {}) }),
+  autoBet: (auto) => net.send({ t: 'crash.autobet', auto }),
+  auto: () => store.crashAuto,
   cancel: () => net.send({ t: 'crash.cancel' }),
   cashOut: () => net.send({ t: 'crash.cashout' }),
   opened: () => net.send({ t: 'crash.look' }),
