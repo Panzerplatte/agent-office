@@ -19,7 +19,7 @@ import { emptyCrash, emptyCrashBoard, type CrashAutoState, type CrashBoard, type
 import type { BallState } from '../shared/hoop';
 import { emptyPlinko, type PlinkoBall, type PlinkoLanding } from '../shared/plinko';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'plinko';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks' | 'plinko';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -224,6 +224,8 @@ class Store {
   crashBoard: CrashBoard = emptyCrashBoard();
   /** Your Crash auto-bet, as the office last said: running, or the last one and why it stopped. */
   crashAuto: CrashAutoState | null = null;
+  /** What everyone has on from the casino's shop, by name (see shared/shop.ts): for the desks of the workers they hired. */
+  looks: Record<string, string[]> = {};
   /** The Plinko machine's balls, each with when it was dropped (performance.now(), from its age when the office sent it), newest last; and the last ones that landed, newest first, as the office had them when you came down. */
   plinkoBalls: { ball: PlinkoBall; start: number }[] = [];
   plinkoRecent: PlinkoLanding[] = [];
@@ -347,6 +349,7 @@ class Store {
     switch (msg.t) {
       case 'welcome':
         this.you = msg.you;
+        this.looks = msg.looks ?? {};
         this.peers = new Map(msg.peers.map((p) => [p.id, p]));
         this.floors = msg.floors;
         this.projectsDir = msg.projectsDir;
@@ -528,6 +531,10 @@ class Store {
       case 'crash.auto':
         this.crashAuto = msg.auto;
         this.emit('crashAuto');
+        break;
+      case 'shop.looks':
+        this.looks = msg.looks;
+        this.emit('looks');
         break;
       case 'cabinet.frame':
         this.cabinetFrame = msg.frame;

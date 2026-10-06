@@ -7,6 +7,8 @@ import { isAsleep, type WorkerPr } from '../../shared/status';
 import { HIPS } from '../player';
 import { OpenBook } from './book';
 import { HeldCard } from './card';
+import { dropModels, shopModel } from './shopitems';
+import { shopItem } from '../../shared/shop';
 import { UNDEAD_SKIN, elfBoot, elfHat, elfWorker, santaHat, warlockHat, zombieWorker } from './costumes';
 import { cardSprite, disposeSprite, mesh, textSprite, toon, toonUnique } from './toon';
 import { t, type Key } from '../i18n';
@@ -417,6 +419,10 @@ export class Person {
   /** Dressed up for a holiday (see setCostume): a warlock's hat and undead skin, or a Santa hat. */
   private costume: Theme | null = null;
   private hat: THREE.Object3D[] = [];
+  /** What they have on from the casino's shop (see setWear): its models on the head, and which items they are. */
+  private wear: THREE.Object3D[] = [];
+  private wearKey = '';
+  private shopHat = false;
 
   constructor(
     private name: string,
@@ -541,12 +547,37 @@ export class Person {
     this.dress();
   }
 
+  /**
+   * Puts on what they bought at the casino's shop (item ids, see shared/shop.ts): a hat (in place of
+   * a holiday costume's) and glasses. Desk items and name colours aren't worn: they go elsewhere.
+   */
+  setWear(ids: readonly string[] | undefined) {
+    const key = (ids ?? []).join();
+    if (key === this.wearKey) return;
+    this.wearKey = key;
+    dropModels(this.wear);
+    this.shopHat = false;
+    for (const id of ids ?? []) {
+      const item = shopItem(id);
+      if (!item || (item.slot !== 'hat' && item.slot !== 'face')) continue;
+      const m = shopModel(item);
+      if (!m) continue;
+      m.traverse((o) => ((o as THREE.Mesh).castShadow = true));
+      this.head.add(m);
+      this.wear.push(m);
+      if (item.slot === 'hat') this.shopHat = true;
+    }
+    this.dress();
+  }
+
   /** The skin and hair under the costume: hair that would poke through a hat's crown hides under it. */
   private dress() {
     this.skin.color.set(SKIN_TONES[this.look.skin]);
     if (this.costume === 'halloween') this.skin.color.lerp(UNDEAD_SKIN, 0.7);
     const style = HAIR_STYLES[this.look.style];
-    this.hair.visible = !this.costume || !(style === 'Spiky' || style === 'Bun' || style === 'Curly');
+    // A hat from the shop goes on instead of the holiday's.
+    for (const h of this.hat) h.visible = !this.shopHat;
+    this.hair.visible = !(this.costume || this.shopHat) || !(style === 'Spiky' || style === 'Bun' || style === 'Curly');
   }
 
   /** Hair is a set of shapes on the head (whose center is 0,0,0; the face looks down +z). */

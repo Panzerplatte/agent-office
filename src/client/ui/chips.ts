@@ -1,6 +1,7 @@
 import type { ChipsEntry, ChipsReason } from '../../shared/chips';
 import { chips } from '../chips';
-import { locale, t, type Key } from '../i18n';
+import { shopItemOfReason } from '../../shared/shop';
+import { lang, locale, t, type Key } from '../i18n';
 import { $, h, openModal, timeAgo, toast } from './dom';
 
 /** A casino chip, drawn: a coloured disc with notches round its edge and a ring inside. */
@@ -19,6 +20,8 @@ function chipIcon(): SVGSVGElement {
 
 /** Why a balance changed, in your language when the page knows the reason, else as the office said it. */
 export function chipsWhy(reason: ChipsReason): string {
+  const bought = shopItemOfReason(reason);
+  if (bought) return t('main.chipsWhyShop', { item: bought.name[lang()] });
   const key = `main.chipsWhy_${reason.replace(/\W/g, '_')}` as Key;
   const text = t(key);
   return text === key ? reason : text;
@@ -105,7 +108,7 @@ function topRows(): HTMLElement[] {
       { class: r.you ? 'you' : '' },
       h('span.rank', {}, ['🥇', '🥈', '🥉'][i] ?? `${i + 1}`),
       h('span.dot', { style: `background: ${r.color ?? '#adb5bd'}` }),
-      h('span.why', {}, r.name),
+      h('span.why', r.nameColor ? { style: `color: ${r.nameColor}; font-weight: 800; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55)` } : {}, r.name),
       h('b.amount', {}, r.chips.toLocaleString(locale())),
     ),
   );

@@ -196,6 +196,10 @@ export const NOTICES = table(
     'chips.creditAmount': '🏦 The bank gives credit in set amounts only (10,000 chips at most)',
     'chips.creditCasino': '🏦 Credit is at the cashier, down in the casino',
     'chips.creditPaid': '🏦 Your credit is paid back: the bank will give you another one',
+    'shop.casino': '🛍️ The shop is down in the casino, through the door in the south-west corner',
+    'shop.chips': '🛍️ That costs {price} chips and you have {balance}',
+    'shop.owned': '🛍️ You have that already: put it on or take it off in the shop',
+    'shop.item': "🛍️ The shop doesn't sell that",
   },
   {
     'floor.removed': '🛗 {who} hat {name} aus dem Gebäude genommen',
@@ -359,6 +363,10 @@ export const NOTICES = table(
     'chips.creditAmount': '🏦 Die Bank gibt Kredit nur in festen Beträgen (höchstens 10.000 Chips)',
     'chips.creditCasino': '🏦 Kredit gibt’s an der Kasse, unten im Casino',
     'chips.creditPaid': '🏦 Dein Kredit ist abbezahlt: die Bank gibt dir wieder einen',
+    'shop.casino': '🛍️ Der Shop ist unten im Casino, durch die Tür in der Südwestecke',
+    'shop.chips': '🛍️ Das kostet {price} Chips, und du hast {balance}',
+    'shop.owned': '🛍️ Das hast du schon: an- und ablegen kannst du es im Shop',
+    'shop.item': '🛍️ Das gibt es im Shop nicht',
   },
 );
 

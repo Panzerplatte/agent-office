@@ -93,6 +93,8 @@ import { Compass, type Bearing } from './ui/compass';
 import { chips } from './chips';
 import { chipsToast, mountChips } from './ui/chips';
 import { openCredit } from './ui/credit';
+import { openShop } from './ui/shop';
+import { DeskTrinkets } from './world/shopitems';
 import { openCharacter } from './ui/character';
 import { openSettings } from './ui/settings';
 import { hiringPaused, renderUsage, usageLabel, usageTitle } from './ui/usage';
@@ -1707,6 +1709,8 @@ function noticeWaiting() {
 
 // ---- Peers --------------------------------------------------------------------------------------
 function syncPeers() {
+  // Your own hat from the shop, for when you see yourself (third person, and the mirror of others' pages).
+  me.setWear(store.peers.get(store.you)?.wear);
   for (const [id, peer] of store.peers) {
     // Only who's on your floor is in the room with you.
     if (id === store.you || !store.onMyFloor(peer)) continue;
@@ -1733,6 +1737,7 @@ function syncPeers() {
       r.person.setLook(peer.look);
       noOutline(r.person.root);
     }
+    r.person.setWear(peer.wear);
     r.person.setSmoking(peer.smoking ?? false);
     r.person.setGolf(!!peer.golfing);
     r.person.holdDrink(peer.drink ? (DRINK_BY_ID.get(peer.drink) ?? null) : null);
@@ -1957,6 +1962,19 @@ function arrangeSeats() {
   for (const c of appeared) if (p.y > -0.1 && p.y < c.top && p.x > c.minX - 0.3 && p.x < c.maxX + 0.3 && p.z > c.minZ - 0.3 && p.z < c.maxZ + 0.3) p.y = c.top;
 }
 store.on('workers', syncWorkers);
+// Desk things from the casino's shop: on each desk, whatever whoever hired its worker has on (see shared/shop.ts).
+const deskTrinkets = new DeskTrinkets();
+const deskGroups = new Map(DESKS.filter((d) => !d.beanbag && !d.station && !d.room).flatMap((d) => (office.desks.has(d.id) ? [[d.id, office.desks.get(d.id)!.group] as const] : [])));
+function syncDeskTrinkets() {
+  const items = new Map<string, readonly string[]>();
+  for (const w of store.workers.values()) {
+    const worn = store.looks[w.createdBy.replace(/ \(queue\)$/, '')];
+    if (worn?.length && deskGroups.has(w.deskId)) items.set(w.deskId, worn);
+  }
+  deskTrinkets.sync(deskGroups, items);
+}
+store.on('workers', syncDeskTrinkets);
+store.on('looks', syncDeskTrinkets);
 // A worker at the meeting table shows its role and round over its head (see meetingCard).
 store.on('meeting', syncWorkers);
 // A worker's bubble shows whether it has a pull request open (green) or merged (purple: send it home).
@@ -2428,6 +2446,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'meeting') showMeeting();
   else if (target.kind === 'bar') showBar();
   else if (target.kind === 'bank') openCredit((amount) => net.send({ t: 'chips.credit', amount }));
+  else if (target.kind === 'shop') openShop({ buy: (item) => net.send({ t: 'shop.buy', item }), wear: (item, on) => net.send({ t: 'shop.wear', item, on }) });
   else if (target.kind === 'dj') blowHorn();
   else if (target.kind === 'golf') teeOff();
   else if (target.kind === 'ball') takeBall();
@@ -3370,6 +3389,8 @@ function hintFor(it: Interactable): Hint {
       const what = c ? t('main.bankOwed', { owed: c.owed.toLocaleString(slotsLocale()), wait: workTime(creditWork(c.owed)) }) : t('main.bankCredit');
       return { k: what, parts: [title(t('main.bank')), aside(what), key('E', t(c ? 'main.bankLook' : 'main.askCredit'))] };
     }
+    case 'shop':
+      return { k: '', parts: [title(t('main.shop')), aside(t('main.shopWhat')), key('E', t('main.shopBrowse'))] };
     case 'bar': {
       const cut = booze.cutOff(performance.now() / 1000);
       return { k: String(cut), parts: [title(t(downstairs ? 'main.casinoBar' : 'main.skyBar')), aside(t(cut ? 'main.hadEnough' : 'main.onTheHouse')), key('E', t(cut ? 'main.askWater' : 'main.orderDrink'))] };
@@ -4005,7 +4026,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, plinko: 5 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
