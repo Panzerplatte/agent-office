@@ -36,7 +36,7 @@ export function parseWorkerLimit(v: unknown): number | undefined {
 }
 
 /** Every core's busy and idle time so far; two of these a few seconds apart give how busy it was. */
-function cpuTimes(): { idle: number; total: number } {
+export function cpuTimes(): { idle: number; total: number } {
   let idle = 0;
   let total = 0;
   for (const c of os.cpus()) {
@@ -154,16 +154,25 @@ export class Machine implements Capacity {
     if (this.count() !== this.told) this.emit();
   }
 
-  private pressure(memTotal: number): string | undefined {
-    const why: string[] = [];
+  /** Which of memory and CPU are under pressure now, with how full or busy they are. */
+  strain(memTotal = os.totalmem()): { mem?: number; cpu?: number } {
+    const out: { mem?: number; cpu?: number } = {};
     const mem = memTotal ? Math.round((this.memUsed / memTotal) * 100) : 0;
-    if (mem >= MEM_PRESSURE) why.push(`memory is ${mem}% used`);
+    if (mem >= MEM_PRESSURE) out.mem = mem;
     // Busy for a while, not a single build step.
     const recent = this.history.slice(-CPU_WINDOW);
     if (recent.length === CPU_WINDOW) {
       const cpu = Math.round(recent.reduce((n, [c]) => n + c, 0) / recent.length);
-      if (cpu >= CPU_PRESSURE) why.push(`the CPU has been ${cpu}% busy for the last ${(CPU_WINDOW * SAMPLE_MS) / 1000} seconds`);
+      if (cpu >= CPU_PRESSURE) out.cpu = cpu;
     }
+    return out;
+  }
+
+  private pressure(memTotal: number): string | undefined {
+    const { mem, cpu } = this.strain(memTotal);
+    const why: string[] = [];
+    if (mem !== undefined) why.push(`memory is ${mem}% used`);
+    if (cpu !== undefined) why.push(`the CPU has been ${cpu}% busy for the last ${(CPU_WINDOW * SAMPLE_MS) / 1000} seconds`);
     return why.length ? why.join(' and ') : undefined;
   }
 

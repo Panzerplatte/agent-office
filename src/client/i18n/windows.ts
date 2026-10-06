@@ -26,6 +26,7 @@ import onlineblackjack from './windows/onlineblackjack';
 import minesweeper from './windows/minesweeper';
 import blocks from './windows/blocks';
 import whiteboard from './windows/whiteboard';
+import machine from './windows/machine';
 
 /**
  * The windows that open over the office: settings, terminals, the elevator, the bookshelf and the rest.
@@ -61,6 +62,7 @@ export default {
     ...minesweeper.en,
     ...blocks.en,
     ...whiteboard.en,
+    ...machine.en,
   },
   de: {
     ...common.de,
@@ -90,5 +92,6 @@ export default {
     ...minesweeper.de,
     ...blocks.de,
     ...whiteboard.de,
+    ...machine.de,
   } as Table,
 };

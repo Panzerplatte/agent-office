@@ -104,6 +104,7 @@ import { providerLabel, officeChoice, resolvedProvider, modelBadge } from './ui/
 import { mirrorWhiteboard, openWhiteboard, routeWhiteboardMessage } from './ui/whiteboard';
 import { renderLimits } from './ui/limits';
 import { MachineTexture, officeFull, pressureNote } from './world/machine';
+import { machineOpen, openMachine } from './ui/machine';
 import { mountHud } from './ui/menu';
 import { openJukebox } from './ui/jukebox';
 import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
@@ -1299,6 +1300,7 @@ net.onMessage((msg) => {
       if (openId && store.workers.has(openId)) net.send({ t: 'worker.attach', workerId: openId });
       const watching = openChangesFor();
       if (watching && store.workers.has(watching)) net.send({ t: 'changes.watch', workerId: watching });
+      if (machineOpen()) net.send({ t: 'machine.watch' });
       renderProject();
       hud.refresh();
       // Back from a restart on another version: this page's code is stale, so load the new one.
@@ -2454,6 +2456,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'pool') stepUpToPool();
   else if (target.kind === 'crash') crashPanel.show();
   else if (target.kind === 'plinko') plinkoPanel.show();
+  else if (target.kind === 'machine') showMachine();
 }
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
@@ -3228,6 +3231,8 @@ function hintFor(it: Interactable): Hint {
       return board(t('main.pullsBoard'));
     case 'services':
       return board(t('main.servicesBoard'));
+    case 'machine':
+      return board(t('main.machineMonitor'));
     case 'queue': {
       const n = store.queue.tasks.filter((task) => task.status !== 'done').length;
       return { k: String(n), parts: [title(`${t('main.taskQueue')}${n ? ` · ${n}` : ''}`), key('E', t('main.open'))] };
@@ -4026,7 +4031,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5, machine: 9 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -4208,6 +4213,7 @@ const hud = mountHud(
     { id: 'pulls', icon: '🔀', label: t('menus.pulls'), section: 'Open', count: () => store.pulls.items.filter((p) => p.state === 'OPEN').length, run: () => openBoard('pulls', net, boardActions()) },
     { id: 'queue', icon: '📋', label: t('menus.queue'), section: 'Open', count: () => store.queue.tasks.filter((task) => task.status !== 'done').length, title: () => t('menus.queueTitle'), run: showQueue },
     { id: 'services', icon: '🌐', label: t('menus.services'), section: 'Open', count: () => store.services.items.length, title: () => t('menus.servicesTitle'), run: () => openServices((msg) => net.send(msg)) },
+    { id: 'machine', icon: '🖥️', label: t('menus.machine'), section: 'Open', title: () => t('menus.machineTitle'), run: showMachine },
     { id: 'whiteboard', icon: '📝', label: t('menus.whiteboard'), section: 'Open', title: () => t('menus.whiteboardTitle'), run: () => openWhiteboard(net) },
     // Up on the top bar while a meeting is on: what's being worked through in the meeting room.
     {
@@ -4283,6 +4289,10 @@ function startHanging() {
   if (upTop) return toast(t('notices.hangUpTop'), 'warn');
   if (downstairs) return toast(t('notices.hangCasino'), 'warn');
   hanger.start();
+}
+/** 🖥️ This machine, process by process: who uses how much memory and CPU, and why. */
+function showMachine() {
+  openMachine({ send: (msg) => net.send(msg), sendHome: killWorker, settings: showSettings });
 }
 function showSettings() {
   openSettings(

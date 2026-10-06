@@ -1,3 +1,4 @@
+import os from 'node:os';
 import http from 'node:http';
 import https from 'node:https';
 import { randomBytes } from 'node:crypto';
@@ -20,7 +21,8 @@ import { ImageProxy } from './decor.js';
 import { Ledger } from './usage.js';
 import { PlanLimitsReader } from './limits.js';
 import { Webhook } from './webhook.js';
-import { MAX_WORKER_LIMIT, Machine, parseWorkerLimit } from './machine.js';
+import { MAX_WORKER_LIMIT, Machine, cpuTimes, parseWorkerLimit } from './machine.js';
+import { ProcWatch, type WorkerRoot } from './procs.js';
 import { Building, type FloorDef } from './building.js';
 import { Floor, type FloorContext } from './floor.js';
 import { Sky } from './sky.js';
@@ -569,6 +571,36 @@ export async function startServer(cfg: Config) {
     (state) => broadcast({ t: 'machine', state }),
   );
   machine.start();
+  // 🖥️ This machine, process by process: the table is only read while someone has it open.
+  const procWatch = new ProcWatch({
+    owners: () => {
+      const workers: WorkerRoot[] = [];
+      const hostPids: number[] = [];
+      for (const f of floors.values()) {
+        const host = f.workers.hostPid;
+        if (host) hostPids.push(host);
+        const pids = new Map(f.workers.owners().map((o) => [o.workerId, o.pid]));
+        for (const w of f.workers.list()) {
+          const issue = /\bissue #(\d+)/i.exec(w.prompt ?? '')?.[1];
+          workers.push({ id: w.id, pid: pids.get(w.id), name: w.name, color: w.color, floor: f.def.name, status: w.status, task: w.task?.name, issue: issue ? Number(issue) : undefined, branch: w.worktree?.branch });
+        }
+      }
+      return { workers, hostPids, serverPid: process.pid, uid: process.getuid?.() ?? -1 };
+    },
+    machine: () => {
+      const m = machine.state();
+      const strain = machine.strain(m.memTotal);
+      return { cores: m.cores, memUsed: m.memUsed, memTotal: m.memTotal, pressure: m.pressure, strain: { mem: strain.mem !== undefined, cpu: strain.cpu !== undefined } };
+    },
+    cpuTimes,
+    cores: () => os.cpus().length,
+    send: (state, ids) => {
+      for (const id of ids) {
+        const c = clients.get(id);
+        if (c) sendTo(c, { t: 'machine.procs', state });
+      }
+    },
+  });
   /** Queues everywhere may be waiting for room under the worker limit: let them look again. */
   const pumpQueues = (except?: Floor) => {
     if (machine.limit === undefined) return;
@@ -1224,6 +1256,7 @@ export async function startServer(cfg: Config) {
       // Offline (this page, down in the casino): their Crash auto-bet stops, unless another page of theirs is still there.
       crashAutoLeft(client);
       clients.delete(id);
+      procWatch.unwatch(id);
       chips.topCheck(); // offline now, on the leaderboard
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
@@ -2418,6 +2451,12 @@ export async function startServer(cfg: Config) {
         pumpQueues();
         break;
       }
+      case 'machine.watch':
+        procWatch.watch(c.id);
+        break;
+      case 'machine.unwatch':
+        procWatch.unwatch(c.id);
+        break;
       case 'changes.watch': {
         const w = worker(msg.workerId);
         if (w) w.floor.changes.watch(w.wid, c.id);
@@ -2801,6 +2840,7 @@ export async function startServer(cfg: Config) {
     tvBrowsers.shutdown();
     webhook.stop();
     machine.stop();
+    procWatch.stop();
     sky.stop();
     themes.stop();
     for (const f of floors.values()) f.shutdown(keep);
