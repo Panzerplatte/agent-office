@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Accounts } from '../src/server/accounts.js';
 import { BlackjackTable, DEALER_STEP } from '../src/server/blackjack.js';
 import { Chips } from '../src/server/chips.js';
 import { Crash } from '../src/server/crash.js';
@@ -19,15 +18,17 @@ import { HOUSE_GAMES, HOUSE_SHARE, formatChips } from '../src/shared/housebank.j
 import { BET_TIME as ROULETTE_BET_TIME, SPIN_TIME } from '../src/shared/roulette.js';
 import { REELS, evaluate } from '../src/shared/slots.js';
 
-const OWNER = 'nadine0000000001';
-const OTHER = 'someone000000002';
+// Players' chips wallets (see server/chips.ts): a browser's, without accounts, and an account's.
+const NADINE = 'browser:6e6164696e655f5f5f5f5f5f5f5f5f5f';
+const KEVIN = 'browser:6b6576696e5f5f5f5f5f5f5f5f5f5f5f';
+const MARC = 'account:marc000000000003';
 const dir = () => mkdtempSync(path.join(tmpdir(), 'agent-office-housebank-'));
 
-/** A house bank (and the chips it pays into) in a fresh data dir, owned by OWNER. */
-function setup(owner: string | null = OWNER, data = dir()) {
+/** A house bank (and the chips it pays into) in a fresh data dir. */
+function setup(data = dir()) {
   let now = 1_000_000;
   const chips = new Chips(data, { now: () => now, saveAfter: 0 });
-  const bank = new HouseBank(data, chips, { now: () => now, owner: () => owner ?? undefined, saveAfter: 0 });
+  const bank = new HouseBank(data, chips, { now: () => now, saveAfter: 0 });
   return { data, chips, bank, go: (ms: number) => (now += ms) };
 }
 
@@ -174,61 +175,59 @@ test('blackjack: a lost hand goes in, a won one does not', () => {
 
 // ---- Withdrawals ------------------------------------------------------------------------------------
 
-test('only the owner can withdraw, never more than the bank holds, onto their own balance with a ledger entry', () => {
+test('any player can withdraw (without accounts), never more than the bank holds, onto their own balance with a ledger entry', () => {
   const { chips, bank } = setup();
   bank.lost('roulette', 300);
   bank.lost('crash', 200);
-  assert.equal(bank.withdraw(OTHER, 'Mallory', 10), 'owner', 'anyone else is turned away');
-  assert.equal(bank.withdraw(undefined, 'Shared', 10), 'owner', 'so is the shared password');
-  assert.equal(chips.balance(`account:${OTHER}`), START_CHIPS);
-  assert.equal(bank.withdraw(OWNER, 'Nadine', 501), 'balance', 'no more than the bank holds');
-  assert.equal(bank.withdraw(OWNER, 'Nadine', 0), 'amount');
-  assert.equal(bank.withdraw(OWNER, 'Nadine', 1.5), 'amount');
-  assert.equal(bank.withdraw(OWNER, 'Nadine', '-3'), 'amount');
+  assert.equal(bank.withdraw(NADINE, 'Nadine', 501), 'balance', 'no more than the bank holds');
+  assert.equal(bank.withdraw(NADINE, 'Nadine', 0), 'amount');
+  assert.equal(bank.withdraw(NADINE, 'Nadine', 1.5), 'amount');
+  assert.equal(bank.withdraw(NADINE, 'Nadine', '-3'), 'amount');
   assert.equal(bank.chipsTotal, 500n, 'nothing changed');
-  assert.equal(bank.withdraw(OWNER, 'Nadine', 120), 120n);
+  assert.equal(bank.withdraw(NADINE, 'Nadine', 120), 120n);
   assert.equal(bank.chipsTotal, 380n);
-  assert.equal(chips.balance(`account:${OWNER}`), START_CHIPS + 120);
-  assert.deepEqual(chips.ledger(`account:${OWNER}`)[0], { at: 1_000_000, amount: 120, reason: 'housebank', balance: START_CHIPS + 120 });
-  assert.equal(bank.withdraw(OWNER, 'Nadine', 'all'), 380n);
+  assert.equal(chips.balance(NADINE), START_CHIPS + 120);
+  assert.deepEqual(chips.ledger(NADINE)[0], { at: 1_000_000, amount: 120, reason: 'housebank', balance: START_CHIPS + 120 });
+  // Someone else, too: anyone may.
+  assert.equal(bank.withdraw(KEVIN, 'Kevin', 80), 80n);
+  assert.equal(chips.balance(KEVIN), START_CHIPS + 80);
+  assert.equal(bank.withdraw(NADINE, 'Nadine', 'all'), 300n);
   assert.equal(bank.chipsTotal, 0n, 'never below 0');
-  assert.equal(bank.withdraw(OWNER, 'Nadine', 'all'), 'balance');
-  // The owner sees the log; everyone else only the total.
-  assert.deepEqual(bank.state(OTHER), { total: '0' });
-  const mine = bank.state(OWNER);
-  assert.equal(mine.owner, true);
-  assert.deepEqual(mine.games, { crash: '200', roulette: '300' });
+  assert.equal(bank.withdraw(KEVIN, 'Kevin', 'all'), 'balance');
+  assert.equal(bank.withdraw(KEVIN, 'Kevin', 1), 'balance');
+  // Everyone sees the same: the total, what each game put in, and who took how much.
+  const seen = bank.state();
+  assert.deepEqual(seen.games, { crash: '200', roulette: '300' });
   assert.deepEqual(
-    mine.withdrawals!.map((w) => [w.amount, w.by]),
+    seen.withdrawals!.map((w) => [w.amount, w.by]),
     [
-      ['380', 'Nadine'],
+      ['300', 'Nadine'],
+      ['80', 'Kevin'],
       ['120', 'Nadine'],
     ],
   );
 });
 
-test('with no owner set nobody can withdraw', () => {
-  const { bank } = setup(null);
+test('with accounts, an account withdraws onto its own balance as before', () => {
+  const { chips, bank } = setup();
   bank.lost('slots', 50);
-  assert.equal(bank.withdraw(OWNER, 'Nadine', 10), 'owner');
-  assert.equal(bank.withdraw(undefined, 'x', 10), 'owner');
+  assert.equal(bank.withdraw(MARC, 'Marc', 30), 30n);
+  assert.equal(chips.balance(MARC), START_CHIPS + 30);
+  assert.equal(chips.ledger(MARC)[0].reason, 'housebank');
+  assert.equal(bank.chipsTotal, 20n);
 });
 
-test('the owner is an account setting, changeable, and only an existing account', () => {
-  const data = dir();
-  const accounts = new Accounts(data);
-  assert.equal(accounts.bankOwner, undefined);
-  assert.equal(accounts.setBankOwner('nope'), false, 'no such account');
-  const raw = { invites: [], accounts: [] as unknown[] };
-  raw.accounts = [{ id: OWNER, name: 'Nadine Nagelfee', role: 'member', hash: 'x', salt: 'y', createdAt: 1, createdBy: 't' }];
-  writeFileSync(path.join(data, 'accounts.json'), JSON.stringify(raw));
-  // (As `agent-office accounts` does, from outside: the office re-reads the file.)
-  const again = new Accounts(data);
-  assert.ok(again.setBankOwner(OWNER));
-  assert.equal(new Accounts(data).bankOwner, OWNER, 'kept on disk');
-  assert.equal(again.state(new Set()).bankOwner, OWNER, 'admins see it');
-  assert.ok(again.setBankOwner(undefined));
-  assert.equal(again.bankOwner, undefined);
+test('two withdrawals at once never take out more than the bank holds', async () => {
+  const { chips, bank } = setup();
+  bank.lost('crash', 1000);
+  // Many players at the machine at the same moment, each going for more than half of it.
+  const players = Array.from({ length: 8 }, (_, i) => `browser:${String(i).repeat(32)}`);
+  const results = await Promise.all(players.map((p, i) => Promise.resolve().then(() => bank.withdraw(p, `P${i}`, i % 2 ? 'all' : 600))));
+  const paid = results.filter((r): r is bigint => typeof r === 'bigint');
+  assert.equal(paid.reduce((a, b) => a + b, 0n), 1000n, 'exactly what was there, no more');
+  assert.equal(bank.chipsTotal, 0n);
+  assert.equal(players.reduce((sum, p) => sum + chips.balance(p) - START_CHIPS, 0), 1000);
+  assert.ok(results.filter((r) => r === 'balance').length >= 6, 'the rest are told there is not enough');
 });
 
 // ---- Persistence and size ----------------------------------------------------------------------------
@@ -237,14 +236,14 @@ test('the bank is kept on disk: total, per game, withdrawals', () => {
   const { data, bank, chips } = setup();
   bank.lost('plinko', 70);
   bank.lost('blackjack', 30);
-  bank.withdraw(OWNER, 'Nadine', 40);
+  bank.withdraw(NADINE, 'Nadine', 40);
   bank.flush();
   chips.flush();
-  const again = new HouseBank(data, new Chips(data), { owner: () => OWNER });
+  const again = new HouseBank(data, new Chips(data));
   assert.equal(again.chipsTotal, 60n);
   assert.equal(again.from('plinko'), 70n);
   assert.equal(again.from('blackjack'), 30n);
-  assert.deepEqual(again.state(OWNER).withdrawals!.map((w) => w.amount), ['40']);
+  assert.deepEqual(again.state().withdrawals!.map((w) => w.amount), ['40']);
 });
 
 test('no upper limit: far past what a JS number holds exactly, kept exactly', () => {
@@ -254,14 +253,14 @@ test('no upper limit: far past what a JS number holds exactly, kept exactly', ()
   const want = BigInt(big) * 1000n;
   assert.equal(bank.chipsTotal, want);
   bank.flush();
-  const again = new HouseBank(data, chips, { owner: () => OWNER });
+  const again = new HouseBank(data, chips);
   assert.equal(again.chipsTotal, want, 'and read back exactly');
-  assert.equal(again.state(undefined).total, want.toString());
+  assert.equal(again.state().total, want.toString());
   assert.equal(formatChips(want.toString(), 'de-DE'), '9.007.199.254.740.991.000');
-  // Taking out "all" stops where the owner's balance can still be added up exactly.
-  assert.equal(again.withdraw(OWNER, 'Nadine', 'all'), BigInt(big - START_CHIPS));
-  assert.equal(chips.balance(`account:${OWNER}`), big);
-  assert.equal(again.withdraw(OWNER, 'Nadine', 1), 'balance', 'the owner has all a balance can hold');
+  // Taking out "all" stops where the player's balance can still be added up exactly.
+  assert.equal(again.withdraw(NADINE, 'Nadine', 'all'), BigInt(big - START_CHIPS));
+  assert.equal(chips.balance(NADINE), big);
+  assert.equal(again.withdraw(NADINE, 'Nadine', 1), 'balance', 'they have all a balance can hold');
   assert.equal(again.chipsTotal, want - BigInt(big - START_CHIPS));
 });
 

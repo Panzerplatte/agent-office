@@ -30,8 +30,6 @@ export interface HouseHistory {
 
 export interface HouseBankOptions {
   now?: () => number;
-  /** The owner's account id, as the office has it set now (see Accounts.bankOwner): none means nobody can withdraw. */
-  owner?: () => string | undefined;
   /** The bank changed (a deposit or a withdrawal). */
   onChange?: () => void;
   /** How long after a change it's written to disk (ms); tests pass 0 and call flush. */
@@ -47,13 +45,14 @@ interface Saved {
   backfill?: Partial<Record<HouseGame, string>>;
 }
 
-/** Why a withdrawal didn't happen: not the owner, not a whole positive amount, or more than the bank (or the owner's balance) holds. */
-export type WithdrawError = 'owner' | 'amount' | 'balance';
+/** Why a withdrawal didn't happen: not a whole positive amount, or more than the bank (or the player's balance) holds. */
+export type WithdrawError = 'amount' | 'balance';
 
 /**
  * The casino's house bank, in .agent-office/housebank.json: every stake a player loses (see
  * shared/housebank.ts), kept as a BigInt, so it never runs out of room. Wins aren't taken from it,
- * so it never goes below 0. Only the owner's account may take chips out, onto its own balance.
+ * so it never goes below 0. Any player may take chips out, onto their own balance, and everyone sees
+ * the log of who took how much.
  */
 export class HouseBank implements HouseTally {
   private total = 0n;
@@ -64,7 +63,6 @@ export class HouseBank implements HouseTally {
   private carry = new Map<HouseGame, number>();
   private file: string;
   private now: () => number;
-  private owner: () => string | undefined;
   private onChange: HouseBankOptions['onChange'];
   private saveAfter: number;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -78,7 +76,6 @@ export class HouseBank implements HouseTally {
   ) {
     this.file = path.join(dataDir, 'housebank.json');
     this.now = opts.now ?? Date.now;
-    this.owner = opts.owner ?? (() => undefined);
     this.onChange = opts.onChange;
     this.saveAfter = opts.saveAfter ?? SAVE_AFTER;
     this.load();
@@ -147,21 +144,15 @@ export class HouseBank implements HouseTally {
     return v;
   }
 
-  /** Whether `accountId` is the bank's owner. */
-  isOwner(accountId: string | undefined): boolean {
-    const owner = this.owner();
-    return !!accountId && !!owner && accountId === owner;
-  }
-
   /**
-   * The owner (`accountId`, called `name`) takes `amount` whole chips out ('all': everything there
-   * is), onto their own balance with "housebank" in their ledger. Anyone else, an amount that isn't a
-   * whole positive number, or more than the bank holds changes nothing and says why; else how many
-   * chips it paid. A balance can't go past what a JS number holds exactly, so 'all' stops there.
+   * A player (their chips `wallet`, see server/chips.ts, called `name`) takes `amount` whole chips
+   * out ('all': everything there is), onto their own balance with "housebank" in their ledger. An
+   * amount that isn't a whole positive number, or more than the bank holds, changes nothing and says
+   * why; else how many chips it paid. It checks and takes in one go, so two withdrawals at once can't
+   * take out more than there is. A balance can't go past what a JS number holds exactly, so 'all'
+   * stops there.
    */
-  withdraw(accountId: string | undefined, name: string, amount: unknown): WithdrawError | bigint {
-    if (!this.isOwner(accountId)) return 'owner';
-    const wallet = `account:${accountId}`;
+  withdraw(wallet: string, name: string, amount: unknown): WithdrawError | bigint {
     const room = BigInt(Number.MAX_SAFE_INTEGER - this.chips.balance(wallet));
     let want: bigint;
     if (amount === 'all') {
@@ -179,13 +170,11 @@ export class HouseBank implements HouseTally {
     return want;
   }
 
-  /** The bank as `accountId`'s page sees it: the total for everyone, the log for the owner. */
-  state(accountId: string | undefined): HouseBankState {
-    const total = this.chipsTotal.toString();
-    if (!this.isOwner(accountId)) return { total };
+  /** The bank as every page sees it: the total, what each game put in, and the log of withdrawals. */
+  state(): HouseBankState {
     const games: Partial<Record<HouseGame, string>> = {};
     for (const g of HOUSE_GAMES) if (this.from(g) > 0n) games[g] = this.from(g).toString();
-    return { total, owner: true, games, withdrawals: this.withdrawals.map((w) => ({ ...w })) };
+    return { total: this.chipsTotal.toString(), games, withdrawals: this.withdrawals.map((w) => ({ ...w })) };
   }
 
   /** Writes any change not on disk yet, now (the office is stopping). */

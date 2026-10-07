@@ -1,8 +1,8 @@
 // The house bank (Hausbank): the casino's own chips. Every stake a player loses in the casino goes
 // in, in full (a partial loss, like Plinko's 0.5×, puts in what wasn't paid back); wins are paid out
-// as ever and never taken from it, so it only grows, and it has no upper limit. Only its owner (an
-// account, set with `agent-office accounts bank-owner` or in 🔑 Accounts) can take chips out, onto
-// their own balance. The office keeps it (see server/housebank.ts); everyone sees its total on the
+// as ever and never taken from it, and it has no upper limit. Any player can take chips out at the
+// house-bank machine in the casino, onto their own balance, and everyone sees who took how much.
+// The office keeps it (see server/housebank.ts); its total is on the machine's screen and on the
 // chip board over the cashier.
 
 /** Where chips in the house bank came from: a casino game (or the trading table). */
@@ -51,16 +51,14 @@ export interface HouseWithdrawal {
 }
 
 /**
- * The house bank as a page sees it. Amounts are whole chips as decimal strings: there's no upper
- * limit. `owner` and the log are only on the owner's own page.
+ * The house bank as every page sees it. Amounts are whole chips as decimal strings: there's no
+ * upper limit.
  */
 export interface HouseBankState {
   total: string;
-  /** You're the owner: you may withdraw. */
-  owner?: boolean;
-  /** What each game has put in, all-time (owner only). */
+  /** What each game has put in, all-time. */
   games?: Partial<Record<HouseGame, string>>;
-  /** Withdrawals, newest first (owner only). */
+  /** Withdrawals, newest first, for everyone to see. */
   withdrawals?: HouseWithdrawal[];
 }
 

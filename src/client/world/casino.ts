@@ -10,6 +10,7 @@ import {
   CASINO_SHOP,
   CHIP_BOARD,
   CRASH_BOARD,
+  HOUSE_BANK_MACHINE,
   MARKET_SCREEN,
   PLINKO_MACHINE,
   TRADING_DESK,
@@ -204,6 +205,16 @@ export interface MarketDeskView {
   where: { x: number; y: number; z: number };
 }
 
+/** The house bank's machine against the south wall: its screen shows the bank's total for everyone, and E there opens its panel. */
+export interface HouseBankMachineView {
+  group: THREE.Group;
+  /** Draws the bank's total (whole chips, a decimal string: it has no upper limit) on its screen. */
+  setTotal(total: string): void;
+  interactable: Interactable;
+  /** The screen's canvas, for checking what it shows. */
+  canvas: HTMLCanvasElement;
+}
+
 export interface Casino {
   group: THREE.Group;
   colliders: Collider[];
@@ -219,6 +230,7 @@ export interface Casino {
   crashBoard: CrashBoardView;
   plinko: PlinkoMachineView;
   market: MarketDeskView;
+  houseBank: HouseBankMachineView;
   /** Where you stand at the cashier's window, and the cashier behind it. */
   cashier: { at: { x: number; z: number }; worker: Worker };
   /** The shop, through the doorway at the west end of the south wall (see casinoshop.ts). */
@@ -1661,6 +1673,122 @@ export function buildCasino(): Casino {
   // A cool light over the desk.
   light('#9fdcff', 3, TRADING_DESK.x - 1, 2.8, TRADING_DESK.z, 6);
 
+  // ---- The house bank's machine -------------------------------------------------------------------------------------
+  // A vault standing against the south wall: a gunmetal cabinet with brass edges, a round vault door
+  // with a spoked wheel in its lower half, an ATM's screen over it (the bank's total, in gold for
+  // everyone), a keypad and a slot under the screen, and a gold HOUSE BANK sign on top. Built facing
+  // +z in its own frame, then turned to face north into the hall.
+  const houseBank = ((): HouseBankMachineView => {
+    const V = HOUSE_BANK_MACHINE;
+    const m = new THREE.Group();
+    m.name = 'house-bank-machine';
+    const front = V.depth / 2;
+    const steel = toon('#3a4150');
+    const steelDark = toon('#232833');
+    const body = V.height - 0.4;
+    m.add(mesh(new THREE.BoxGeometry(V.width + 0.1, 0.12, V.depth + 0.08), steelDark, 0, 0.06, 0));
+    m.add(mesh(roundedBox(V.width, body - 0.12, V.depth, 0.06), steel, 0, 0.12 + (body - 0.12) / 2, 0));
+    for (const sx of [-1, 1]) m.add(mesh(new THREE.BoxGeometry(0.05, body - 0.12, 0.05), brass, (sx * (V.width - 0.02)) / 2, 0.12 + (body - 0.12) / 2, front, false));
+    // The vault door: a thick brass-rimmed disc, bolts round it, and a wheel with four spokes.
+    const doorY = 0.62;
+    const door = new THREE.Group();
+    door.add(mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 40).rotateX(Math.PI / 2), steelDark, 0, 0, 0.03, false));
+    door.add(mesh(new THREE.TorusGeometry(0.42, 0.035, 8, 40), brass, 0, 0, 0.05, false));
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      door.add(mesh(new THREE.SphereGeometry(0.022, 8, 6), brass, Math.cos(a) * 0.34, Math.sin(a) * 0.34, 0.065, false));
+    }
+    door.add(mesh(new THREE.TorusGeometry(0.17, 0.018, 8, 28), brass, 0, 0, 0.11, false));
+    for (let i = 0; i < 4; i++) {
+      const spoke = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.34, 6), brass, 0, 0, 0.11, false);
+      spoke.rotation.z = (i * Math.PI) / 4;
+      door.add(spoke);
+    }
+    door.add(mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.06, 16).rotateX(Math.PI / 2), brass, 0, 0, 0.1, false));
+    door.position.set(0, doorY, front);
+    m.add(door);
+    // The screen, in a brass frame, with a keypad and a card slot on a shelf under it.
+    const sw = V.screen.width;
+    const sh = V.screen.height;
+    m.add(mesh(new THREE.BoxGeometry(sw + 0.1, sh + 0.1, 0.04), brass, 0, V.screenY, front + 0.005, false));
+    const canvas = document.createElement('canvas');
+    canvas.width = 768;
+    canvas.height = Math.round((768 * sh) / sw);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    const screen = mesh(new THREE.PlaneGeometry(sw, sh), glow('#ffffff', { map: texture }), 0, V.screenY, front + 0.03, false);
+    m.add(screen);
+    const shelfY = V.screenY - sh / 2 - 0.12;
+    m.add(mesh(new THREE.BoxGeometry(sw + 0.06, 0.04, 0.2), steelDark, 0, shelfY, front + 0.09, false));
+    const key = toon('#c9ced8');
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) m.add(mesh(new THREE.BoxGeometry(0.05, 0.015, 0.035), key, -0.32 + col * 0.07, shelfY + 0.028, front + 0.05 + row * 0.05, false));
+    m.add(mesh(new THREE.BoxGeometry(0.26, 0.02, 0.012), toon('#0b0d12'), 0.25, shelfY + 0.1, front + 0.004, false));
+    m.add(mesh(new THREE.BoxGeometry(0.28, 0.01, 0.01), glow('#3ddc84'), 0.25, shelfY + 0.075, front + 0.006, false));
+    // The sign on top: a dark box with the name in gold on its front.
+    const signText = t('world.casinoHouseBank');
+    const sign = canvasTexture(1024, 192, (c) => {
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      fitFont(c, signText, 120, 960);
+      c.shadowColor = '#ffb300';
+      c.shadowBlur = 26;
+      c.fillStyle = '#ffd166';
+      c.fillText(signText, 512, 104);
+    });
+    m.add(mesh(new THREE.BoxGeometry(V.width + 0.06, 0.34, V.depth * 0.8), steelDark, 0, body + 0.17, -0.03));
+    m.add(mesh(new THREE.BoxGeometry(V.width + 0.1, 0.03, V.depth * 0.8 + 0.04), brass, 0, body + 0.015, -0.03, false));
+    m.add(mesh(new THREE.PlaneGeometry(V.width - 0.04, 0.26), glow('#ffffff', { map: sign, transparent: true }), 0, body + 0.18, V.depth * 0.37 + 0.002, false));
+    m.position.set(V.x, 0, V.z);
+    m.rotation.y = V.rotY;
+    group.add(m);
+    // Where you stand: in front of it, out in the hall.
+    const out = front + 0.9;
+    const interactable: Interactable = { kind: 'housebank', x: V.x + Math.sin(V.rotY) * out, z: V.z + Math.cos(V.rotY) * out, radius: V.reach };
+    interactables.push(interactable);
+    const aim = new THREE.Mesh(new THREE.BoxGeometry(V.width, V.height, V.depth + 0.1), new THREE.MeshBasicMaterial({ visible: false }));
+    aim.position.set(0, V.height / 2, 0.05);
+    aim.userData.interact = interactable;
+    screen.userData.interact = interactable;
+    m.add(aim);
+    let shown = '';
+    const setTotal = (total: string) => {
+      if (total === shown) return;
+      shown = total;
+      const g = canvas.getContext('2d')!;
+      const W = canvas.width;
+      const Hh = canvas.height;
+      const bg = g.createLinearGradient(0, 0, 0, Hh);
+      bg.addColorStop(0, '#0d1b2a');
+      bg.addColorStop(1, '#08111c');
+      g.fillStyle = bg;
+      g.fillRect(0, 0, W, Hh);
+      g.strokeStyle = 'rgba(255, 209, 102, 0.55)';
+      g.lineWidth = 6;
+      g.strokeRect(12, 12, W - 24, Hh - 24);
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillStyle = '#c9d6e8';
+      fitFont(g, signText, 44, W - 80, 800);
+      g.fillText(signText, W / 2, 78);
+      const n = formatChips(total, locale());
+      g.fillStyle = '#ffd166';
+      g.shadowColor = '#ffb300';
+      g.shadowBlur = 18;
+      fitFont(g, n, 140, W - 80, 900);
+      g.fillText(n, W / 2, Hh / 2 + 10);
+      g.shadowBlur = 0;
+      g.fillStyle = '#8fa3bf';
+      fitFont(g, t('world.casinoHouseBankChips'), 40, W - 80, 800);
+      g.fillText(t('world.casinoHouseBankChips'), W / 2, Hh - 64);
+      texture.needsUpdate = true;
+    };
+    setTotal('0');
+    return { group: m, setTotal, interactable, canvas };
+  })();
+  // A warm light on its front.
+  light('#ffd9a0', 2.2, HOUSE_BANK_MACHINE.x, 2.6, HOUSE_BANK_MACHINE.z - 1.4, 5);
+
   // ---- The bar and the lounge ----------------------------------------------------------------------------------
   const B = CASINO_BAR;
   const blen = B.maxZ - B.minZ;
@@ -1778,6 +1906,7 @@ export function buildCasino(): Casino {
     crashBoard,
     plinko,
     market,
+    houseBank,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
     shop,
     update(time, dt) {

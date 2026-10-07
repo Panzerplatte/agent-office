@@ -252,12 +252,11 @@ export async function startServer(cfg: Config) {
     nameOf: (who) => (who.startsWith('account:') ? accounts.get(who.slice('account:'.length))?.name : undefined),
     online: (who) => [...clients.values()].some((c) => c.chips === who),
   });
-  // The casino's house bank: every stake a player loses goes in (see shared/housebank.ts), and only its
-  // owner (an account, see Accounts.bankOwner) may take chips out. Everyone hears its total, a moment
-  // after a burst of bets; its owner hears the log too.
+  // The casino's house bank: every stake a player loses goes in (see shared/housebank.ts), and any
+  // player may take chips out at its machine. Everyone hears its total and the log, a moment after a
+  // burst of bets.
   let houseBankSoon: ReturnType<typeof setTimeout> | null = null;
   const houseBank = new HouseBank(cfg.dataDir, chips, {
-    owner: () => accounts.bankOwner,
     onChange: () => {
       houseBankSoon ??= setTimeout(() => {
         houseBankSoon = null;
@@ -267,7 +266,8 @@ export async function startServer(cfg: Config) {
     },
   });
   const houseBankChanged = () => {
-    for (const c of clients.values()) sendTo(c, { t: 'housebank', bank: houseBank.state(c.accountId) });
+    const bank = houseBank.state();
+    for (const c of clients.values()) sendTo(c, { t: 'housebank', bank });
   };
   /** What `who` has on from the shop changed: their avatar on every page of theirs, for everyone, and the desks of the workers they hired. */
   const shopWorn = (who: string) => {
@@ -1189,8 +1189,6 @@ export async function startServer(cfg: Config) {
       }
       if (me.admin) sendTo(c, { t: 'accounts', state: (state ??= accounts.state(onlineAccounts())) });
     }
-    // The house bank's owner may have changed (here, or with `agent-office accounts bank-owner`).
-    houseBankChanged();
   };
 
   const onConnection = (ws: WebSocket, url: URL, session: Session) => {
@@ -1280,7 +1278,7 @@ export async function startServer(cfg: Config) {
       me,
       chips: chips.state(client.chips),
       chipsTop: chipsTopFor(client, chips.top()),
-      houseBank: houseBank.state(client.accountId),
+      houseBank: houseBank.state(),
       looks: chips.looks(),
       onlinebj: onlinebj.state(),
       notify: webhook.state(),
@@ -2051,10 +2049,9 @@ export async function startServer(cfg: Config) {
           sendTo(c, { t: 'toast', ...notice('housebank.casino'), level: 'warn' });
           break;
         }
-        // Checked here, by the account the connection signed in with: nobody else can, whatever they send.
-        const r = houseBank.withdraw(c.accountId, c.peer.name, msg.amount);
-        if (r === 'owner') sendTo(c, { t: 'toast', ...notice('housebank.owner'), level: 'warn' });
-        else if (r === 'amount') sendTo(c, { t: 'toast', ...notice('housebank.amount'), level: 'warn' });
+        // Onto their own chips (their account's, or their browser's), checked and taken in one go.
+        const r = houseBank.withdraw(c.chips, c.peer.name, msg.amount);
+        if (r === 'amount') sendTo(c, { t: 'toast', ...notice('housebank.amount'), level: 'warn' });
         else if (r === 'balance') sendTo(c, { t: 'toast', ...notice('housebank.balance', { total: houseBank.chipsTotal.toLocaleString('en') }), level: 'warn' });
         else {
           console.log(`  ${c.peer.name} took ${r} chips out of the house bank`);
@@ -2634,7 +2631,6 @@ export async function startServer(cfg: Config) {
       case 'accounts.revoke':
       case 'accounts.role':
       case 'accounts.shared':
-      case 'accounts.bankOwner':
         handleAccounts(c, msg);
         break;
       case 'decor.add': {
@@ -2836,15 +2832,6 @@ export async function startServer(cfg: Config) {
         const a = accounts.setRole(id, msg.role === 'admin' ? 'admin' : 'member');
         if (!a) break;
         toastAll(notice(a.role === 'admin' ? 'account.madeAdmin' : 'account.noLongerAdmin', { who, name: a.name }));
-        accountsChanged();
-        break;
-      }
-      case 'accounts.bankOwner': {
-        const id = msg.accountId === null ? undefined : str(msg.accountId, 32);
-        if (id === accounts.bankOwner || !accounts.setBankOwner(id)) break;
-        const a = accounts.get(id);
-        console.log(`  ${who} made ${a?.name ?? 'nobody'} the owner of the house bank`);
-        toastAll(a ? notice('housebank.ownerSet', { who, name: a.name }) : notice('housebank.ownerNone', { who }));
         accountsChanged();
         break;
       }
