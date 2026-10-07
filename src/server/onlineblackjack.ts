@@ -2,6 +2,7 @@ import { MAX_SEATS, type Rand } from '../shared/blackjack.js';
 import { EMOTE_EVERY, ONLINE_KEEP, isOnlineEmote, type OnlineBlackjackState, type OnlineEmote, type OnlineTable } from '../shared/onlineblackjack.js';
 import { SEATING_BY_ID } from '../shared/layout.js';
 import { BlackjackTable, type BlackjackBank } from './blackjack.js';
+import type { HouseTally } from './housebank.js';
 
 /** Whether someone sitting on seat place `seat` (a PeerInfo seat key, "boss-chair:0") is at a PC: the boss's chair, facing its monitor. */
 export function atPc(seat: string | undefined): boolean {
@@ -15,6 +16,8 @@ export interface OnlineBlackjackOptions {
   rand?: Rand;
   /** Set timers for the clocks (the default); off, `tick()` (and each table's) is called by hand (tests). */
   timers?: boolean;
+  /** The house bank (server/housebank.ts): told what each settled bet lost. */
+  house?: HouseTally;
 }
 
 /** Someone at a PC, at a table: which, who they are (their chips id) and the floor their PC is on. */
@@ -126,6 +129,7 @@ export class OnlineBlackjack {
       now: this.opts.now,
       rand: this.opts.rand,
       timers: this.opts.timers,
+      house: this.opts.house,
       changed: () => {
         this.tidy();
         this.opts.changed?.();

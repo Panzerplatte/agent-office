@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import type { HouseTally } from './housebank.js';
 import { DROP_GAP, MAX_BALLS, MAX_YOURS, RECENT, dropOk, fallMs, multipliers, payout, slotOf, type PlinkoBall, type PlinkoLanding, type PlinkoPath, type PlinkoState } from '../shared/plinko.js';
 
 /** What the game needs of the chips bank (server/chips.ts): taking a stake, and paying out. */
@@ -11,6 +12,8 @@ export interface PlinkoOptions {
   now?: () => number;
   /** A ball's bounces, one per row: from cryptographically random bytes unless a test says otherwise. */
   path?: (rows: number) => PlinkoPath;
+  /** The house bank (server/housebank.ts): told what each settled bet lost. */
+  house?: HouseTally;
 }
 
 /** A ball while it falls: whose wallet the bet came out of (and the winnings go back into), and when it lands. */
@@ -39,6 +42,7 @@ export class Plinko {
   private last = new Map<string, number>();
   private now: () => number;
   private pick: (rows: number) => PlinkoPath;
+  private house: HouseTally | undefined;
 
   constructor(
     private readonly bank: PlinkoBank,
@@ -46,6 +50,7 @@ export class Plinko {
   ) {
     this.now = opts.now ?? Date.now;
     this.pick = opts.path ?? randomPath;
+    this.house = opts.house;
   }
 
   /** The machine as it is now, for a page coming down: nobody's wallet. */
@@ -114,6 +119,7 @@ export class Plinko {
 
   private settle(b: Falling): PlinkoLanding {
     if (b.won > 0) this.bank.award(b.wallet, b.won, 'plinko.win', { quiet: true });
+    if (b.won < b.bet) this.house?.lost('plinko', b.bet - b.won);
     const landing: PlinkoLanding = { name: b.name, ...(b.color ? { color: b.color } : {}), bet: b.bet, rows: b.rows, risk: b.risk, m: b.m, won: b.won };
     this.recent = [landing, ...this.recent].slice(0, RECENT);
     // Nobody's drop gap needs remembering once they've nothing falling.

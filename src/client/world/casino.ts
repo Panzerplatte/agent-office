@@ -23,9 +23,10 @@ import {
   rouletteColor,
   type CasinoTable,
 } from '../../shared/casino';
+import { formatChips } from '../../shared/housebank';
 import { multText, type CrashBoard, type CrashBoardRow } from '../../shared/crash';
 import { ELEVATOR, ELEVATOR_FRONT, WALL_T } from '../../shared/layout';
-import { t } from '../i18n';
+import { locale, t } from '../i18n';
 import { Worker } from './character';
 import { buildCasinoBartender } from './casinobartender';
 import { buildCasinoShop, type CasinoShop } from './casinoshop';
@@ -168,6 +169,8 @@ export interface ChipBoard {
   mesh: THREE.Mesh;
   /** Draws the board: the title, then a row for each (the first 10 fit), medals for the first three. With none, it says there's nothing yet. */
   setRows(rows: readonly ChipBoardRow[]): void;
+  /** The house bank's total along the bottom (whole chips, as a decimal string: it has no upper limit). */
+  setBank(total: string): void;
 }
 
 /** The Crash scoreboard on the west wall next to the Crash screen: who's bet the most, and who's won the most, all-time. */
@@ -1347,9 +1350,10 @@ export function buildCasino(): Casino {
   const boardMesh = mesh(new THREE.PlaneGeometry(CHIP_BOARD.width, CHIP_BOARD.height), glow('#ffffff', { map: boardTex }), CHIP_BOARD.x, CHIP_BOARD.y, CHIP_BOARD.z + 0.035, false);
   group.add(boardMesh);
   statics.add(mesh(new THREE.BoxGeometry(CHIP_BOARD.width + 0.16, CHIP_BOARD.height + 0.16, 0.06), brass, CHIP_BOARD.x, CHIP_BOARD.y, CHIP_BOARD.z, false));
-  const chipBoard: ChipBoard = {
-    mesh: boardMesh,
-    setRows(rows) {
+  let boardRows: readonly ChipBoardRow[] = [];
+  let bankTotal = '0';
+  const drawBoard = () => {
+      const rows = boardRows;
       const g = boardCanvas.getContext('2d')!;
       const W = boardCanvas.width;
       const Hh = boardCanvas.height;
@@ -1362,7 +1366,7 @@ export function buildCasino(): Casino {
       g.textAlign = 'center';
       g.fillStyle = '#ffd166';
       fitFont(g, t('world.casinoChipBoard'), 54, W - 80);
-      g.fillText(t('world.casinoChipBoard'), W / 2, 52);
+      g.fillText(t('world.casinoChipBoard'), W / 2, 46);
       const shown = [...rows].sort((a, b) => b.chips - a.chips).slice(0, 10);
       if (!shown.length) {
         g.fillStyle = '#c9c1d6';
@@ -1373,13 +1377,13 @@ export function buildCasino(): Casino {
         const col = i < 5 ? 0 : 1;
         const row = i % 5;
         const x = 40 + col * (W / 2);
-        const y = 116 + row * 54;
+        const y = 102 + row * 50;
         if (r.you) {
           g.fillStyle = 'rgba(255, 209, 102, 0.22)';
           g.strokeStyle = '#ffd166';
           g.lineWidth = 3;
           g.beginPath();
-          g.roundRect(x - 16, y - 25, W / 2 - 48, 50, 12);
+          g.roundRect(x - 16, y - 23, W / 2 - 48, 46, 12);
           g.fill();
           g.stroke();
         }
@@ -1409,7 +1413,30 @@ export function buildCasino(): Casino {
         g.font = '900 34px Nunito, ui-rounded, system-ui, sans-serif';
         g.fillText(r.chips.toLocaleString('en-US'), x + W / 2 - 80, y);
       });
+      // The house bank, along the bottom under a rule: every stake lost in the casino (see shared/housebank.ts).
+      g.strokeStyle = 'rgba(212, 168, 75, 0.5)';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(40, Hh - 72);
+      g.lineTo(W - 40, Hh - 72);
+      g.stroke();
+      const bankLine = `${t('world.casinoHouseBank')}: ${formatChips(bankTotal, locale())}`;
+      g.textAlign = 'center';
+      g.fillStyle = '#ffd166';
+      fitFont(g, bankLine, 38, W - 100, 900);
+      g.fillText(bankLine, W / 2, Hh - 40);
       boardTex.needsUpdate = true;
+  };
+  const chipBoard: ChipBoard = {
+    mesh: boardMesh,
+    setRows(rows) {
+      boardRows = rows;
+      drawBoard();
+    },
+    setBank(total) {
+      if (total === bankTotal) return;
+      bankTotal = total;
+      drawBoard();
     },
   };
   chipBoard.setRows([]);

@@ -83,6 +83,10 @@ export function openAccounts(net: Net) {
           () => net.send({ t: 'accounts.revoke', accountId: a.id }),
         ),
       );
+      // The casino's house bank: one account owns it (see shared/housebank.ts).
+      const owns = s.bankOwner === a.id;
+      const bank = h('button.btn', { type: 'button', title: owns ? t('windows.accounts.dropBankOwnerTip') : t('windows.accounts.makeBankOwnerTip', { name: a.name }) }, owns ? t('windows.accounts.dropBankOwner') : t('windows.accounts.makeBankOwner'));
+      bank.addEventListener('click', () => net.send({ t: 'accounts.bankOwner', accountId: owns ? null : a.id }));
       list.append(
         h(
           'li',
@@ -90,6 +94,8 @@ export function openAccounts(net: Net) {
           h('span.dot', { class: a.online ? 'on' : '', title: seen }),
           h('span.name', {}, a.name, you ? h('span.you', {}, t('windows.accounts.you')) : null),
           h('span.role', { class: a.role }, roleName(a.role)),
+          owns ? h('span.role', {}, t('windows.accounts.bankOwner')) : null,
+          bank,
           h('span.keys', { title: t('windows.accounts.invitedBy', { name: a.createdBy }) }, seen),
           you ? null : role,
           you ? null : revoke,

@@ -71,6 +71,11 @@ export class CrashStats {
     return t && { wagered: t.wagered, net: t.net, rounds: t.rounds, ...(t.best ? { best: { ...t.best } } : {}) };
   }
 
+  /** Everyone's all-time result on Crash (won less wagered): for the house bank's backfill (server/housebank.ts). */
+  nets(): number[] {
+    return [...this.totals.values()].map((t) => t.net);
+  }
+
   /** The scoreboard: the most wagered and the most won, each with whose place it is. */
   board(): { wagered: CrashBoardEntry[]; won: CrashBoardEntry[] } {
     return crashRanking([...this.totals].map(([id, t]) => ({ id, ...structuredClone(t) })));

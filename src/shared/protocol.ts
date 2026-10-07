@@ -1,6 +1,7 @@
 // Wire protocol between browser and server. Every WebSocket frame is one JSON object.
 
 import type { Look } from './avatar.js';
+import type { HouseBankState } from './housebank.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { SnakeFrame, SnakeResult, SnakeState, SnakeView } from './snake.js';
 import type { DartsMode, DartsState } from './darts.js';
@@ -852,6 +853,8 @@ export interface AccountsState {
   invites: AccountInvite[];
   /** Whether the shared office password still lets people in. */
   sharedPassword: boolean;
+  /** The account that owns the casino's house bank (shared/housebank.ts), if any. */
+  bankOwner?: string;
 }
 
 export interface TeamMember {
@@ -1221,6 +1224,8 @@ export type ClientMsg =
   | { t: 'accounts.role'; accountId: string; role: AccountRole }
   /** Let the shared office password sign people in, or stop it. */
   | { t: 'accounts.shared'; on: boolean }
+  /** Make `accountId` the owner of the casino's house bank (null: nobody). */
+  | { t: 'accounts.bankOwner'; accountId: string | null }
   /** Follow what a worker changed (the office polls its checkout while anyone watches). */
   | { t: 'changes.watch'; workerId: string }
   | { t: 'changes.unwatch'; workerId: string }
@@ -1412,6 +1417,8 @@ export type ClientMsg =
   | { t: 'roulette.unbet'; spot?: string }
   /** At the bank (the cashier), in the casino: a chip credit of `amount` (one of CREDIT_AMOUNTS in shared/chips.ts), once the last one's paid back. */
   | { t: 'chips.credit'; amount: number }
+  /** At the cashier, in the casino: the house bank's owner takes `amount` whole chips (or 'all') out of it (see shared/housebank.ts). */
+  | { t: 'housebank.withdraw'; amount: number | 'all' }
   /** At the shop's counter, in the casino: buy `item` (an id from SHOP_ITEMS in shared/shop.ts) for its price in chips. */
   | { t: 'shop.buy'; item: string }
   /** Put on (`on`) or take off something you bought at the shop, anywhere. */
@@ -1474,6 +1481,8 @@ export type ServerMsg =
       chips: ChipsState;
       /** Chips: the top CHIPS_TOP balances in the building, most first, for the casino's board. */
       chipsTop: ChipsTopRow[];
+      /** The casino's house bank (shared/housebank.ts). */
+      houseBank: HouseBankState;
       /** What everyone has on from the casino's shop, by name (see Chips.looks): for the desks of the workers they hired. */
       looks: Record<string, string[]>;
       /** Online blackjack at the PCs: every table, for the PC monitors and for playing. */
@@ -1602,6 +1611,8 @@ export type ServerMsg =
   | { t: 'chips'; chips: ChipsState; change?: ChipsEntry; quiet?: boolean }
   /** Chips: the top CHIPS_TOP balances changed (a new order, a balance, a name, someone came or went). */
   | { t: 'chips.top'; top: ChipsTopRow[] }
+  /** The casino's house bank changed (its total; the log too, for its owner). */
+  | { t: 'housebank'; bank: HouseBankState }
   /** What everyone has on from the shop changed (see welcome's looks). */
   | { t: 'shop.looks'; looks: Record<string, string[]> }
   | { t: 'jukebox'; state: JukeboxState }

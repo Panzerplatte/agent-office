@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import type { HouseTally } from './housebank.js';
 import { BET_TIME, CRASHED_TIME, CYCLE, HISTORY, MAX_BET, MAX_PLAYERS, autoBetOk, autoStop, betOk, crashPoint, crashedBy, drawSeries, multiplierAt, nextAutoBet, payout, targetOk, timeFor, type CrashAutoState, type CrashAutoStop, type CrashOdds, type CrashPhase, type CrashPlayer, type CrashState } from '../shared/crash.js';
 
 /** What the game needs of the chips bank (server/chips.ts): taking a stake, and paying out. */
@@ -15,6 +16,8 @@ export interface CrashOptions {
   series?: () => CrashOdds;
   /** Who's bet what and won what, all-time, for the scoreboard (server/crashstats.ts): told when a bet goes down, goes back, and settles. */
   stats?: CrashTally;
+  /** The house bank (server/housebank.ts): told what each settled bet lost. */
+  house?: HouseTally;
   /** Someone's auto-bet changed (it bet, a round settled, it stopped): told whose, and how it is now. */
   onAuto?: (wallet: string, auto: CrashAutoState) => void;
 }
@@ -78,6 +81,7 @@ export class Crash {
   private pick: (odds: CrashOdds) => number;
   private draw: () => CrashOdds;
   private stats: CrashTally | undefined;
+  private house: HouseTally | undefined;
   private onAuto: ((wallet: string, auto: CrashAutoState) => void) | undefined;
   /** Everyone's auto-bet, running or the last one stopped (so their pages can say why), by wallet. */
   private autos = new Map<string, AutoRun>();
@@ -89,6 +93,7 @@ export class Crash {
     this.now = opts.now ?? Date.now;
     this.pick = opts.point ?? ((odds) => crashPoint(random(), odds));
     this.stats = opts.stats;
+    this.house = opts.house;
     this.onAuto = opts.onAuto;
     this.draw = opts.series ?? (() => drawSeries(random(), random()));
     // The first series, and bets open for its first round straight away.
@@ -185,6 +190,7 @@ export class Crash {
 
   /** A bet settled for `won` (0: lost; any cash-out counts as a win): if their auto-bet put it down, it counts, the next bet's worked out, and it may stop there. */
   private settled(p: Player, won: number) {
+    if (won < p.bet) this.house?.lost('crash', p.bet - won);
     const run = this.autos.get(p.wallet);
     if (!p.byAuto || !run?.on) return;
     run.rounds++;
