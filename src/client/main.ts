@@ -111,6 +111,9 @@ import { addCasinoJukebox, jukeboxAt } from './world/casinojukebox';
 import { addCrashScreen, type CrashScreen } from './world/crashscreen';
 import { CrashPanel, mine as myCrashBet } from './ui/crash';
 import { PlinkoPanel } from './ui/plinko';
+import { MarketPanel } from './ui/market';
+import { drawScreen as drawMarketScreen } from './world/marketscreen';
+import { priceText as marketPriceText } from '../shared/market';
 import { LINGER_MS, drawScreen as drawPlinkoScreen, pegsHit } from './world/plinkoboard';
 import { RECENT as PLINKO_RECENT, fallMs as plinkoFallMs, type PlinkoRisk } from '../shared/plinko';
 import type { JukeboxView } from './world/jukebox';
@@ -375,6 +378,7 @@ function theCasino(): Casino {
     store.on('crashBoard', () => crashBoard.setBoard(store.crashBoard));
     crashDrawnAt = -Infinity;
     plinkoDrawnAt = -Infinity;
+    marketDirty = true;
     noOutline(casino.group);
   }
   return casino;
@@ -1020,6 +1024,51 @@ function updatePlinko(now: number) {
     }
   }
   plinkoPanel.update(now);
+}
+
+// ---- The trading desk ---------------------------------------------------------------------------------
+// The desk by the casino's east wall, for everyone down there: its big screen shows the stock's chart,
+// the price, who's long and short and the latest closes (see world/marketscreen.ts). E at it opens
+// the panel to trade (see ui/market.ts). The office moves the price and settles every position; this
+// only shows what it says.
+const marketPanel = new MarketPanel({
+  open: (o) => net.send({ t: 'market.open', ...o }),
+  close: (id) => net.send({ t: 'market.close', id }),
+  closed: () => (hintKey = 'stale'),
+  balance: () => chips.balance,
+  market: () => store.market,
+  mine: () => store.marketMine,
+  lastClosed: () => store.marketClosed,
+});
+/** Whether the wall screen needs drawing again (a tick, a trade): it's drawn at most once a tick, and only while in view. */
+let marketDirty = true;
+store.on('market', () => {
+  marketDirty = true;
+  marketPanel.update();
+});
+store.on('marketMine', () => {
+  marketPanel.update();
+  // Liquidated while you were looking elsewhere: say so (a take-profit or stop-loss pays, and the chips toast says it).
+  const c = store.marketClosed;
+  if (c && c.close.why === 'liquidated' && store.marketClosedSeen !== c.position.id) {
+    store.marketClosedSeen = c.position.id;
+    toast(t('main.marketLiquidated', { side: c.position.side === 'long' ? 'Long' : 'Short', lev: c.position.lev, price: marketPriceText(c.close.price), n: c.position.stake.toLocaleString() }), 'warn');
+  }
+});
+chips.onChange(() => marketPanel.update());
+const marketView = new THREE.Frustum();
+const marketViewMatrix = new THREE.Matrix4();
+function updateMarket() {
+  if (!downstairs || !casino) {
+    if (marketPanel.open) marketPanel.close();
+    return;
+  }
+  if (!marketDirty) return;
+  marketView.setFromProjectionMatrix(marketViewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  if (!marketView.intersectsObject(casino.market.screen)) return;
+  marketDirty = false;
+  drawMarketScreen(casino.market.canvas, store.market);
+  casino.market.texture.needsUpdate = true;
 }
 
 // ---- Slot machines ----------------------------------------------------------------------------------
@@ -2467,6 +2516,7 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'pool') stepUpToPool();
   else if (target.kind === 'crash') crashPanel.show();
   else if (target.kind === 'plinko') plinkoPanel.show();
+  else if (target.kind === 'market') marketPanel.show();
   else if (target.kind === 'machine') showMachine();
 }
 
@@ -3319,6 +3369,12 @@ function hintFor(it: Interactable): Hint {
       const about = falling ? t('main.plinkoFalling', { n: falling }) : t('main.plinkoAbout');
       return { k: about, parts: [title(t('main.plinko')), aside(about), key('E', t('main.plinkoPlay'))] };
     }
+    case 'market': {
+      const m = store.market;
+      const n = store.marketMine.length;
+      const about = n ? t('main.marketYours', { symbol: m.symbol, price: marketPriceText(m.price), n }) : t('main.marketAbout', { symbol: m.symbol, price: marketPriceText(m.price) });
+      return { k: about, parts: [title(t('main.market')), aside(about), key('E', t('main.marketPlay'))] };
+    }
     case 'jukebox': {
       const j = store.jukebox;
       const what = j.on ? trackTitle(j) : '';
@@ -4042,7 +4098,7 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5, machine: 9 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5, machine: 9, market: 9 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
@@ -4553,6 +4609,7 @@ function frame(ts?: number) {
     casinoJukebox?.update(t, dt, sound.beat());
     updateCrash(performance.now());
     updatePlinko(performance.now());
+    updateMarket();
     if (!pokerFelt) {
       pokerFelt = new PokerFelt(casino.poker);
       pokerFelt.render(store.poker, true);

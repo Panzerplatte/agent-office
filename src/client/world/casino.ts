@@ -10,7 +10,9 @@ import {
   CASINO_SHOP,
   CHIP_BOARD,
   CRASH_BOARD,
+  MARKET_SCREEN,
   PLINKO_MACHINE,
+  TRADING_DESK,
   POKER_TABLE,
   ROULETTE_TABLE,
   ROULETTE_WHEEL,
@@ -190,6 +192,18 @@ export interface PlinkoMachineView {
   where: { x: number; y: number; z: number };
 }
 
+/** The trading desk by the east wall: the big chart screen over it (a canvas everyone down there watches), and where E is. */
+export interface MarketDeskView {
+  group: THREE.Group;
+  /** The wall screen: draw on `canvas`, then set `texture.needsUpdate`. */
+  screen: THREE.Mesh;
+  canvas: HTMLCanvasElement;
+  texture: THREE.CanvasTexture;
+  interactable: Interactable;
+  /** Where the screen is, for its sounds. */
+  where: { x: number; y: number; z: number };
+}
+
 export interface Casino {
   group: THREE.Group;
   colliders: Collider[];
@@ -204,6 +218,7 @@ export interface Casino {
   chipBoard: ChipBoard;
   crashBoard: CrashBoardView;
   plinko: PlinkoMachineView;
+  market: MarketDeskView;
   /** Where you stand at the cashier's window, and the cashier behind it. */
   cashier: { at: { x: number; z: number }; worker: Worker };
   /** The shop, through the doorway at the west end of the south wall (see casinoshop.ts). */
@@ -1578,6 +1593,74 @@ export function buildCasino(): Casino {
   // A warm light on the machine's front.
   light('#ffb3e6', 2.5, PLINKO_MACHINE.x, 2.6, PLINKO_MACHINE.z - 1.6, 5);
 
+  // ---- The trading desk ---------------------------------------------------------------------------------------
+  // A big chart screen on the east wall between the cashier's cage and the bar, in a black frame
+  // with a cyan neon strip under it, and in front of it a dark trading desk with a brass top, a row
+  // of three small monitors (green and red tickers) and a lamp. You stand on its west side and
+  // look over it at the screen. The screen's drawn by world/marketscreen.ts.
+  const market = ((): MarketDeskView => {
+    const S = MARKET_SCREEN;
+    const D = TRADING_DESK;
+    const m = new THREE.Group();
+    m.name = 'trading-desk';
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = Math.round((1280 * S.height) / S.width);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    const screen = mesh(new THREE.PlaneGeometry(S.width, S.height), glow('#ffffff', { map: texture }), S.x - 0.06, S.y, S.z, false);
+    screen.rotation.y = -Math.PI / 2;
+    m.add(screen);
+    m.add(mesh(new THREE.BoxGeometry(0.08, S.height + 0.22, S.width + 0.22), toon('#15131a'), S.x - 0.01, S.y, S.z, false));
+    m.add(mesh(new THREE.BoxGeometry(0.04, 0.05, S.width + 0.22), glow('#4cc9f0'), S.x - 0.06, S.y - S.height / 2 - 0.16, S.z, false));
+    // The desk: a dark body, a brass top, and a modesty panel on the side toward the room.
+    const body = toon('#1b1f2a');
+    m.add(mesh(roundedBox(D.depth, D.height - 0.05, D.length, 0.05), body, D.x, (D.height - 0.05) / 2, D.z));
+    m.add(mesh(new THREE.BoxGeometry(D.depth + 0.12, 0.05, D.length + 0.12), brass, D.x, D.height - 0.025, D.z, false));
+    // Three monitors along it, turned a little toward whoever stands in front, each with a ticker on it.
+    const ticker = (up: boolean) =>
+      canvasTexture(256, 160, (g) => {
+        g.fillStyle = '#0b1118';
+        g.fillRect(0, 0, 256, 160);
+        g.strokeStyle = up ? '#3ddc84' : '#ff4d6d';
+        g.lineWidth = 6;
+        g.beginPath();
+        for (let i = 0; i <= 12; i++) {
+          const y = 80 + (up ? -1 : 1) * (i * 4.5) + Math.sin(i * 1.7) * 14;
+          if (i) g.lineTo(14 + i * 19, y);
+          else g.moveTo(14, y);
+        }
+        g.stroke();
+      });
+    const tickers = [glow('#ffffff', { map: ticker(true) }), glow('#ffffff', { map: ticker(false) })];
+    const frame = toon('#0d0f14');
+    [-1.05, 0, 1.05].forEach((dz, i) => {
+      const mon = new THREE.Group();
+      mon.add(mesh(new THREE.BoxGeometry(0.04, 0.36, 0.56), frame, 0, 0, 0, false));
+      const face = mesh(new THREE.PlaneGeometry(0.52, 0.32), tickers[i % 2], -0.022, 0, 0, false);
+      face.rotation.y = -Math.PI / 2;
+      mon.add(face);
+      mon.add(mesh(new THREE.BoxGeometry(0.03, 0.18, 0.03), frame, 0.02, -0.25, 0, false));
+      mon.add(mesh(new THREE.BoxGeometry(0.16, 0.02, 0.2), frame, 0.02, -0.34, 0, false));
+      mon.position.set(D.x + 0.12, D.height + 0.36, D.z + dz);
+      mon.rotation.y = -dz * 0.25;
+      m.add(mon);
+    });
+    group.add(m);
+    // E at the desk's front, on the room's side of it (or by crosshair at the desk or the screen).
+    const interactable: Interactable = { kind: 'market', x: D.x - D.depth / 2 - 0.9, z: D.z, radius: D.reach };
+    interactables.push(interactable);
+    const aim = new THREE.Mesh(new THREE.BoxGeometry(D.depth + 0.1, D.height + 0.8, D.length), new THREE.MeshBasicMaterial({ visible: false }));
+    aim.position.set(D.x, (D.height + 0.8) / 2, D.z);
+    aim.userData.interact = interactable;
+    m.add(aim);
+    screen.userData.interact = interactable;
+    return { group: m, screen, canvas, texture, interactable, where: { x: S.x - 0.5, y: S.y, z: S.z } };
+  })();
+  // A cool light over the desk.
+  light('#9fdcff', 3, TRADING_DESK.x - 1, 2.8, TRADING_DESK.z, 6);
+
   // ---- The bar and the lounge ----------------------------------------------------------------------------------
   const B = CASINO_BAR;
   const blen = B.maxZ - B.minZ;
@@ -1694,6 +1777,7 @@ export function buildCasino(): Casino {
     chipBoard,
     crashBoard,
     plinko,
+    market,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
     shop,
     update(time, dt) {

@@ -368,6 +368,16 @@ export default strings(
     plinkoAbout: 'Drop balls through the pegs: up to 1000×',
     plinkoFalling: (v) => `${v.n} ${s(v.n, 'ball', 'balls')} falling`,
     plinkoPlay: 'Play Plinko',
+    chipsWhy_market_open: 'Opened a trade',
+    chipsWhy_market_close: 'Closed a trade',
+    chipsWhy_market_tp: 'Take-profit hit',
+    chipsWhy_market_sl: 'Stop-loss hit',
+    // At the trading desk on the casino's east wall (the hint line, and a toast)
+    market: '📈 Trading desk',
+    marketAbout: '{symbol} at {price}: Long or Short, up to 10×',
+    marketYours: (v) => `${v.symbol} at ${v.price} · ${v.n} ${s(v.n, 'position', 'positions')} of yours open`,
+    marketPlay: 'Trade',
+    marketLiquidated: 'Your {side} {lev}× position was liquidated at {price}: the stake ({n}) is gone',
     // At the roulette table (the hint line)
     roulette: '🎡 Roulette',
     rouletteBet: 'Put chips down (right-click picks them up)',
@@ -758,6 +768,16 @@ export default strings(
     plinkoAbout: 'Bälle durch die Stifte fallen lassen: bis 1000×',
     plinkoFalling: (v) => `${v.n} ${s(v.n, 'Ball fällt', 'Bälle fallen')}`,
     plinkoPlay: 'Plinko spielen',
+    chipsWhy_market_open: 'Position eröffnet',
+    chipsWhy_market_close: 'Position geschlossen',
+    chipsWhy_market_tp: 'Take-Profit erreicht',
+    chipsWhy_market_sl: 'Stop-Loss erreicht',
+    // Am Trading-Tisch an der Ostwand des Casinos (die Hinweiszeile, und ein Toast)
+    market: '📈 Trading-Tisch',
+    marketAbout: '{symbol} bei {price}: Long oder Short, bis 10×',
+    marketYours: (v) => `${v.symbol} bei ${v.price} · ${v.n} ${s(v.n, 'Position', 'Positionen')} von dir offen`,
+    marketPlay: 'Traden',
+    marketLiquidated: 'Deine {side}-Position mit {lev}× wurde bei {price} liquidiert: der Einsatz ({n}) ist weg',
     // At the roulette table (the hint line)
     roulette: '🎡 Roulette',
     rouletteBet: 'Chips setzen (Rechtsklick nimmt sie weg)',

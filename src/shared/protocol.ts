@@ -13,6 +13,7 @@ import type { OnlineBlackjackState, OnlineEmote } from './onlineblackjack.js';
 import type { RouletteState } from './roulette.js';
 import type { CrashAutoBet, CrashAutoState, CrashBoard, CrashState } from './crash.js';
 import type { PlinkoBall, PlinkoRisk, PlinkoState } from './plinko.js';
+import type { MarketClose, MarketPosition, MarketState, Side } from './market.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -807,6 +808,10 @@ export interface FloorView {
   crashAuto?: CrashAutoState | null;
   /** The Plinko machine in the casino's main hall (only in the casino): the balls still falling, and the last ones that landed. */
   plinko?: PlinkoState;
+  /** The trading desk on the casino's east wall (only in the casino): the price, the chart and the latest closes. */
+  market?: MarketState;
+  /** Your open positions at the trading desk (only in the casino). */
+  marketMine?: MarketPosition[];
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1436,6 +1441,13 @@ export type ClientMsg =
    * bet × its slot's multiplier when it lands (see shared/plinko.ts).
    */
   | { t: 'plinko.drop'; bet: number; rows: number; risk: PlinkoRisk }
+  /**
+   * The trading desk: open a position on the stock for `stake` chips, Long or Short, at `lev`
+   * leverage (1 to 10), with a take-profit and stop-loss (% of the stake) if wanted (see shared/market.ts).
+   */
+  | { t: 'market.open'; stake: number; side: Side; lev: number; tp?: number; sl?: number }
+  /** Close your position `id` at the price now. */
+  | { t: 'market.close'; id: number }
   /** Give the dog on your floor a pat; it has to be within reach. */
   | { t: 'dog.pet' }
   /** Name the dog on your floor ('' gives it back its first name). */
@@ -1585,6 +1597,12 @@ export type ServerMsg =
   | { t: 'crash.auto'; auto: CrashAutoState | null }
   /** In the casino: someone dropped a ball on the Plinko machine, with the path the office picked for it (it lands after fallMs). */
   | { t: 'plinko.ball'; ball: PlinkoBall }
+  /** In the casino: the stock's price moved (a tick a second, the `n`th since it began). */
+  | { t: 'market.tick'; price: number; n: number }
+  /** In the casino: the trading desk changed (a position opened or closed): the whole of it again. */
+  | { t: 'market'; market: MarketState }
+  /** To your pages in the casino: your open positions now, and if one just closed, which and how. */
+  | { t: 'market.mine'; positions: MarketPosition[]; closed?: { position: MarketPosition; close: MarketClose } }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

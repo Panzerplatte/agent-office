@@ -1,7 +1,7 @@
 // The casino: a basement under the ground floor, one for the whole building. The elevator goes down
 // there from every floor, the way it goes up to the roof. Nobody works down there: there's a poker
 // table, a blackjack table, a roulette wheel, a bank of slot machines, a Plinko machine in the middle
-// of the hall, the cashier's cage with a board of everyone's chips over it, and a little bar with a lounge. This is only the room; the games
+// of the hall, a trading desk with a big chart screen on the east wall, the cashier's cage with a board of everyone's chips over it, and a little bar with a lounge. This is only the room; the games
 // (and the chips they're played for) are their own. Shared by the server (who's down there, where
 // they sit) and the client (which builds it).
 //
@@ -269,6 +269,17 @@ export function shopFootprints(): Footprint[] {
  */
 export const PLINKO_MACHINE = { x: -0.4, z: 1.6, rotY: Math.PI, width: 2.2, depth: 0.7, height: 3.15, screenY: 1.62, screen: { width: 1.9, height: 2.06 }, reach: 3.2 } as const;
 
+/**
+ * The trading desk (see shared/market.ts): a big chart screen high on the east wall, between the
+ * cashier's cage and the bar, facing into the room (-x), where the whole casino can watch the price;
+ * its middle is at (x, y, z), `width` × `height` meters. In front of it, out in the room, the desk:
+ * a long counter with monitors on it, `x, z` its middle, `length` along z, `depth` across, `height`
+ * tall; you stand on its west side, facing the screen over it. `reach` is how far from the desk's
+ * front E opens the panel.
+ */
+export const MARKET_SCREEN = { x: CASINO_ROOM.maxX - 0.07, y: 2.75, z: -4.6, width: 4.8, height: 2.7 } as const;
+export const TRADING_DESK = { x: 14.6, z: MARKET_SCREEN.z, length: 3.4, depth: 0.8, height: 0.95, reach: 2.4 } as const;
+
 /** A box on the floor that nobody walks through: the tables, the machines, the counters. */
 export interface Footprint {
   minX: number;
@@ -299,6 +310,7 @@ export function casinoFootprints(): Footprint[] {
   out.push({ minX: CASINO_LOUNGE.x - 0.6, maxX: CASINO_LOUNGE.x + 0.6, minZ: CASINO_LOUNGE.z - 0.4, maxZ: CASINO_LOUNGE.z + 0.4, top: 0.42 });
   out.push({ minX: CASINO_ASHTRAY.x - 0.2, maxX: CASINO_ASHTRAY.x + 0.2, minZ: CASINO_ASHTRAY.z - 0.2, maxZ: CASINO_ASHTRAY.z + 0.2, top: 1 });
   out.push({ minX: PLINKO_MACHINE.x - PLINKO_MACHINE.width / 2, maxX: PLINKO_MACHINE.x + PLINKO_MACHINE.width / 2, minZ: PLINKO_MACHINE.z - PLINKO_MACHINE.depth / 2, maxZ: PLINKO_MACHINE.z + PLINKO_MACHINE.depth / 2, top: 9 });
+  out.push({ minX: TRADING_DESK.x - TRADING_DESK.depth / 2, maxX: TRADING_DESK.x + TRADING_DESK.depth / 2, minZ: TRADING_DESK.z - TRADING_DESK.length / 2, maxZ: TRADING_DESK.z + TRADING_DESK.length / 2, top: 9 });
   out.push({ minX: CASINO_JUKEBOX.x - CASINO_JUKEBOX.depth / 2 - 0.05, maxX: CASINO_ROOM.maxX, minZ: CASINO_JUKEBOX.z - CASINO_JUKEBOX.width / 2 - 0.05, maxZ: CASINO_JUKEBOX.z + CASINO_JUKEBOX.width / 2 + 0.05, top: CASINO_JUKEBOX.height });
   return out;
 }
