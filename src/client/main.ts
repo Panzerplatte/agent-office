@@ -26,6 +26,7 @@ import { casinoBartender } from './world/casinobartender';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
 import { CASINO, casinoSpotOf } from '../shared/casino';
+import { DoorPush } from '../shared/secretdoor';
 import { canSmokeAt } from '../shared/smoking';
 import { BlackjackPlayer } from './blackjack';
 import { allowed } from '../shared/blackjack';
@@ -380,6 +381,10 @@ function theCasino(): Casino {
     const platform = casino.platform;
     platform.setLit(store.platformOn > 0);
     store.on('platform', () => platform.setLit(store.platformOn > 0));
+    // A certain bit of the wall: as the office has it (straight there, for whoever's only just come down).
+    const door = casino.secretDoor;
+    door.set(store.secretDoor, true);
+    store.on('secretDoor', () => door.set(store.secretDoor, performance.now() - doorSeenAt > 500));
     crashDrawnAt = -Infinity;
     plinkoDrawnAt = -Infinity;
     marketDirty = true;
@@ -389,6 +394,24 @@ function theCasino(): Casino {
 }
 /** Where you are now: down in the casino (true). */
 let downstairs = false;
+
+// The casino's secret door (see shared/secretdoor.ts): nothing says it's there. Walk straight into it
+// for a moment and the office opens it for everyone; it shuts itself.
+const doorPush = new DoorPush();
+let doorPushedAt = -Infinity;
+/** When the door was last on screen (a frame in the casino): once it's been a while, it goes straight to how it is. */
+let doorSeenAt = -Infinity;
+/** Every frame in the casino: the door's motion, and whether you're pushing it. */
+function updateSecretDoor(dt: number) {
+  const door = casino!.secretDoor;
+  doorSeenAt = performance.now();
+  door.update(dt, player.seat ? undefined : player.pos);
+  const pushing = player.seat ? 0 : doorPush.update(dt, { x: player.pos.x, z: player.pos.z, facing: player.facing, wishX: player.wish.x, wishZ: player.wish.y });
+  if (pushing && !store.secretDoor.open && doorSeenAt - doorPushedAt > 1000) {
+    doorPushedAt = doorSeenAt;
+    net.send({ t: 'secretDoor.push' });
+  }
+}
 /** The casino lights itself, low and warm, whatever the time of day up above (after the sky's had its say). */
 function lightCasino() {
   hemi.intensity = 0.55;
@@ -4611,6 +4634,7 @@ function frame(ts?: number) {
   if (downstairs && casino) {
     lightCasino();
     casino.update(t, dt);
+    updateSecretDoor(dt);
     casinoAshtray?.update(t, dt, (smoking ? 1 : 0) + [...remotes.values()].filter((r) => r.person.smoking).length);
     casinoJukebox?.update(t, dt, sound.beat());
     updateCrash(performance.now());

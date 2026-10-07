@@ -233,6 +233,16 @@ export const CASINO_SHOP = {
   door: { x: -13, width: 2, height: 2.6 },
 } as const;
 /**
+ * Behind the east end of the hall's south wall there's a little room nobody's told about: about 3 × 3
+ * meters, empty but for a lamp hanging from its ceiling, under a ceiling `height` up. Its floor starts
+ * `wall` back from the hall's wall (the hall's wall, and the room's own lining on the far side of it).
+ * The way in is a door in that wall that looks like nothing but wall (see shared/secretdoor.ts):
+ * `x` its middle along the wall, `width` across and `height` tall. Clear of the shop (west), the
+ * lounge's sofas and the palm in the corner, and of the house bank's machine on the wall at x ≈ 4.6.
+ */
+export const SECRET_ROOM = { minX: 11.6, maxX: 14.6, minZ: CASINO_ROOM.maxZ + 0.32, maxZ: CASINO_ROOM.maxZ + 3.32, height: 2.8, wall: 0.32 } as const;
+export const SECRET_DOOR = { x: 13.1, width: 1.1, height: 2.4 } as const;
+/**
  * The shop's counter, across the back of the room facing the door: `x` its middle, `front` the side
  * you stand at (the shopkeeper's behind it, toward the back wall), `length` × `depth`, `height` tall.
  * E there (or at a display) opens the shop; `reach` is how near you have to be.
@@ -328,10 +338,20 @@ export function casinoFootprints(): Footprint[] {
   return out;
 }
 
-/** Whether you can stand at (x, z) in the casino (its main hall, the shop or the doorway between), keeping `r` meters off the walls and everything in it. */
-export function casinoWalkable(x: number, z: number, r = 0.3): boolean {
+/**
+ * Whether you can stand at (x, z) in the casino (its main hall, the shop or the doorway between, the
+ * secret room), keeping `r` meters off the walls and everything in it. The secret door's doorway only
+ * while it's `open`.
+ */
+export function casinoWalkable(x: number, z: number, r = 0.3, open = false): boolean {
   const R = CASINO_ROOM;
   const S = CASINO_SHOP;
+  const Q = SECRET_ROOM;
+  if (z > R.maxZ - r && x > Q.minX - r && x < Q.maxX + r) {
+    // Through the secret door, between its jambs (only while it's open), or in the room behind it.
+    if (z < Q.minZ + r) return open && Math.abs(x - SECRET_DOOR.x) < SECRET_DOOR.width / 2 - r;
+    return x > Q.minX + r && x < Q.maxX - r && z < Q.maxZ - r;
+  }
   // Through the shop's doorway, between its jambs.
   if (z > R.maxZ - r && z < S.room.minZ + r) return Math.abs(x - S.door.x) < S.door.width / 2 - r;
   if (z >= S.room.minZ + r) {

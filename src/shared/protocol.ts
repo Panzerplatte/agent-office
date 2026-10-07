@@ -14,6 +14,7 @@ import type { RouletteState } from './roulette.js';
 import type { CrashAutoBet, CrashAutoState, CrashBoard, CrashState } from './crash.js';
 import type { PlinkoBall, PlinkoRisk, PlinkoState } from './plinko.js';
 import type { MarketClose, MarketPosition, MarketState, Side } from './market.js';
+import type { SecretDoorState } from './secretdoor.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -812,6 +813,8 @@ export interface FloorView {
   market?: MarketState;
   /** Your open positions at the trading desk (only in the casino). */
   marketMine?: MarketPosition[];
+  /** Whether a certain bit of the casino's wall is open just now (only in the casino; see shared/secretdoor.ts). */
+  secretDoor?: SecretDoorState;
   /** How many people are on the chip platform in the casino's hall, being paid (only in the casino). */
   platform?: number;
 }
@@ -1443,6 +1446,8 @@ export type ClientMsg =
    * bet × its slot's multiplier when it lands (see shared/plinko.ts).
    */
   | { t: 'plinko.drop'; bet: number; rows: number; risk: PlinkoRisk }
+  /** In the casino: you've been walking straight into the secret door for a moment, from where you are (see shared/secretdoor.ts). */
+  | { t: 'secretDoor.push' }
   /**
    * The trading desk: open a position on the stock for `stake` chips, Long or Short, at `lev`
    * leverage (1 to 10), with a take-profit and stop-loss (% of the stake) if wanted (see shared/market.ts).
@@ -1603,6 +1608,8 @@ export type ServerMsg =
   | { t: 'market.tick'; price: number; n: number }
   /** In the casino: the trading desk changed (a position opened or closed): the whole of it again. */
   | { t: 'market'; market: MarketState }
+  /** In the casino: the secret door opened or shut (see shared/secretdoor.ts). */
+  | { t: 'secretDoor'; door: SecretDoorState }
   /** To your pages in the casino: your open positions now, and if one just closed, which and how. */
   | { t: 'market.mine'; positions: MarketPosition[]; closed?: { position: MarketPosition; close: MarketClose } }
   /** In the casino: how many people are on the chip platform now (someone stepped on or off). */

@@ -27,6 +27,8 @@ export class PlayerController {
   vy = 0;
   facing = Math.PI;
   moving = false;
+  /** Which way the keys are walking you this frame, on the floor (a unit vector; 0, 0 when they aren't): even when something's in the way. */
+  readonly wish = new THREE.Vector2();
   grounded = true;
   /** Heading of the camera. You look along (-sin, -cos) of it on the XZ plane. */
   camYaw = Math.PI * 0.15;
@@ -388,6 +390,7 @@ export class PlayerController {
     }
     const steering = ix !== 0 || iz !== 0;
     this.moving = steering;
+    this.wish.set(0, 0);
     if (this.path && (steering || (this.enabled && k.has('Space')))) {
       this.path = null;
       this.onPathEnd?.('cancelled');
@@ -406,6 +409,7 @@ export class PlayerController {
       const cos = Math.cos(this.camYaw + stagger);
       const dx = ix * cos + iz * sin;
       const dz = -ix * sin + iz * cos;
+      this.wish.set(dx, dz);
       const speed = (k.has('ShiftLeft') || k.has('ShiftRight') ? RUN : WALK) * this.speedBoost;
       this.tryMove(this.pos.x + dx * speed * dt, this.pos.z);
       this.tryMove(this.pos.x, this.pos.z + dz * speed * dt);
