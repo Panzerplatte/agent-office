@@ -27,7 +27,7 @@ export function chipsWhy(reason: ChipsReason): string {
   return text === key ? reason : text;
 }
 
-/** Why a change came, with a basket's streak: "3er-Streak 🔥" (a three-pointer says so first), or how many platform payouts it adds up. */
+/** Why a change came, with a basket's streak: "3er-Streak 🔥" (a three-pointer says so first), or how many payouts an old chip-platform entry adds up. */
 function entryWhy(e: ChipsEntry): string {
   if (e.times && e.times > 1) return `${chipsWhy(e.reason)} ×${e.times}`;
   if (!e.streak || e.streak < 2) return chipsWhy(e.reason);

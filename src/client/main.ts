@@ -376,10 +376,6 @@ function theCasino(): Casino {
     const crashBoard = casino.crashBoard;
     crashBoard.setBoard(store.crashBoard);
     store.on('crashBoard', () => crashBoard.setBoard(store.crashBoard));
-    // The chip platform in the hall glows while the office is paying someone on it.
-    const platform = casino.platform;
-    platform.setLit(store.platformOn > 0);
-    store.on('platform', () => platform.setLit(store.platformOn > 0));
     crashDrawnAt = -Infinity;
     plinkoDrawnAt = -Infinity;
     marketDirty = true;
@@ -1463,8 +1459,6 @@ net.onMessage((msg) => {
     case 'chips':
       chips.set(msg.chips, msg.change);
       if (!msg.quiet && msg.change) chipsToast(msg.change);
-      // Paid for standing on the casino's chip platform: the "+5.000" floats off the counter, with a coin.
-      if (msg.change?.reason === 'platform' && downstairs) sound.platform();
       break;
     case 'chips.top':
       chips.setTop(msg.top);

@@ -372,6 +372,7 @@ export default strings(
     chipsWhy_market_close: 'Closed a trade',
     chipsWhy_market_tp: 'Take-profit hit',
     chipsWhy_market_sl: 'Stop-loss hit',
+    // The chip platform is gone again (#109); old ledger entries still say what they were
     chipsWhy_platform: 'Chip platform',
     // At the trading desk on the casino's east wall (the hint line, and a toast)
     market: '📈 Trading desk',
