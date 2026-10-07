@@ -31,6 +31,7 @@ import { locale, t } from '../i18n';
 import { Worker } from './character';
 import { buildCasinoBartender } from './casinobartender';
 import { buildCasinoShop, type CasinoShop } from './casinoshop';
+import { buildSecretDoor, type SecretDoorView } from './casinosecret';
 import { buildElevator, type Elevator } from './elevator';
 import type { Collider, Interactable } from './office';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
@@ -235,6 +236,8 @@ export interface Casino {
   cashier: { at: { x: number; z: number }; worker: Worker };
   /** The shop, through the doorway at the west end of the south wall (see casinoshop.ts). */
   shop: CasinoShop;
+  /** The door nobody sees, in the south wall's east end, and the room behind it (see casinosecret.ts). */
+  secretDoor: SecretDoorView;
   update(t: number, dt: number): void;
 }
 
@@ -604,7 +607,7 @@ export function buildCasino(): Casino {
     // x, z, length, turned (0 along x, 1 along z), facing (+1 into the room along the normal)
     [cx, R.minZ, w, 0, 1],
     [(R.minX + doorW) / 2, R.maxZ, doorW - R.minX, 0, -1],
-    [(doorE + R.maxX) / 2, R.maxZ, R.maxX - doorE, 0, -1],
+    // (East of it the wall has a secret in it: see casinosecret.ts.)
     [R.minX, cz, d, 1, 1],
     [R.maxX, cz, d, 1, -1],
   ];
@@ -633,6 +636,10 @@ export function buildCasino(): Casino {
         : { minX: x0, maxX: x1, minZ: face > 0 ? z - WALL_T : z, maxZ: face > 0 ? z : z + WALL_T, top: 99 },
     );
   }
+  // The rest of the south wall, east of the shop's doorway, as the others, but with a door in it that
+  // looks like nothing but wall, and a little room behind it (see casinosecret.ts).
+  const secretDoor = buildSecretDoor(colliders, { paper, toonMap, panel, brass, back: toon('#1a0a10'), dado, fromX: doorE, carpet: carpetTexture() });
+  group.add(secretDoor.group);
   // A dark ceiling with a coffer of lit cove round its edge, and pot lights in rows.
   statics.add(mesh(new THREE.BoxGeometry(w + WALL_T * 2, 0.2, d + WALL_T * 2), toon('#120c14'), cx, H + 0.1, cz, false));
   const cove = glow('#ff9f43');
@@ -1909,6 +1916,7 @@ export function buildCasino(): Casino {
     houseBank,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
     shop,
+    secretDoor,
     update(time, dt) {
       elevator.update(dt);
       for (const wk of workers) wk.update(dt, time);
