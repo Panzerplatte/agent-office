@@ -18,8 +18,9 @@ import { emptyRoulette, type RouletteState } from '../shared/roulette';
 import { emptyCrash, emptyCrashBoard, type CrashAutoState, type CrashBoard, type CrashState } from '../shared/crash';
 import type { BallState } from '../shared/hoop';
 import { emptyPlinko, type PlinkoBall, type PlinkoLanding } from '../shared/plinko';
+import { HISTORY as MARKET_HISTORY, emptyMarket, type MarketClose, type MarketPosition, type MarketState } from '../shared/market';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'machineProcs' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks' | 'plinko';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'machineProcs' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks' | 'plinko' | 'market' | 'marketMine';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -231,6 +232,14 @@ class Store {
   /** The Plinko machine's balls, each with when it was dropped (performance.now(), from its age when the office sent it), newest last; and the last ones that landed, newest first, as the office had them when you came down. */
   plinkoBalls: { ball: PlinkoBall; start: number }[] = [];
   plinkoRecent: PlinkoLanding[] = [];
+  /** The trading desk: the price, the chart (one price a tick, oldest first) and the latest closes, as the office last said; and when the last tick came (performance.now()). */
+  market: MarketState = emptyMarket();
+  marketAt = 0;
+  /** Your open positions at the trading desk; and the last one of yours that closed, with how. */
+  marketMine: MarketPosition[] = [];
+  marketClosed: { position: MarketPosition; close: MarketClose } | null = null;
+  /** The last closed position of yours a toast was shown for. */
+  marketClosedSeen = 0;
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -329,7 +338,10 @@ class Store {
     const now = performance.now();
     this.plinkoBalls = plinko.balls.map((ball) => ({ ball, start: now - ball.age }));
     this.plinkoRecent = plinko.recent;
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard', 'crashAuto', 'plinko'] as Topic[]) this.emit(t);
+    this.market = v.market ?? emptyMarket();
+    this.marketAt = now;
+    this.marketMine = v.marketMine ?? [];
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard', 'crashAuto', 'plinko', 'market', 'marketMine'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -521,6 +533,26 @@ class Store {
         this.crash = msg.crash;
         this.crashAt = performance.now();
         this.emit('crash');
+        break;
+      case 'market.tick': {
+        const m = this.market;
+        // A tick missed (a dropped message) still leaves a chart: the price joins it either way.
+        m.history.push(msg.price);
+        if (m.history.length > MARKET_HISTORY) m.history.splice(0, m.history.length - MARKET_HISTORY);
+        m.price = msg.price;
+        m.n = msg.n;
+        this.marketAt = performance.now();
+        this.emit('market');
+        break;
+      }
+      case 'market':
+        this.market = msg.market;
+        this.emit('market');
+        break;
+      case 'market.mine':
+        this.marketMine = msg.positions;
+        if (msg.closed) this.marketClosed = msg.closed;
+        this.emit('marketMine');
         break;
       case 'plinko.ball':
         this.plinkoBalls.push({ ball: msg.ball, start: performance.now() - msg.ball.age });
