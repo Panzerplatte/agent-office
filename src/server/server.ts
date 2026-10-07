@@ -67,6 +67,8 @@ import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 import { Roulette } from './roulette.js';
 import { Crash } from './crash.js';
 import { Plinko } from './plinko.js';
+import { Market, type Closed as MarketClosed } from './market.js';
+import { TICK_MS as MARKET_TICK_MS } from '../shared/market.js';
 import { CrashStats, type CrashBoardEntry } from './crashstats.js';
 import type { CrashBoard, CrashBoardRow } from '../shared/crash.js';
 
@@ -360,6 +362,36 @@ export async function startServer(cfg: Config) {
     plinkoClockAt = at;
     plinkoClock = setTimeout(plinkoLoop, Math.max(0, at - Date.now()));
   };
+  // The trading desk on the casino's east wall, one for the building: the price runs nonstop, a tick a
+  // second, and positions are kept on disk (see market.ts). Stakes and payouts go through the chips bank.
+  const market = new Market(chips, { dataDir: cfg.dataDir });
+  /** To everyone in the casino: the desk as it is now (after a position opened or closed). */
+  const marketChanged = () => {
+    let json = '';
+    for (const o of clients.values()) {
+      if (o.peer.floor !== CASINO || o.ws.readyState !== WebSocket.OPEN) continue;
+      json ||= JSON.stringify({ t: 'market', market: market.state() } satisfies ServerMsg);
+      o.ws.send(json);
+    }
+  };
+  /** To `wallet`'s pages in the casino: their positions now, and the one that just closed if one did. */
+  const marketMine = (wallet: string, closed?: MarketClosed) => {
+    for (const o of clients.values()) {
+      if (o.chips === wallet && o.peer.floor === CASINO) sendTo(o, { t: 'market.mine', positions: market.positions(wallet), ...(closed ? { closed: { position: closed.position, close: closed.close } } : {}) });
+    }
+  };
+  // Its clock: a tick a second, nonstop. Only put the news together when someone's in the casino.
+  const marketClock = setInterval(() => {
+    const closed = market.tick();
+    let json = '';
+    for (const o of clients.values()) {
+      if (o.peer.floor !== CASINO || o.ws.readyState !== WebSocket.OPEN) continue;
+      json ||= JSON.stringify({ t: 'market.tick', price: market.price, n: market.n } satisfies ServerMsg);
+      o.ws.send(json);
+    }
+    for (const c of closed) marketMine(c.wallet, c);
+    if (closed.length) marketChanged();
+  }, MARKET_TICK_MS);
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -767,7 +799,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), plinko: plinko.state(), jukebox: casinoJukebox.state() });
+  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), plinko: plinko.state(), market: market.state(), marketMine: market.positions(c.chips), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
     // And what's on the lounge TV, which only sends a frame when the page changes.
@@ -2051,6 +2083,21 @@ export async function startServer(cfg: Config) {
         for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
         break;
       }
+      case 'market.open': {
+        if (c.peer.floor !== CASINO) break;
+        if (!market.open(c.chips, c.peer.name, msg, c.peer.color)) break;
+        marketMine(c.chips);
+        marketChanged();
+        break;
+      }
+      case 'market.close': {
+        if (c.peer.floor !== CASINO) break;
+        const closed = market.close(c.chips, msg.id);
+        if (!closed) break;
+        marketMine(c.chips, closed);
+        marketChanged();
+        break;
+      }
       case 'dog.pet':
         floorOf(c)?.dog.pet(c.peer);
         break;
@@ -2821,6 +2868,9 @@ export async function startServer(cfg: Config) {
     // Plinko balls still falling land now and are paid (their slots were picked on the drop), before the bank's written.
     if (plinkoClock) clearTimeout(plinkoClock);
     plinko.close();
+    // The trading desk's price, chart and open positions are written down: they go on after the restart.
+    clearInterval(marketClock);
+    market.flush();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();
