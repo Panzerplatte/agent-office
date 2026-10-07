@@ -21,7 +21,7 @@ import { emptyPlinko, type PlinkoBall, type PlinkoLanding } from '../shared/plin
 import { HISTORY as MARKET_HISTORY, emptyMarket, type MarketClose, type MarketPosition, type MarketState } from '../shared/market';
 import type { SecretDoorState } from '../shared/secretdoor';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'machineProcs' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks' | 'plinko' | 'market' | 'marketMine' | 'secretDoor' | 'platform';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'machineProcs' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks' | 'plinko' | 'market' | 'marketMine' | 'secretDoor';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -241,8 +241,6 @@ class Store {
   marketClosed: { position: MarketPosition; close: MarketClose } | null = null;
   /** The last closed position of yours a toast was shown for. */
   marketClosedSeen = 0;
-  /** How many people are on the casino's chip platform, being paid (it glows while there's anyone). */
-  platformOn = 0;
   /** A certain bit of the casino's wall (see shared/secretdoor.ts). */
   secretDoor: SecretDoorState = { open: false, side: 1 };
   /** Outside the windows; null until the server says. */
@@ -347,8 +345,7 @@ class Store {
     this.marketAt = now;
     this.marketMine = v.marketMine ?? [];
     this.secretDoor = v.secretDoor ?? { open: false, side: 1 };
-    this.platformOn = v.platform ?? 0;
-    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard', 'crashAuto', 'plinko', 'market', 'marketMine', 'secretDoor', 'platform'] as Topic[]) this.emit(t);
+    for (const t of ['floor', 'project', 'workers', 'issues', 'pulls', 'queue', 'meeting', 'decor', 'services', 'tvBrowser', 'demoGallery', 'dog', 'cat', 'jukebox', 'style', 'whiteboard', 'drawing', 'cabinet', 'cabinetFrame', 'snake', 'snakeFrame', 'ball', 'darts', 'pool', 'blackjack', 'roulette', 'crash', 'crashBoard', 'crashAuto', 'plinko', 'market', 'marketMine', 'secretDoor'] as Topic[]) this.emit(t);
   }
 
   private setDog(dog: DogState | null) {
@@ -559,10 +556,6 @@ class Store {
       case 'secretDoor':
         this.secretDoor = msg.door;
         this.emit('secretDoor');
-        break;
-      case 'platform':
-        this.platformOn = msg.on;
-        this.emit('platform');
         break;
       case 'market.mine':
         this.marketMine = msg.positions;

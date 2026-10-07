@@ -815,8 +815,6 @@ export interface FloorView {
   marketMine?: MarketPosition[];
   /** Whether a certain bit of the casino's wall is open just now (only in the casino; see shared/secretdoor.ts). */
   secretDoor?: SecretDoorState;
-  /** How many people are on the chip platform in the casino's hall, being paid (only in the casino). */
-  platform?: number;
 }
 
 export type AccountRole = 'admin' | 'member';
@@ -1609,8 +1607,6 @@ export type ServerMsg =
   | { t: 'secretDoor'; door: SecretDoorState }
   /** To your pages in the casino: your open positions now, and if one just closed, which and how. */
   | { t: 'market.mine'; positions: MarketPosition[]; closed?: { position: MarketPosition; close: MarketClose } }
-  /** In the casino: how many people are on the chip platform now (someone stepped on or off). */
-  | { t: 'platform'; on: number }
   /**
    * Chips: your balance changed (on any of your pages): `change` is by how much and why, for a toast
    * unless `quiet` (a casino game that shows it itself).

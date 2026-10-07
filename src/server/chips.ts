@@ -2,7 +2,7 @@ import { SHOP_ITEMS, nameColorOf, shopItem, shopReason, tidyWorn } from '../shar
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HOOP, THREE_POINT, backboard, launch, simulate } from '../shared/hoop.js';
-import { CHIPS_TOP, CREDIT_GAMES, CREDIT_MAX, CREDIT_MERGED, CREDIT_PER_MINUTE, EARN, LEDGER_SIZE, ONLINE_EVERY, PLATFORM_PAY, START_CHIPS, STREAK_PAUSE, chipsAmountOk, chipsDay, creditAmountOk, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type ChipsTopRow, type EarnKind, type Earning } from '../shared/chips.js';
+import { CHIPS_TOP, CREDIT_GAMES, CREDIT_MAX, CREDIT_MERGED, CREDIT_PER_MINUTE, EARN, LEDGER_SIZE, ONLINE_EVERY, START_CHIPS, STREAK_PAUSE, chipsAmountOk, chipsDay, creditAmountOk, chipsKeyOk, type ChipsEntry, type ChipsReason, type ChipsState, type ChipsTopRow, type EarnKind, type Earning } from '../shared/chips.js';
 
 /** How long after a change the file is written, gathering a burst of changes into one write (ms). */
 const SAVE_AFTER = 1000;
@@ -248,30 +248,6 @@ export class Chips {
   award(id: string, amount: number, reason: ChipsReason, opts: ChangeOptions = {}): boolean {
     if (!chipsAmountOk(amount) || !idOk(id)) return false;
     this.change(id, this.wallet(id), amount, reason, !!opts.quiet);
-    return true;
-  }
-
-  /**
-   * `id` stood on the casino's chip platform for another PLATFORM_PAY.every: its chips, quietly (the
-   * page plays its own coin). Payouts in a row go into one running "platform" entry at the top of the
-   * ledger (counting `times`), as long as nothing else came between and the last was less than
-   * PLATFORM_RUN ago, so a long stand doesn't push everything else out of it. The change reported is
-   * still just this payout.
-   */
-  platform(id: string, amount: number = PLATFORM_PAY.chips): boolean {
-    if (!chipsAmountOk(amount) || !idOk(id)) return false;
-    const w = this.wallet(id);
-    const top = w.ledger[0];
-    const now = this.now();
-    if (top?.reason !== 'platform' || now - top.at > PLATFORM_RUN) {
-      this.change(id, w, amount, 'platform', true);
-      return true;
-    }
-    w.balance += amount;
-    Object.assign(top, { at: now, amount: top.amount + amount, balance: w.balance, times: (top.times ?? 1) + 1 });
-    this.dirty();
-    this.onChange?.(id, this.state(id), { at: now, amount, reason: 'platform', balance: w.balance }, true);
-    this.topCheck();
     return true;
   }
 
@@ -534,9 +510,6 @@ function shopOf(w: Partial<Wallet>): Pick<Wallet, 'items' | 'worn'> {
   if (!items.length) return {};
   return { items, worn: tidyWorn(Array.isArray(w.worn) ? w.worn : [], items) };
 }
-
-/** How long after the last platform payout the next still goes into the same ledger entry (ms). */
-const PLATFORM_RUN = 60_000;
 
 /** Less than this owed on a credit is paid (chips). */
 const SLIVER = 1e-6;

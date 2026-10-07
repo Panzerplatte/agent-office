@@ -1,7 +1,7 @@
 // The casino: a basement under the ground floor, one for the whole building. The elevator goes down
 // there from every floor, the way it goes up to the roof. Nobody works down there: there's a poker
 // table, a blackjack table, a roulette wheel, a bank of slot machines, a Plinko machine in the middle
-// of the hall, a trading desk with a big chart screen on the east wall, a chip platform that pays whoever stands on it, the cashier's cage with a board of everyone's chips over it, and a little bar with a lounge. This is only the room; the games
+// of the hall, a trading desk with a big chart screen on the east wall, the cashier's cage with a board of everyone's chips over it, and a little bar with a lounge. This is only the room; the games
 // (and the chips they're played for) are their own. Shared by the server (who's down there, where
 // they sit) and the client (which builds it).
 //
@@ -289,19 +289,6 @@ export const PLINKO_MACHINE = { x: -0.4, z: 1.6, rotY: Math.PI, width: 2.2, dept
  */
 export const MARKET_SCREEN = { x: CASINO_ROOM.maxX - 0.07, y: 2.75, z: -4.6, width: 4.8, height: 2.7 } as const;
 export const TRADING_DESK = { x: 14.6, z: MARKET_SCREEN.z, length: 3.4, depth: 0.8, height: 0.95, reach: 2.4 } as const;
-
-/**
- * The chip platform (see PLATFORM_PAY in shared/chips.ts): a round plate set into the carpet out in
- * the east half of the hall, between the Plinko machine and the trading desk, south of the elevator's
- * landing. Stand on it (anywhere within `r` of its middle) and the office pays you chips every few
- * seconds. Nothing to walk round: it's flat, `height` proud of the carpet.
- */
-export const CHIP_PLATFORM = { x: 6.2, z: -1.2, r: 1.1, height: 0.025 } as const;
-
-/** Whether (x, z) is on the chip platform. */
-export function onChipPlatform(x: number, z: number): boolean {
-  return Number.isFinite(x) && Number.isFinite(z) && Math.hypot(x - CHIP_PLATFORM.x, z - CHIP_PLATFORM.z) <= CHIP_PLATFORM.r;
-}
 
 /**
  * The house bank's machine (see shared/housebank.ts): a vault-like cabinet against the south wall,
