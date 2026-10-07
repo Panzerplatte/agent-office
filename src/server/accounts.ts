@@ -27,8 +27,6 @@ interface Saved {
   invites: AccountInvite[];
   /** Missing means on: offices from before accounts keep working with their password. */
   sharedPassword?: boolean;
-  /** The account that owns the casino's house bank (server/housebank.ts), and may take chips out of it. */
-  bankOwner?: string;
 }
 
 /** Collapses whitespace and drops control characters, so "Ada" and " Ada​" are one name. */
@@ -82,23 +80,6 @@ export class Accounts {
     return this.data.accounts.length > 0;
   }
 
-  /** The house bank's owner's account id, while that account exists. */
-  get bankOwner(): string | undefined {
-    this.sync();
-    const id = this.data.bankOwner;
-    return id && this.data.accounts.some((a) => a.id === id) ? id : undefined;
-  }
-
-  /** Makes `id`'s account the house bank's owner (none: nobody). Says false, changing nothing, if there's no such account. */
-  setBankOwner(id: string | undefined): boolean {
-    this.sync();
-    if (id && !this.data.accounts.some((a) => a.id === id)) return false;
-    if (id) this.data.bankOwner = id;
-    else delete this.data.bankOwner;
-    this.save();
-    return true;
-  }
-
   get(id: string | undefined): Account | undefined {
     if (!id) return undefined;
     this.sync();
@@ -118,7 +99,6 @@ export class Accounts {
       accounts: this.data.accounts.map(({ hash: _h, salt: _s, ...a }) => ({ ...a, online: online.has(a.id) })),
       invites: this.data.invites,
       sharedPassword: this.data.sharedPassword !== false,
-      ...(this.bankOwner ? { bankOwner: this.bankOwner } : {}),
     };
   }
 
@@ -272,7 +252,6 @@ export class Accounts {
         accounts: Array.isArray(saved.accounts) ? saved.accounts.filter((a) => a && typeof a.id === 'string' && typeof a.hash === 'string') : [],
         invites: Array.isArray(saved.invites) ? saved.invites.filter((v) => v && typeof v.token === 'string') : [],
         ...(saved.sharedPassword === false ? { sharedPassword: false } : {}),
-        ...(typeof saved.bankOwner === 'string' && saved.bankOwner ? { bankOwner: saved.bankOwner } : {}),
       };
       this.unreadable = false;
     } catch (err) {
@@ -313,9 +292,6 @@ Usage:
   agent-office accounts revoke <name>          Delete an account; it's signed out at once
   agent-office accounts role <name> admin|member
   agent-office accounts password on|off        Whether the shared office password still works
-  agent-office accounts bank-owner [<name>|none]
-                                               Who owns the casino's house bank (and may
-                                               take chips out of it); no name: show who
 
 Options:
   -d, --dir <dir>   The office's directory: the project it was started in, or its
@@ -360,7 +336,6 @@ export function accountsCommand(argv: string[]): number {
     case 'list': {
       const s = accounts.state(new Set());
       console.log(`Shared office password: ${s.sharedPassword ? 'on' : 'off'}`);
-      console.log(`House bank owner: ${s.accounts.find((a) => a.id === s.bankOwner)?.name ?? 'nobody'}`);
       console.log(`\nAccounts (${s.accounts.length}):`);
       for (const a of s.accounts) {
         console.log(`  ${a.name.padEnd(NAME_MAX)}  ${a.role.padEnd(6)}  since ${day(a.createdAt)}  ${a.lastSeenAt ? `last seen ${day(a.lastSeenAt)}` : 'never signed in'}`);
@@ -401,23 +376,6 @@ export function accountsCommand(argv: string[]): number {
       }
       accounts.setSharedPassword(arg === 'on');
       console.log(arg === 'on' ? 'The shared office password works again.' : 'The shared office password no longer signs anyone in; people who used it are signed out within seconds.');
-      return 0;
-    }
-    case 'bank-owner': {
-      if (!arg) {
-        const owner = accounts.get(accounts.bankOwner);
-        console.log(owner ? `${owner.name} owns the house bank.` : 'Nobody owns the house bank.');
-        return 0;
-      }
-      if (arg === 'none') {
-        accounts.setBankOwner(undefined);
-        console.log('Nobody owns the house bank now: nobody can take chips out of it.');
-        return 0;
-      }
-      const a = accounts.byName(arg);
-      if (!a) return fail(`there's no account called ${arg}`);
-      accounts.setBankOwner(a.id);
-      console.log(`${a.name} owns the house bank now.`);
       return 0;
     }
     default:

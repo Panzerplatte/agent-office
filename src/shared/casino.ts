@@ -293,6 +293,15 @@ export function onChipPlatform(x: number, z: number): boolean {
   return Number.isFinite(x) && Number.isFinite(z) && Math.hypot(x - CHIP_PLATFORM.x, z - CHIP_PLATFORM.z) <= CHIP_PLATFORM.r;
 }
 
+/**
+ * The house bank's machine (see shared/housebank.ts): a vault-like cabinet against the south wall,
+ * east of the CASINO sign and well away from the cashier, facing north (-z) into the hall, so it's in
+ * view as you come out of the elevator. `x, z` is the middle of its foot; `width` across, `depth`
+ * front to back, `height` tall. Its screen (the bank's total) is `screenY` up, `screen` meters wide
+ * and tall; `reach` is how far out in front of it E opens the panel.
+ */
+export const HOUSE_BANK_MACHINE = { x: 4.6, z: CASINO_ROOM.maxZ - 0.42, rotY: Math.PI, width: 1.4, depth: 0.74, height: 2.25, screenY: 1.5, screen: { width: 1.08, height: 0.6 }, reach: 1.7 } as const;
+
 /** A box on the floor that nobody walks through: the tables, the machines, the counters. */
 export interface Footprint {
   minX: number;
@@ -324,6 +333,7 @@ export function casinoFootprints(): Footprint[] {
   out.push({ minX: CASINO_ASHTRAY.x - 0.2, maxX: CASINO_ASHTRAY.x + 0.2, minZ: CASINO_ASHTRAY.z - 0.2, maxZ: CASINO_ASHTRAY.z + 0.2, top: 1 });
   out.push({ minX: PLINKO_MACHINE.x - PLINKO_MACHINE.width / 2, maxX: PLINKO_MACHINE.x + PLINKO_MACHINE.width / 2, minZ: PLINKO_MACHINE.z - PLINKO_MACHINE.depth / 2, maxZ: PLINKO_MACHINE.z + PLINKO_MACHINE.depth / 2, top: 9 });
   out.push({ minX: TRADING_DESK.x - TRADING_DESK.depth / 2, maxX: TRADING_DESK.x + TRADING_DESK.depth / 2, minZ: TRADING_DESK.z - TRADING_DESK.length / 2, maxZ: TRADING_DESK.z + TRADING_DESK.length / 2, top: 9 });
+  out.push({ minX: HOUSE_BANK_MACHINE.x - HOUSE_BANK_MACHINE.width / 2, maxX: HOUSE_BANK_MACHINE.x + HOUSE_BANK_MACHINE.width / 2, minZ: HOUSE_BANK_MACHINE.z - HOUSE_BANK_MACHINE.depth / 2, maxZ: CASINO_ROOM.maxZ, top: 9 });
   out.push({ minX: CASINO_JUKEBOX.x - CASINO_JUKEBOX.depth / 2 - 0.05, maxX: CASINO_ROOM.maxX, minZ: CASINO_JUKEBOX.z - CASINO_JUKEBOX.width / 2 - 0.05, maxZ: CASINO_JUKEBOX.z + CASINO_JUKEBOX.width / 2 + 0.05, top: CASINO_JUKEBOX.height });
   return out;
 }
