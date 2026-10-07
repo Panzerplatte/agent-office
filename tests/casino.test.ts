@@ -187,3 +187,9 @@ test('the chairs at a table face it, and none sits on another', () => {
     }
   }
 });
+
+test("the house bank's vault machine is gone again (#113): nothing stands against the south wall where it was", () => {
+  // It stood at x ≈ 4.6, its back to the south wall; the bank itself (server/housebank.ts) stays.
+  for (const f of casinoFootprints()) assert.ok(!(f.minX < 5.4 && f.maxX > 3.8 && f.maxZ > CASINO_ROOM.maxZ - 0.8), `a footprint at ${f.minX}..${f.maxX}, ${f.minZ}..${f.maxZ}`);
+  assert.ok(casinoWalkable(4.6, CASINO_ROOM.maxZ - 0.5), 'you can walk where it was');
+});

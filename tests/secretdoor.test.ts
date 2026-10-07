@@ -39,16 +39,15 @@ function hold(push: DoorPush, p: Pusher | ((i: number) => Pusher), seconds: numb
 
 // ---- Where it is --------------------------------------------------------------------------------------
 
-test("the secret room is about 3 × 3 m behind the hall's south wall, clear of the shop, the vault machine's spot and everything else", () => {
+test("the secret room is about 3 × 3 m behind the hall's south wall, clear of the shop and everything else", () => {
   assert.ok(Math.abs(Q.maxX - Q.minX - 3) < 0.3 && Math.abs(Q.maxZ - Q.minZ - 3) < 0.3, 'about 3 × 3');
   assert.ok(Q.minZ > R.maxZ, 'behind the wall');
   assert.ok(D.x - D.width / 2 > Q.minX + 0.3 && D.x + D.width / 2 < Q.maxX - 0.3, 'the door opens into it');
   assert.ok(D.height < Q.height && D.height > 2, 'a door you walk through without ducking');
-  // Not the shop's room, nor its doorway, nor anywhere near the house bank's machine (south wall, x ≈ 4.6).
+  // Not the shop's room, nor its doorway.
   const S = CASINO_SHOP.room;
   assert.ok(Q.minX - 0.3 > S.maxX + 0.3 || Q.maxX + 0.3 < S.minX - 0.3, 'apart from the shop, walls and all');
   assert.ok(Math.abs(D.x - CASINO_SHOP.door.x) > 5);
-  assert.ok(D.x - D.width / 2 - 4.6 > 3, 'well away from the vault machine at x ≈ 4.6');
   assert.ok(Q.maxX + 0.3 <= R.maxX, 'inside the casino\'s footprint');
   // Nothing in the hall stands in front of it or in its swing, and nobody sits there.
   for (const f of [...casinoFootprints(), ...shopFootprints()]) {
