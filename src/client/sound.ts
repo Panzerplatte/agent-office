@@ -822,6 +822,20 @@ export class OfficeSound {
     }
   }
 
+  /** The chip platform paying you: a little cascade of chips landing on a stack, and a bright ding. */
+  platform() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count('platform');
+    const out = ctx.createGain();
+    out.gain.value = 0.7;
+    out.connect(this.ambience);
+    const t0 = ctx.currentTime + 0.005;
+    for (let i = 0; i < 5; i++) this.clink(out, t0 + i * 0.045, rand(2300, 3100), 0.045);
+    this.blip(out, t0 + 0.24, 1568, 1, 0.3, 0.07, 'triangle');
+    this.blip(out, t0 + 0.24, 3136, 1, 0.15, 0.02);
+  }
+
   /** Whoosh: the rush of air and the squeal of hands on brass, all the way down a fire pole. */
   slide(seconds = 1.6) {
     const ctx = this.ctx;

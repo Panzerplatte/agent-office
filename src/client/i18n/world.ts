@@ -21,6 +21,7 @@ export default strings(
     signGolf: '⛳ Hole 1 · Par 1',
     // The casino in the basement
     signCasino: '🎰 Casino',
+    platformSign: '{chips} / {s} s',
     casinoDealer: '🃏 Dealer',
     casinoPokerDealer: "Texas Hold'em, up to six",
     casinoBlackjackDealer: 'Blackjack pays 3 to 2',
@@ -208,6 +209,7 @@ export default strings(
     signRooftop: '🍸 Rooftop-Bar',
     signGolf: '⛳ Loch 1 · Par 1',
     signCasino: '🎰 Casino',
+    platformSign: '{chips} / {s} s',
     casinoDealer: '🃏 Dealer',
     casinoPokerDealer: "Texas Hold'em, bis zu sechs",
     casinoBlackjackDealer: 'Blackjack zahlt 3 zu 2',

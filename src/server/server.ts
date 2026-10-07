@@ -70,6 +70,7 @@ import { HouseBank } from './housebank.js';
 import { Plinko } from './plinko.js';
 import { Market, type Closed as MarketClosed } from './market.js';
 import { TICK_MS as MARKET_TICK_MS } from '../shared/market.js';
+import { ChipPlatform, PLATFORM_TICK } from './platform.js';
 import { CrashStats, type CrashBoardEntry } from './crashstats.js';
 import type { CrashBoard, CrashBoardRow } from '../shared/crash.js';
 
@@ -421,6 +422,19 @@ export async function startServer(cfg: Config) {
     for (const c of closed) marketMine(c.wallet, c);
     if (closed.length) marketChanged();
   }, MARKET_TICK_MS);
+  // The chip platform in the casino's hall: one clock for everyone on it, going by where the office
+  // last heard each page is (no page says it's on it). Its payouts are quiet (the page plays a coin),
+  // aren't a casino win and don't go near the house bank. The casino hears how many are on it, for the glow.
+  const platform = new ChipPlatform();
+  const platformClock = setInterval(() => {
+    const now = Date.now();
+    const { paid, changed } = platform.tick(
+      now,
+      [...clients.values()].map((c) => ({ chips: c.chips, floor: c.peer.floor, x: c.peer.x, z: c.peer.z, seat: c.peer.seat, activeAt: c.chipsActiveAt })),
+    );
+    for (const id of paid) chips.platform(id);
+    if (changed) for (const o of clients.values()) if (o.peer.floor === CASINO) sendTo(o, { t: 'platform', on: platform.count });
+  }, PLATFORM_TICK);
   const arcade = new Arcade(highScores, (first) => {
     for (const f of floors.values()) cabinetChanged(f);
     if (first) toastFloor(floors.get(first.floor), notice('arcade.highScore', { name: first.score.name, score: scoreText(first.score.score) }));
@@ -828,7 +842,7 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
-  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), plinko: plinko.state(), market: market.state(), marketMine: market.positions(c.chips), jukebox: casinoJukebox.state() });
+  const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), plinko: plinko.state(), market: market.state(), marketMine: market.positions(c.chips), platform: platform.count, jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
     // And what's on the lounge TV, which only sends a frame when the page changes.
@@ -2931,6 +2945,7 @@ export async function startServer(cfg: Config) {
     // The trading desk's price, chart and open positions are written down: they go on after the restart.
     clearInterval(marketClock);
     market.flush();
+    clearInterval(platformClock);
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();

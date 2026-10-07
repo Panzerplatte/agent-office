@@ -9,6 +9,7 @@ import {
   CASINO_SEATING,
   CASINO_SHOP,
   CHIP_BOARD,
+  CHIP_PLATFORM,
   CRASH_BOARD,
   MARKET_SCREEN,
   PLINKO_MACHINE,
@@ -24,6 +25,7 @@ import {
   type CasinoTable,
 } from '../../shared/casino';
 import { formatChips } from '../../shared/housebank';
+import { PLATFORM_PAY } from '../../shared/chips';
 import { multText, type CrashBoard, type CrashBoardRow } from '../../shared/crash';
 import { ELEVATOR, ELEVATOR_FRONT, WALL_T } from '../../shared/layout';
 import { locale, t } from '../i18n';
@@ -204,6 +206,14 @@ export interface MarketDeskView {
   where: { x: number; y: number; z: number };
 }
 
+/** The chip platform out in the hall (see CHIP_PLATFORM): a plate in the carpet that glows while it pays someone. */
+export interface ChipPlatformView {
+  group: THREE.Group;
+  /** Someone's on it, being paid: it lights up (and pulses) until it's set off again. */
+  setLit(on: boolean): void;
+  readonly lit: boolean;
+}
+
 export interface Casino {
   group: THREE.Group;
   colliders: Collider[];
@@ -219,6 +229,7 @@ export interface Casino {
   crashBoard: CrashBoardView;
   plinko: PlinkoMachineView;
   market: MarketDeskView;
+  platform: ChipPlatformView;
   /** Where you stand at the cashier's window, and the cashier behind it. */
   cashier: { at: { x: number; z: number }; worker: Worker };
   /** The shop, through the doorway at the west end of the south wall (see casinoshop.ts). */
@@ -1661,6 +1672,97 @@ export function buildCasino(): Casino {
   // A cool light over the desk.
   light('#9fdcff', 3, TRADING_DESK.x - 1, 2.8, TRADING_DESK.z, 6);
 
+  // ---- The chip platform, out in the hall between Plinko and the trading desk ---------------------------------
+  const platform = (() => {
+    const P = CHIP_PLATFORM;
+    const m = new THREE.Group();
+    m.position.set(P.x, 0, P.z);
+    // A brass rim round a dark plate with a ring of gold chips and what it pays across the middle (both
+    // ways round, to read from either side), set flush in the carpet: nothing to walk round.
+    m.add(mesh(new THREE.CylinderGeometry(P.r, P.r, P.height, 48), brass, 0, P.height / 2, 0, false));
+    const face = canvasTexture(512, 512, (g) => {
+      const grad = g.createRadialGradient(256, 256, 40, 256, 256, 250);
+      grad.addColorStop(0, '#3a2a08');
+      grad.addColorStop(1, '#140c18');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(256, 256, 250, 0, Math.PI * 2);
+      g.fill();
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const x = 256 + Math.cos(a) * 205;
+        const y = 256 + Math.sin(a) * 205;
+        g.fillStyle = i % 2 ? '#d4a84b' : '#ffd166';
+        g.beginPath();
+        g.arc(x, y, 20, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = '#7a5a1a';
+        g.lineWidth = 3;
+        g.setLineDash([5, 5]);
+        g.beginPath();
+        g.arc(x, y, 14, 0, Math.PI * 2);
+        g.stroke();
+        g.setLineDash([]);
+      }
+      const text = t('world.platformSign', { chips: PLATFORM_PAY.chips.toLocaleString(locale()), s: PLATFORM_PAY.every / 1000 });
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillStyle = '#ffe6a0';
+      g.shadowColor = '#ffb703';
+      g.shadowBlur = 14;
+      for (const turn of [0, Math.PI]) {
+        g.save();
+        g.translate(256, 256);
+        g.rotate(turn);
+        fitFont(g, text, 64, 300);
+        g.fillText(text, 0, 62);
+        g.restore();
+      }
+    });
+    const dim = new THREE.Color('#9a8a70');
+    const white = new THREE.Color('#ffffff');
+    const plateMat = glow(dim, { map: face });
+    m.add(mesh(new THREE.CircleGeometry(P.r - 0.08, 48).rotateX(-Math.PI / 2), plateMat, 0, P.height + 0.002, 0, false));
+    // The glow: a ring of light round the rim and a soft column over the plate (below eye height, so it
+    // doesn't fog the view of whoever stands in it), dim until someone's on it.
+    const ringMat = glow('#ffb703', { transparent: true });
+    ringMat.opacity = 0.35;
+    const ring = mesh(new THREE.TorusGeometry(P.r - 0.04, 0.035, 8, 64).rotateX(Math.PI / 2), ringMat, 0, P.height + 0.01, 0, false);
+    m.add(ring);
+    const beamMat = glow('#ffd166', { transparent: true });
+    beamMat.opacity = 0;
+    beamMat.side = THREE.DoubleSide;
+    beamMat.blending = THREE.AdditiveBlending;
+    const beam = mesh(new THREE.CylinderGeometry(P.r - 0.1, P.r - 0.05, 1.2, 40, 1, true), beamMat, 0, 0.6 + P.height, 0, false);
+    beam.visible = false;
+    beam.raycast = () => {};
+    m.add(beam);
+    const lamp = new THREE.PointLight('#ffc94a', 0, 5, 1.6);
+    lamp.position.set(0, 1.2, 0);
+    m.add(lamp);
+    group.add(m);
+    let lit = false;
+    let level = 0;
+    return {
+      group: m,
+      get lit() {
+        return lit;
+      },
+      setLit(on: boolean) {
+        lit = on;
+      },
+      update(time: number, dt: number) {
+        level += ((lit ? 1 : 0) - level) * Math.min(1, dt * 4);
+        const pulse = 0.85 + 0.15 * Math.sin(time * 5);
+        ringMat.opacity = 0.35 + 0.65 * level * pulse;
+        beamMat.opacity = 0.22 * level * pulse;
+        beam.visible = level > 0.01;
+        lamp.intensity = 3 * level * pulse;
+        plateMat.color.copy(dim).lerp(white, level);
+      },
+    };
+  })();
+
   // ---- The bar and the lounge ----------------------------------------------------------------------------------
   const B = CASINO_BAR;
   const blen = B.maxZ - B.minZ;
@@ -1778,10 +1880,12 @@ export function buildCasino(): Casino {
     crashBoard,
     plinko,
     market,
+    platform,
     cashier: { at: { x: C.x, z: C.front + 0.6 }, worker: cashierW },
     shop,
     update(time, dt) {
       elevator.update(dt);
+      platform.update(time, dt);
       for (const wk of workers) wk.update(dt, time);
       // The marquee's bulbs chase under the sign; the neon hums.
       const step = Math.floor(time * 6);

@@ -98,6 +98,13 @@ export function workTime(min: number): string {
   return h ? (m % 60 ? `${h} h ${m % 60} min` : `${h} h`) : `${m} min`;
 }
 
+/**
+ * The chip platform in the casino (CHIP_PLATFORM in shared/casino.ts): `chips` every `every` ms to
+ * each person standing on it, decided by the office from where they are. Away for `idle` ms (nothing
+ * done, see ACTIVE_FOR) and it stops paying. Not a casino win, and nothing to do with the house bank.
+ */
+export const PLATFORM_PAY = { chips: 5000, every: 3000, idle: ACTIVE_FOR } as const;
+
 /** A streak of baskets ends with a shot of yours that misses, leaving the floor, or this long (ms) without a basket. */
 export const STREAK_PAUSE = 2 * MIN;
 
@@ -119,6 +126,8 @@ export interface ChipsEntry {
   balance: number;
   /** For a basket that's one of a streak: how many in a row it makes (2 and up). */
   streak?: number;
+  /** For the chip platform's running entry: how many payouts it adds up (2 and up). */
+  times?: number;
 }
 
 /** Your chips as the page sees them: the balance and your latest changes, newest first. */
