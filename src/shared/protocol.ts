@@ -855,8 +855,6 @@ export interface AccountsState {
   invites: AccountInvite[];
   /** Whether the shared office password still lets people in. */
   sharedPassword: boolean;
-  /** The account that owns the casino's house bank (shared/housebank.ts), if any. */
-  bankOwner?: string;
 }
 
 export interface TeamMember {
@@ -1227,7 +1225,6 @@ export type ClientMsg =
   /** Let the shared office password sign people in, or stop it. */
   | { t: 'accounts.shared'; on: boolean }
   /** Make `accountId` the owner of the casino's house bank (null: nobody). */
-  | { t: 'accounts.bankOwner'; accountId: string | null }
   /** Follow what a worker changed (the office polls its checkout while anyone watches). */
   | { t: 'changes.watch'; workerId: string }
   | { t: 'changes.unwatch'; workerId: string }
@@ -1419,7 +1416,7 @@ export type ClientMsg =
   | { t: 'roulette.unbet'; spot?: string }
   /** At the bank (the cashier), in the casino: a chip credit of `amount` (one of CREDIT_AMOUNTS in shared/chips.ts), once the last one's paid back. */
   | { t: 'chips.credit'; amount: number }
-  /** At the cashier, in the casino: the house bank's owner takes `amount` whole chips (or 'all') out of it (see shared/housebank.ts). */
+  /** At the house bank's machine, in the casino: any player takes `amount` whole chips (or 'all') out of it, onto their own balance (see shared/housebank.ts). */
   | { t: 'housebank.withdraw'; amount: number | 'all' }
   /** At the shop's counter, in the casino: buy `item` (an id from SHOP_ITEMS in shared/shop.ts) for its price in chips. */
   | { t: 'shop.buy'; item: string }
