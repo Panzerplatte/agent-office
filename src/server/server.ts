@@ -254,7 +254,7 @@ export async function startServer(cfg: Config) {
     online: (who) => [...clients.values()].some((c) => c.chips === who),
   });
   // The casino's house bank: every stake a player loses goes in (see shared/housebank.ts), and any
-  // player may take chips out at its machine. Everyone hears its total and the log, a moment after a
+  // player may take chips out (the casino has no machine for it now, see #113). Everyone hears its total and the log, a moment after a
   // burst of bets.
   let houseBankSoon: ReturnType<typeof setTimeout> | null = null;
   const houseBank = new HouseBank(cfg.dataDir, chips, {

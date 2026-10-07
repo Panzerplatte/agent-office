@@ -1,9 +1,9 @@
 // The house bank (Hausbank): the casino's own chips. Every stake a player loses in the casino goes
 // in, in full (a partial loss, like Plinko's 0.5×, puts in what wasn't paid back); wins are paid out
-// as ever and never taken from it, and it has no upper limit. Any player can take chips out at the
-// house-bank machine in the casino, onto their own balance, and everyone sees who took how much.
-// The office keeps it (see server/housebank.ts); its total is on the machine's screen and on the
-// chip board over the cashier.
+// as ever and never taken from it, and it has no upper limit. The office keeps it (see
+// server/housebank.ts) and can pay chips out of it onto a player's own balance, logging who took how
+// much; the casino has no place to do that any more (its vault machine went again, #113). Its total
+// is on the chip board over the cashier.
 
 /** Where chips in the house bank came from: a casino game (or the trading table). */
 export type HouseGame = 'crash' | 'plinko' | 'roulette' | 'slots' | 'blackjack' | 'trading' | 'poker';
