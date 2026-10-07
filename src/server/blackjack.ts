@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { BlackjackGame, MAX_SEATS, betOk, type BjAction, type BjRoundView, type Rand } from '../shared/blackjack.js';
 import type { BlackjackSeat, BlackjackState, BlackjackStage } from '../shared/blackjack.js';
+import type { HouseTally } from './housebank.js';
 
 /** How long the table takes bets once the first is down (ms); it deals sooner once everyone at it has bet. */
 export const BET_TIME = 15_000;
@@ -33,6 +34,8 @@ export interface BlackjackOptions {
   changed?: () => void;
   /** Set its own timers for the clocks (the default); off, `tick()` is called by hand (tests). */
   timers?: boolean;
+  /** The house bank (server/housebank.ts): told what each settled bet lost. */
+  house?: HouseTally;
 }
 
 /** A seat, and who it's kept for: `key` says it's the same person back (their account, or their browser). */
@@ -303,6 +306,10 @@ export class BlackjackTable {
       for (const p of r.players) {
         const key = this.roundKeys.get(p.id);
         if (key && p.paid) this.bank.give(key, p.paid, `${this.label}.win`);
+        // Every hand (and insurance) that lost, or paid back less than its stake, goes to the house bank.
+        let lost = Math.max(0, (p.insurance ?? 0) - (p.insurancePaid ?? 0));
+        for (const h of p.hands) lost += Math.max(0, h.bet - (h.paid ?? 0));
+        if (lost > 0) this.opts.house?.lost('blackjack', lost);
       }
       this.setStage('done', RESULTS_TIME);
     }

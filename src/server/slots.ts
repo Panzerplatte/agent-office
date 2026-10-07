@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { HouseTally } from './housebank.js';
 import { JACKPOT_SEED, JACKPOT_SHARE, REELS, SPIN_MS, emptySlots, evaluate, isBet, jackpotWin, type JackpotHit, type SlotSpin, type SlotsState } from '../shared/slots.js';
 
 /** A machine kept for someone who walked off (or reloaded, or dropped out) stays theirs this long (ms). */
@@ -24,6 +25,8 @@ export interface SlotsOptions {
   later?: (fn: () => void, ms: number) => void;
   /** The reels have stopped and it's paid: the casino hears about it again (the jackpot's back to its seed, say). */
   onPaid?: (spin: SlotSpin, machine: number) => void;
+  /** The house bank (server/housebank.ts): told what each settled bet lost. */
+  house?: HouseTally;
 }
 
 /** Someone's machine, and who it's kept for: `key` is who they are at the bank (their chips id), the same after a reload. */
@@ -70,6 +73,7 @@ export class Slots {
   private readonly random: (n: number) => number;
   private readonly later: (fn: () => void, ms: number) => void;
   private readonly onPaid: SlotsOptions['onPaid'];
+  private readonly house: SlotsOptions['house'];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private n = 0;
 
@@ -84,6 +88,7 @@ export class Slots {
     this.random = opts.random ?? ((n) => randomInt(n));
     this.later = opts.later ?? ((fn, ms) => setTimeout(fn, ms).unref());
     this.onPaid = opts.onPaid;
+    this.house = opts.house;
     this.load();
   }
 
@@ -161,6 +166,8 @@ export class Slots {
     m.spin = spin;
     if (jackpot) this.last = { name: m.seat.name, amount: jackpot, machine, at: now };
     this.saveSoon();
+    // The spin's settled now (the reels only show it): what it didn't pay back goes to the house bank.
+    if (spin.win < bet) this.house?.lost('slots', bet - spin.win);
     if (spin.win > 0) {
       const p: Pending = { key, win: spin.win, spin, machine, paid: false };
       this.pending.push(p);

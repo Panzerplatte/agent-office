@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import type { HouseTally } from './housebank.js';
 import { BET_TIME, HISTORY, MAX_SEATS, MAX_SPOT, MAX_TOTAL, POCKETS, RESULT_TIME, ROULETTE_COLORS, SPIN_TIME, amountOk, settle, spotOf, staked, type RouletteBet, type RoulettePhase, type RouletteSeat, type RouletteState, type RouletteWin } from '../shared/roulette.js';
 
 /** What the table needs of the chips bank (server/chips.ts): taking a stake, and paying out. */
@@ -11,6 +12,8 @@ export interface RouletteOptions {
   now?: () => number;
   /** The winning number, 0–36: a cryptographically random one unless a test says otherwise. */
   spin?: () => number;
+  /** The house bank (server/housebank.ts): told what each settled bet lost. */
+  house?: HouseTally;
 }
 
 /** How long a place is kept for someone who's away with no chips on the layout (ms). */
@@ -55,6 +58,7 @@ export class Roulette {
   private bucket = new Map<string, { tokens: number; at: number }>();
   private now: () => number;
   private spin: () => number;
+  private house: HouseTally | undefined;
 
   constructor(
     private readonly bank: RouletteBank,
@@ -62,6 +66,7 @@ export class Roulette {
   ) {
     this.now = opts.now ?? Date.now;
     this.spin = opts.spin ?? (() => randomInt(POCKETS));
+    this.house = opts.house;
   }
 
   /** The table as it is now, for every page in the casino: nobody's wallet, and how long the phase has to go. */
@@ -182,10 +187,14 @@ export class Roulette {
       this.wins = settle(this.bets, n);
       // Paid to whose chips they were, whether they're still at the table or not.
       const wallets = new Map<string, number>();
+      let lost = 0;
       for (const b of this.bets) {
         const spot = spotOf(b.spot)!;
         if (spot.numbers.includes(n)) wallets.set(b.wallet, (wallets.get(b.wallet) ?? 0) + this.paid(b, n));
+        else lost += b.amount;
       }
+      // Every chip on a spot that lost goes to the house bank.
+      this.house?.lost('roulette', lost);
       for (const [wallet, paid] of wallets) this.bank.award(wallet, paid, 'roulette.win');
       this.history = [n, ...this.history].slice(0, HISTORY);
       this.phase = 'result';

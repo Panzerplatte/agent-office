@@ -1,4 +1,5 @@
 import type { ChipsEntry, ChipsState, ChipsTopRow } from '../shared/chips';
+import type { HouseBankState } from '../shared/housebank';
 
 const KEY = 'agent-office.chips-key';
 let memoryKey = '';
@@ -65,5 +66,19 @@ export const chips = {
   onTop(l: (top: ChipsTopRow[]) => void): () => void {
     this.topListeners.add(l);
     return () => this.topListeners.delete(l);
+  },
+
+  /** The casino's house bank as the office last said (its total; the log too, if you own it). */
+  bank: { total: '0' } as HouseBankState,
+  bankListeners: new Set<(bank: HouseBankState) => void>(),
+
+  setBank(bank: HouseBankState) {
+    this.bank = bank;
+    for (const l of this.bankListeners) l(bank);
+  },
+
+  onBank(l: (bank: HouseBankState) => void): () => void {
+    this.bankListeners.add(l);
+    return () => this.bankListeners.delete(l);
   },
 };

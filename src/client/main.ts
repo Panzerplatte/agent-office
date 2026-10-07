@@ -361,6 +361,9 @@ function theCasino(): Casino {
     const board = casino.chipBoard;
     board.setRows(chips.top);
     chips.onTop((top) => board.setRows(top));
+    // And the house bank's total under it, for everyone.
+    board.setBank(chips.bank.total);
+    chips.onBank((bank) => board.setBank(bank.total));
     casino.group.visible = false;
     scene.add(casino.group);
     casinoJukebox = addCasinoJukebox(casino);
@@ -1279,6 +1282,7 @@ net.onMessage((msg) => {
     case 'welcome': {
       chips.set(msg.chips);
       chips.setTop(msg.chipsTop ?? []);
+      if (msg.houseBank) chips.setBank(msg.houseBank);
       // A few pings, to line this page's clock up with the office's for the jukebox.
       for (let i = 0; i < 5; i++) setTimeout(() => net.send({ t: 'ping', at: performance.now() }), 200 + i * 500);
       const mine = store.peers.get(store.you);
@@ -1409,6 +1413,9 @@ net.onMessage((msg) => {
       break;
     case 'chips.top':
       chips.setTop(msg.top);
+      break;
+    case 'housebank':
+      chips.setBank(msg.bank);
       break;
     case 'gong':
       gongRang(msg.why, msg.pr);
@@ -2447,7 +2454,11 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'pole' && target.pole !== undefined) usePole(target.pole);
   else if (target.kind === 'meeting') showMeeting();
   else if (target.kind === 'bar') showBar();
-  else if (target.kind === 'bank') openCredit((amount) => net.send({ t: 'chips.credit', amount }));
+  else if (target.kind === 'bank')
+    openCredit(
+      (amount) => net.send({ t: 'chips.credit', amount }),
+      (amount) => net.send({ t: 'housebank.withdraw', amount }),
+    );
   else if (target.kind === 'shop') openShop({ buy: (item) => net.send({ t: 'shop.buy', item }), wear: (item, on) => net.send({ t: 'shop.wear', item, on }) });
   else if (target.kind === 'dj') blowHorn();
   else if (target.kind === 'golf') teeOff();

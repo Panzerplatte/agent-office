@@ -66,6 +66,7 @@ import { Slots } from './slots.js';
 import { OnlineBlackjack, atPc } from './onlineblackjack.js';
 import { Roulette } from './roulette.js';
 import { Crash } from './crash.js';
+import { HouseBank } from './housebank.js';
 import { Plinko } from './plinko.js';
 import { CrashStats, type CrashBoardEntry } from './crashstats.js';
 import type { CrashBoard, CrashBoardRow } from '../shared/crash.js';
@@ -249,6 +250,23 @@ export async function startServer(cfg: Config) {
     nameOf: (who) => (who.startsWith('account:') ? accounts.get(who.slice('account:'.length))?.name : undefined),
     online: (who) => [...clients.values()].some((c) => c.chips === who),
   });
+  // The casino's house bank: every stake a player loses goes in (see shared/housebank.ts), and only its
+  // owner (an account, see Accounts.bankOwner) may take chips out. Everyone hears its total, a moment
+  // after a burst of bets; its owner hears the log too.
+  let houseBankSoon: ReturnType<typeof setTimeout> | null = null;
+  const houseBank = new HouseBank(cfg.dataDir, chips, {
+    owner: () => accounts.bankOwner,
+    onChange: () => {
+      houseBankSoon ??= setTimeout(() => {
+        houseBankSoon = null;
+        houseBankChanged();
+      }, 1000);
+      houseBankSoon.unref?.();
+    },
+  });
+  const houseBankChanged = () => {
+    for (const c of clients.values()) sendTo(c, { t: 'housebank', bank: houseBank.state(c.accountId) });
+  };
   /** What `who` has on from the shop changed: their avatar on every page of theirs, for everyone, and the desks of the workers they hired. */
   const shopWorn = (who: string) => {
     const wear = chips.worn(who);
@@ -270,7 +288,7 @@ export async function startServer(cfg: Config) {
       take: (who, amount, why) => chips.bet(who, amount, why, { quiet: true }),
       give: (who, amount, why) => void chips.award(who, amount, why, { quiet: true }),
     },
-    { changed: () => blackjackChanged() },
+    { changed: () => blackjackChanged(), house: houseBank },
   );
   /** Everyone in the casino hears how the blackjack table is now. */
   const blackjackChanged = () => {
@@ -288,7 +306,7 @@ export async function startServer(cfg: Config) {
   };
   // The casino's slot machines, one bank for the whole building: bets and payouts go through the chips,
   // and the jackpot they share is kept on disk. Everyone in the casino hears about every spin.
-  const slots = new Slots(SLOT_MACHINES.length, chips, { dataDir: cfg.dataDir, onPaid: () => slotsChanged() });
+  const slots = new Slots(SLOT_MACHINES.length, chips, { dataDir: cfg.dataDir, onPaid: () => slotsChanged(), house: houseBank });
   const slotsChanged = () => {
     const json = JSON.stringify({ t: 'slots', slots: slots.state() } satisfies ServerMsg);
     for (const c of clients.values()) if (c.peer.floor === CASINO && c.ws.readyState === WebSocket.OPEN) c.ws.send(json);
@@ -308,7 +326,7 @@ export async function startServer(cfg: Config) {
       take: (who, amount, why) => chips.bet(who, amount, why, { quiet: true }),
       give: (who, amount, why) => void chips.award(who, amount, why, { quiet: true }),
     },
-    { changed: () => onlinebjChanged() },
+    { changed: () => onlinebjChanged(), house: houseBank },
   );
   const onlinebjChanged = () => broadcast({ t: 'onlinebj', onlinebj: onlinebj.state() });
   /** Getting up from the PC (or leaving the floor) leaves the online table: away, the seat kept for a while. */
@@ -316,7 +334,7 @@ export async function startServer(cfg: Config) {
     if (!atPc(c.peer.seat) && onlinebj.away(c.id)) onlinebjChanged();
   };
   /** The casino's roulette table, one for the building: bets and payouts go through the chips bank (see roulette.ts). */
-  const roulette = new Roulette(chips);
+  const roulette = new Roulette(chips, { house: houseBank });
   /** The Crash screen on the casino's wall, one for the building: bets and cash-outs go through the chips bank (see crash.ts). */
   // Its scoreboard: who's bet the most and won the most on it, all-time, kept on disk. Any change goes
   // out to the casino once things have settled down for this tick (a round's crash settles everyone at once).
@@ -329,8 +347,15 @@ export async function startServer(cfg: Config) {
       }, 0);
     },
   });
+  // What the casino won before the house bank existed goes in once (as far as the office still knows it).
+  const backfilled = houseBank.backfill({ ledgers: chips.ledgers(), crashNets: crashStats.nets() });
+  if (backfilled) {
+    const counted = Object.entries(backfilled).map(([g, v]) => `${g} ${v}`);
+    console.log(`  House bank: counted what the casino won before it existed: ${counted.length ? counted.join(', ') : 'nothing'} (chips)`);
+  }
   const crash = new Crash(chips, {
     stats: crashStats,
+    house: houseBank,
     // An auto-bet's news goes to its owner's pages in the casino.
     onAuto: (wallet, auto) => {
       for (const o of clients.values()) if (o.chips === wallet && o.peer.floor === CASINO) sendTo(o, { t: 'crash.auto', auto });
@@ -343,7 +368,7 @@ export async function startServer(cfg: Config) {
     if (crash.stopAuto(c.chips, 'left')) crashChanged();
   };
   /** The Plinko machine in the casino's main hall, one for the building: drops and payouts go through the chips bank (see plinko.ts). */
-  const plinko = new Plinko(chips);
+  const plinko = new Plinko(chips, { house: houseBank });
   // Its clock: one timer for the next ball to land (it's paid then), only while balls are falling.
   let plinkoClock: ReturnType<typeof setTimeout> | null = null;
   let plinkoClockAt = Infinity;
@@ -1128,6 +1153,8 @@ export async function startServer(cfg: Config) {
       }
       if (me.admin) sendTo(c, { t: 'accounts', state: (state ??= accounts.state(onlineAccounts())) });
     }
+    // The house bank's owner may have changed (here, or with `agent-office accounts bank-owner`).
+    houseBankChanged();
   };
 
   const onConnection = (ws: WebSocket, url: URL, session: Session) => {
@@ -1217,6 +1244,7 @@ export async function startServer(cfg: Config) {
       me,
       chips: chips.state(client.chips),
       chipsTop: chipsTopFor(client, chips.top()),
+      houseBank: houseBank.state(client.accountId),
       looks: chips.looks(),
       onlinebj: onlinebj.state(),
       notify: webhook.state(),
@@ -1982,6 +2010,24 @@ export async function startServer(cfg: Config) {
         else if (why) sendTo(c, { t: 'toast', ...notice('chips.creditAmount'), level: 'warn' });
         break;
       }
+      case 'housebank.withdraw': {
+        if (c.peer.floor !== CASINO) {
+          sendTo(c, { t: 'toast', ...notice('housebank.casino'), level: 'warn' });
+          break;
+        }
+        // Checked here, by the account the connection signed in with: nobody else can, whatever they send.
+        const r = houseBank.withdraw(c.accountId, c.peer.name, msg.amount);
+        if (r === 'owner') sendTo(c, { t: 'toast', ...notice('housebank.owner'), level: 'warn' });
+        else if (r === 'amount') sendTo(c, { t: 'toast', ...notice('housebank.amount'), level: 'warn' });
+        else if (r === 'balance') sendTo(c, { t: 'toast', ...notice('housebank.balance', { total: houseBank.chipsTotal.toLocaleString('en') }), level: 'warn' });
+        else {
+          console.log(`  ${c.peer.name} took ${r} chips out of the house bank`);
+          if (houseBankSoon) clearTimeout(houseBankSoon);
+          houseBankSoon = null;
+          houseBankChanged();
+        }
+        break;
+      }
       case 'shop.buy': {
         if (c.peer.floor !== CASINO) {
           sendTo(c, { t: 'toast', ...notice('shop.casino'), level: 'warn' });
@@ -2537,6 +2583,7 @@ export async function startServer(cfg: Config) {
       case 'accounts.revoke':
       case 'accounts.role':
       case 'accounts.shared':
+      case 'accounts.bankOwner':
         handleAccounts(c, msg);
         break;
       case 'decor.add': {
@@ -2741,6 +2788,15 @@ export async function startServer(cfg: Config) {
         accountsChanged();
         break;
       }
+      case 'accounts.bankOwner': {
+        const id = msg.accountId === null ? undefined : str(msg.accountId, 32);
+        if (id === accounts.bankOwner || !accounts.setBankOwner(id)) break;
+        const a = accounts.get(id);
+        console.log(`  ${who} made ${a?.name ?? 'nobody'} the owner of the house bank`);
+        toastAll(a ? notice('housebank.ownerSet', { who, name: a.name }) : notice('housebank.ownerNone', { who }));
+        accountsChanged();
+        break;
+      }
       case 'accounts.shared': {
         if (msg.on === accounts.sharedPassword) break;
         // Only someone who can still get in without it may switch it off.
@@ -2832,6 +2888,8 @@ export async function startServer(cfg: Config) {
     // Spins still on their reels are paid before the chips are written down.
     slots.flush();
     chips.flush();
+    if (houseBankSoon) clearTimeout(houseBankSoon);
+    houseBank.flush();
     clearInterval(resync);
     clearTimeout(floorsTimer);
     arcade.flush();

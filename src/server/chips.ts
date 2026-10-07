@@ -222,6 +222,11 @@ export class Chips {
     this.work([id], CREDIT_MERGED);
   }
 
+  /** Everyone's latest changes (see ledger): what's left of what the casino won before the house bank (server/housebank.ts). */
+  ledgers(): ChipsEntry[][] {
+    return Object.values(this.data.wallets).map((w) => w.ledger.map((e) => ({ ...e })));
+  }
+
   /** `id`'s latest changes, newest first (at most LEDGER_SIZE). */
   ledger(id: string): ChipsEntry[] {
     return this.state(id).ledger;
