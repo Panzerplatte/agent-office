@@ -243,6 +243,12 @@ export const CASINO_SHOP = {
 export const SECRET_ROOM = { minX: 11.6, maxX: 14.6, minZ: CASINO_ROOM.maxZ + 0.32, maxZ: CASINO_ROOM.maxZ + 3.32, height: 2.8, wall: 0.32 } as const;
 export const SECRET_DOOR = { x: 13.1, width: 1.1, height: 2.4 } as const;
 /**
+ * In the secret room's back west corner, a hatch in the floor with a ladder down to the bunker (see
+ * shared/bunker/index.ts): `x`, `z` the hole's middle, `size` across it (square). The ladder's top
+ * stands up out of it against its back edge; you stand `reach` meters off its middle to climb on.
+ */
+export const SECRET_HATCH = { x: 12.25, z: SECRET_ROOM.maxZ - 0.67, size: 0.8, reach: 1.5 } as const;
+/**
  * The shop's counter, across the back of the room facing the door: `x` its middle, `front` the side
  * you stand at (the shopkeeper's behind it, toward the back wall), `length` × `depth`, `height` tall.
  * E there (or at a display) opens the shop; `reach` is how near you have to be.
@@ -337,6 +343,9 @@ export function casinoWalkable(x: number, z: number, r = 0.3, open = false): boo
   if (z > R.maxZ - r && x > Q.minX - r && x < Q.maxX + r) {
     // Through the secret door, between its jambs (only while it's open), or in the room behind it.
     if (z < Q.minZ + r) return open && Math.abs(x - SECRET_DOOR.x) < SECRET_DOOR.width / 2 - r;
+    // Not down the hatch (that's what the ladder's for).
+    const K = SECRET_HATCH;
+    if (Math.abs(x - K.x) < K.size / 2 + r && Math.abs(z - K.z) < K.size / 2 + r) return false;
     return x > Q.minX + r && x < Q.maxX - r && z < Q.maxZ - r;
   }
   // Through the shop's doorway, between its jambs.

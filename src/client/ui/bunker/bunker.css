@@ -1,0 +1,12 @@
+/* The bunker's panels (ui/bunker/): what they share, so none of them touch style.css. A feature's own
+   rules stay in its own panel file (bunkerStyle in ui/bunker/panel.ts), scoped by
+   .bunker-panel[data-station="<id>"], so the features never edit the same file. */
+.modal.bunker-panel { width: min(560px, 100%); }
+.modal.bunker-panel header { background: #d9dcd6; }
+.bunker-empty { margin: 0; font-weight: 800; color: var(--muted); }
+.bunker-section { margin: 14px 0 8px; font-size: 15px; font-weight: 900; }
+.bunker-section:first-child { margin-top: 0; }
+.bunker-stash li { cursor: default; }
+.bunker-amount { flex: none; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bunker-back { margin-bottom: 12px; padding: 3px 10px; font-size: 13px; }
+.bunker-app-title { margin: 0 0 8px; font-size: 16px; font-weight: 900; }

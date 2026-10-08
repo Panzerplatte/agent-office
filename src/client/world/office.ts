@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ASHTRAY, BALCONY, BALCONY_DOOR, BEANBAGS, BOARDS, BOOKSHELF, CABINET, DARTBOARD, DESKS, DESK_SIZE, ELEVATOR, EXIT_DOOR, EXIT_STAIRS, FLOOR, GONG, JUKEBOX, KIOSK, LADDER, LOFT, MACHINE_MONITOR, MEETING_BOARD, MEETING_ROOM, MEETING_SEATS, MEETING_TABLE, PLANTS, POOL_TABLE, SEATING_BY_ID, SLAB, SNAKE_CABINET, STAIRS, STATIONS, STATION_AGENT, STOREY, STREET_Y, TV, WALL_HEIGHT, WALL_T, WINDOWS, deskSeat, streetBelow, type DeskDef, type Opening, type Side, type StationKind } from '../../shared/layout';
 import { wallFacing, type WallId, type WallRect } from '../../shared/decor';
 import { deskPoint } from '../../shared/nav';
+import type { BunkerStationId } from '../../shared/bunker/index';
 import { FLOOR_PALETTES, type FloorPalette } from '../../shared/floors';
 import { buildGarage, buildStreet, bulb, type NightParts } from './outside';
 import { mergeByMaterial, mesh, roundedBox, textPlane, toon, toonUnique } from './toon';
@@ -37,7 +38,7 @@ export interface Collider {
   fence?: boolean;
 }
 
-export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'snake' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts' | 'pool' | 'crash' | 'bank' | 'shop' | 'plinko' | 'machine' | 'market';
+export type InteractKind = 'desk' | 'station' | 'issues' | 'pulls' | 'services' | 'queue' | 'tv' | 'coffee' | 'decor' | 'smoke' | 'elevator' | 'gong' | 'dog' | 'cat' | 'jukebox' | 'seat' | 'whiteboard' | 'cabinet' | 'snake' | 'ladder' | 'pole' | 'meeting' | 'bar' | 'dj' | 'golf' | 'ball' | 'bookshelf' | 'darts' | 'pool' | 'crash' | 'bank' | 'shop' | 'plinko' | 'machine' | 'market' | 'hatch' | 'bunker';
 
 /** Something you can use. Its scene object carries it as `userData.interact`, for clicking. */
 export interface Interactable {
@@ -52,6 +53,8 @@ export interface Interactable {
   seatId?: string;
   /** Which of POLES, for a fire pole. */
   pole?: number;
+  /** Which of the bunker's stations (see shared/bunker/index.ts), for one of them. */
+  station?: BunkerStationId;
   /** Put away for now (a bean bag nobody needs yet): can't be used. */
   off?: boolean;
 }

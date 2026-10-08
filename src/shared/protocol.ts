@@ -15,6 +15,7 @@ import type { CrashAutoBet, CrashAutoState, CrashBoard, CrashState } from './cra
 import type { PlinkoBall, PlinkoRisk, PlinkoState } from './plinko.js';
 import type { MarketClose, MarketPosition, MarketState, Side } from './market.js';
 import type { SecretDoorState } from './secretdoor.js';
+import type { BunkerEvent, BunkerFeature, BunkerPerson } from './bunker/index.js';
 import type { ChipsEntry, ChipsState, ChipsTopRow } from './chips.js';
 import type { DecorPlacement, Decoration } from './decor.js';
 import type { CatState } from './cat.js';
@@ -1443,6 +1444,8 @@ export type ClientMsg =
   | { t: 'plinko.drop'; bet: number; rows: number; risk: PlinkoRisk }
   /** In the casino: you've been walking straight into the secret door for a moment, from where you are (see shared/secretdoor.ts). */
   | { t: 'secretDoor.push' }
+  /** In the bunker: do `action` at one of its features, with `args` that are that feature's business (see shared/bunker/index.ts). */
+  | { t: 'bunker.act'; feature: BunkerFeature; action: string; args?: unknown }
   /**
    * The trading desk: open a position on the stock for `stake` chips, Long or Short, at `lev`
    * leverage (1 to 10), with a take-profit and stop-loss (% of the stake) if wanted (see shared/market.ts).
@@ -1605,6 +1608,10 @@ export type ServerMsg =
   | { t: 'market'; market: MarketState }
   /** In the casino: the secret door opened or shut (see shared/secretdoor.ts). */
   | { t: 'secretDoor'; door: SecretDoorState }
+  /** Your bunker (see shared/bunker/index.ts): as you go down, and whenever something of yours down there changes. */
+  | { t: 'bunker.state'; state: BunkerPerson }
+  /** Something to tell you about your bunker, as a toast (a key of the bunker's texts). */
+  | { t: 'bunker.event'; event: BunkerEvent }
   /** To your pages in the casino: your open positions now, and if one just closed, which and how. */
   | { t: 'market.mine'; positions: MarketPosition[]; closed?: { position: MarketPosition; close: MarketClose } }
   /**

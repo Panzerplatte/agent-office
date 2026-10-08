@@ -4,6 +4,7 @@
 
 import { CASINO, CASINO_SEATING, type CasinoGame } from './casino.js';
 import { ROOF } from './rooftop.js';
+import { BUNKER } from './bunker/index.js';
 
 export const FLOOR = { minX: -18, maxX: 18, minZ: -13, maxZ: 13 } as const;
 /** How high the ceiling is: a meter over the loft's roof (LOFT.y + LOFT.height), all the way across the room. */
@@ -506,12 +507,13 @@ export function seatAt(key: string): SeatPlace | undefined {
 
 /**
  * The place `key` names, if it's somewhere you can sit from where you are (`floor`, a peer's): up on
- * the roof, down in the casino, or on a floor.
+ * the roof, down in the casino, or on a floor (never in the bunker).
  */
 export function seatHere(key: string, floor: string | undefined): SeatPlace | undefined {
   const place = seatAt(key);
   const seat = place && SEATING_BY_ID.get(place.seatId)!;
-  return seat && !!seat.roof === (floor === ROOF) && !!seat.casino === (floor === CASINO) ? place : undefined;
+  // (Nowhere to sit down in the bunker.)
+  return seat && floor !== BUNKER && !!seat.roof === (floor === ROOF) && !!seat.casino === (floor === CASINO) ? place : undefined;
 }
 
 /**

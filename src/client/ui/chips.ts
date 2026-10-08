@@ -1,6 +1,8 @@
 import type { ChipsEntry, ChipsReason } from '../../shared/chips';
 import { chips } from '../chips';
 import { shopItemOfReason } from '../../shared/shop';
+import { bunkerReasonOf } from '../../shared/bunker/index';
+import { bunkerItem } from '../../shared/bunker/items';
 import { lang, locale, t, type Key } from '../i18n';
 import { $, h, openModal, timeAgo, toast } from './dom';
 
@@ -22,6 +24,12 @@ function chipIcon(): SVGSVGElement {
 export function chipsWhy(reason: ChipsReason): string {
   const bought = shopItemOfReason(reason);
   if (bought) return t('main.chipsWhyShop', { item: bought.name[lang()] });
+  // Bought or sold down in the bunker (see shared/bunker/index.ts).
+  const bunker = bunkerReasonOf(reason);
+  if (bunker) {
+    if (bunker.what === 'buy') return t('bunker.common.whyBuy', { item: bunkerItem(bunker.of)?.name[lang()] ?? bunker.of });
+    return t(bunker.what === 'sale' ? 'bunker.common.whySale' : 'bunker.common.whyOther');
+  }
   const key = `main.chipsWhy_${reason.replace(/\W/g, '_')}` as Key;
   const text = t(key);
   return text === key ? reason : text;

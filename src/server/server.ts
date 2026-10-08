@@ -58,7 +58,9 @@ import { isThemePick } from '../shared/theme.js';
 import { isFloorStyle } from '../shared/floorstyle.js';
 import { PROMPTS, PROMPT_MAX, isPromptId } from '../shared/prompts.js';
 import { ROOF, drinkAt } from '../shared/rooftop.js';
-import { CASINO, casinoSpotOf } from '../shared/casino.js';
+import { CASINO, SECRET_HATCH, casinoSpotOf } from '../shared/casino.js';
+import { BUNKER } from '../shared/bunker/index.js';
+import { Bunker } from './bunker/index.js';
 import { hasAshtray } from '../shared/smoking.js';
 import { BlackjackTable } from './blackjack.js';
 import { SLOT_MACHINES } from '../shared/casino.js';
@@ -425,6 +427,15 @@ export async function startServer(cfg: Config) {
   // The casino's secret door: opened by whoever walks into it (see 'secretDoor.push'), shut again by the
   // office once nobody's in its way, going by where it last heard everyone is. Everyone down there sees it.
   const secretDoor = new SecretDoor();
+  // The bunker under the casino, down the ladder in the secret room behind that door (see
+  // shared/bunker/index.ts): everyone's own, played for the same chips.
+  const bunker = new Bunker(cfg.dataDir, {
+    chips,
+    send: (who, msg) => {
+      for (const c of clients.values()) if (c.chips === who) sendTo(c, msg);
+    },
+  });
+  bunker.start();
   const secretDoorChanged = () => {
     const json = JSON.stringify({ t: 'secretDoor', door: secretDoor.state() } satisfies ServerMsg);
     for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
@@ -839,6 +850,8 @@ export async function startServer(cfg: Config) {
   /** The rooftop bar: nobody works up there, so it has none of a floor's things. */
   const roofView = (): FloorView => ({ ...floorView(undefined), floor: ROOF });
   /** The casino in the basement: the same, one for the whole building (the games keep their own state). */
+  /** The bunker under the casino: nothing of a floor's either (your own bunker comes on its own, see bunker.state). */
+  const bunkerView = (): FloorView => ({ ...floorView(undefined), floor: BUNKER });
   const casinoView = (c: Client): FloorView => ({ ...floorView(undefined), floor: CASINO, blackjack: blackjack.state(), roulette: roulette.state(), crash: crash.state(), crashBoard: crashBoardFor(c), crashAuto: crash.autoState(c.chips), plinko: plinko.state(), market: market.state(), marketMine: market.positions(c.chips), secretDoor: secretDoor.state(), jukebox: casinoJukebox.state() });
   const screensOf = (c: Client, floor: Floor | undefined) => {
     for (const { workerId, frame } of floor?.workers.fullScreens() ?? []) sendTo(c, { t: 'screen', workerId, ...frame, full: true });
@@ -1210,7 +1223,9 @@ export async function startServer(cfg: Config) {
     const onRoof = wanted === ROOF && floors.size > 0;
     // Or down in the casino, the same.
     const inCasino = wanted === CASINO && floors.size > 0;
-    const floor = onRoof || inCasino ? undefined : arrivalFloor(wanted);
+    // Or down in the bunker under it (only ever back there after a reload: the way in is the ladder).
+    const inBunker = wanted === BUNKER && floors.size > 0;
+    const floor = onRoof || inCasino || inBunker ? undefined : arrivalFloor(wanted);
     const spot = elevatorSpot();
     const account = session.account;
     // An account's name is its own; on the shared password people pick one.
@@ -1262,7 +1277,7 @@ export async function startServer(cfg: Config) {
         muted: true,
         sharing: false,
         ...(account ? { account: true } : {}),
-        ...(onRoof ? { floor: ROOF } : inCasino ? { floor: CASINO } : floor ? { floor: floor.id } : {}),
+        ...(onRoof ? { floor: ROOF } : inCasino ? { floor: CASINO } : inBunker ? { floor: BUNKER } : floor ? { floor: floor.id } : {}),
       },
     };
     clients.set(id, client);
@@ -1298,8 +1313,9 @@ export async function startServer(cfg: Config) {
       theme: themes.state(),
       prompts: prompts.state(),
       leaveOnMerge: leaveOnMerge.state(),
-      ...(onRoof ? roofView() : inCasino ? casinoView(client) : floorView(floor)),
+      ...(onRoof ? roofView() : inCasino ? casinoView(client) : inBunker ? bunkerView() : floorView(floor)),
     });
+    if (inBunker) sendTo(client, { t: 'bunker.state', state: bunker.state(client.chips) });
     screensOf(client, floor);
     tvPeopleChanged();
     if (inCasino) pokerTo(client);
@@ -1528,6 +1544,17 @@ export async function startServer(cfg: Config) {
     floorsChanged();
   };
 
+  /** Down the ladder in the casino's secret room to the bunker, or back there after a reload: your own bunker comes with it. */
+  const goToBunker = (c: Client) => {
+    if (c.peer.floor === BUNKER) return;
+    const left = leave(c);
+    c.peer.floor = BUNKER;
+    sendTo(c, { t: 'floor.enter', peers: [...clients.values()].map((o) => o.peer), ...bunkerView() });
+    sendTo(c, { t: 'bunker.state', state: bunker.state(c.chips) });
+    arrived(c, left);
+    floorsChanged();
+  };
+
   /** Out to the lobby, where the elevator has nowhere to go: the building's last floor was taken off. */
   const toLobby = (c: Client) => {
     const left = leave(c);
@@ -1548,7 +1575,7 @@ export async function startServer(cfg: Config) {
     floorsSent = JSON.stringify(list);
     broadcast({ t: 'floors', floors: list });
     for (const c of clients.values()) {
-      if (c.peer.floor === floor.id || (!next && (c.peer.floor === ROOF || c.peer.floor === CASINO))) {
+      if (c.peer.floor === floor.id || (!next && (c.peer.floor === ROOF || c.peer.floor === CASINO || c.peer.floor === BUNKER))) {
         if (next) goToFloor(c, next);
         else toLobby(c);
         sendTo(c, { t: 'toast', ...(next ? notice('floor.removedRode', { who, name, next: next.def.name }) : notice('floor.removedLast', { who, name })), level: 'warn' });
@@ -1679,7 +1706,7 @@ export async function startServer(cfg: Config) {
         }
         if (typeof msg.golf === 'boolean') {
           // The tee's on an office floor's balcony; there's none up on the roof.
-          const golf = msg.golf && c.peer.floor !== ROOF && c.peer.floor !== CASINO;
+          const golf = msg.golf && c.peer.floor !== ROOF && c.peer.floor !== CASINO && c.peer.floor !== BUNKER;
           if (golf === !!c.peer.golfing) break;
           if (golf) c.peer.golfing = true;
           else delete c.peer.golfing;
@@ -1822,6 +1849,12 @@ export async function startServer(cfg: Config) {
         if (msg.floor === ROOF) {
           if (floors.size) goToRoof(c);
           else warn(c, notice('floor.noBuilding'));
+          break;
+        }
+        if (msg.floor === BUNKER) {
+          // Only down the ladder: from the casino, at the hatch in its secret room (where the office last heard they were, give or take).
+          const p = c.peer;
+          if (floors.size && p.floor === CASINO && !p.seat && Math.hypot(p.x - SECRET_HATCH.x, p.z - SECRET_HATCH.z) < SECRET_HATCH.reach + 1.5) goToBunker(c);
           break;
         }
         if (msg.floor === CASINO) {
@@ -2141,6 +2174,10 @@ export async function startServer(cfg: Config) {
         for (const o of clients.values()) if (o.peer.floor === CASINO && o.ws.readyState === WebSocket.OPEN) o.ws.send(json);
         break;
       }
+      case 'bunker.act':
+        if (c.peer.floor !== BUNKER) break;
+        bunker.act(c.chips, msg);
+        break;
       case 'secretDoor.push': {
         if (secretDoor.push(c.peer, Date.now())) secretDoorChanged();
         break;
@@ -2934,6 +2971,8 @@ export async function startServer(cfg: Config) {
     clearInterval(marketClock);
     market.flush();
     clearInterval(secretDoorClock);
+    bunker.stop();
+    bunker.flush();
     // Chips still on the roulette layout go back to whoever put them there, before the bank's written.
     clearInterval(rouletteClock);
     roulette.close();
