@@ -103,6 +103,7 @@ export const PROSPECTS: readonly Prospect[] = [
   { name: 'Sly Sid', face: '🕵️', favourite: 'fizz', budget: 300, tolerance: 0.2, appetite: 4 },
   { name: 'Big Bertha', face: '👩‍🍳', favourite: 'weed-kush', budget: 500, tolerance: 0.3, appetite: 10 },
   { name: 'Zed Zero', face: '🧛', favourite: 'nebula', budget: 900, tolerance: 0.35, appetite: 3 },
+  { name: 'Duke Dollar', face: '🤵', favourite: 'weed-royal', budget: 800, tolerance: 0.3, appetite: 5 },
 ];
 export const STARTERS = 3;
 

@@ -74,8 +74,8 @@ export const TIER_VALUE: readonly (readonly [number, number])[] = [
 ];
 /** What they pay a gram at each tier, of what it fetches at its base price (customers pay round all of it). */
 export const TIER_RATE = [0.55, 0.6, 0.65, 0.7, 0.75] as const;
-/** How long you get to deliver at each tier (minutes). */
-export const TIER_MINUTES = [30, 45, 60, 90, 120] as const;
+/** How long you get to deliver at each tier (minutes): a round or two of growing (see shared/bunker/grow.ts STRAINS), so it wants planning. */
+export const TIER_MINUTES = [12, 18, 25, 35, 45] as const;
 /** The least they want at each tier (quality 0–1, give or take 0.1). */
 export const TIER_QUALITY = [0.3, 0.4, 0.5, 0.6, 0.7] as const;
 
@@ -110,9 +110,12 @@ export function clampRep(rep: number): number {
   return Math.min(MAX_REP, Math.max(0, Math.round(rep)));
 }
 
-/** What they'll offer at a tier: weed to start with, the lab's products too from the third rung up. */
+/** The premium weed (25 minutes a plant without a lamp), which they only ask for from the third rung up, like the lab's products. */
+export const PREMIUM_WEED = 'weed-royal';
+
+/** What they'll offer at a tier: weed to start with, the premium weed and the lab's products too from the third rung up. */
 export function tierProducts(tier: number): ProductKind[] {
-  return PRODUCTS.filter((p) => p.source === 'grow' || tier >= 2);
+  return PRODUCTS.filter((p) => (p.source === 'grow' && p.id !== PREMIUM_WEED) || tier >= 2);
 }
 
 /** The chance (0–1) they agree to a better price or more time: better the more they trust you. */

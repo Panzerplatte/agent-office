@@ -10,7 +10,7 @@ export default strings(
     'grow.title': '🌿 Grow area',
     'grow.mark': 'GROW',
     'grow.help':
-      "At the grow area (E at it) you look after a row of pots, four to start with; more pots, soil, seeds and lamps are bought at the PC. Fill a pot with soil, plant a seed, and it grows by itself, even while you're upstairs: seedling, vegetative, flowering, ready, a few minutes each. Water it whenever it's thirsty: a plant left dry wilts and loses quality, and dry for too long it dies. A lamp over the pot makes it grow faster (the LED panel fastest, and better), and now and then a plant gets pests: spray them. When it's ready, harvest it: the weed goes in the stash, ready for the packing table, the better looked after the more and the better it is.",
+      "At the grow area (E at it) you look after a row of pots, four to start with; more pots, soil, seeds and lamps are bought at the PC. Fill a pot with soil, plant a seed, and it grows by itself, even while you're upstairs: seedling, vegetative, flowering, ready: a minute all told for Basement Skunk, up to 25 for the expensive Royal Haze, which gives by far the most. Water it whenever it's thirsty: a plant left dry wilts and loses quality, and dry for too long it dies. A lamp over the pot makes it grow faster (the LED panel fastest, and better), and now and then a plant gets pests: spray them. When it's ready, harvest it: the weed goes in the stash, ready for the packing table, the better looked after the more and the better it is.",
     'grow.pot': 'Pot {n}',
     'grow.stage.seedling': 'Seedling',
     'grow.stage.vegetative': 'Growing',
@@ -46,7 +46,7 @@ export default strings(
     'grow.title': '🌿 Anbaufläche',
     'grow.mark': 'ANBAU',
     'grow.help':
-      'An der Anbaufläche (E dort) kümmerst du dich um eine Reihe Töpfe, vier zum Start; mehr Töpfe, Erde, Samen und Lampen gibt es am PC. Füll einen Topf mit Erde, pflanz einen Samen, und er wächst von selbst, auch wenn du oben bist: Keimling, Wachstum, Blüte, erntereif, je ein paar Minuten. Gieß ihn, wenn er Durst hat: Eine Pflanze, die austrocknet, welkt und verliert Qualität, und zu lange trocken geht sie ein. Eine Lampe über dem Topf lässt sie schneller wachsen (das LED-Panel am schnellsten und besser), und ab und zu bekommt eine Pflanze Schädlinge: sprüh sie weg. Ist sie reif, ernte sie: Das Gras kommt in den Vorrat, bereit für den Packtisch, und je besser gepflegt, desto mehr und desto besser.',
+      'An der Anbaufläche (E dort) kümmerst du dich um eine Reihe Töpfe, vier zum Start; mehr Töpfe, Erde, Samen und Lampen gibt es am PC. Füll einen Topf mit Erde, pflanz einen Samen, und er wächst von selbst, auch wenn du oben bist: Keimling, Wachstum, Blüte, erntereif: eine Minute insgesamt beim Keller-Skunk, bis zu 25 beim teuren Royal Haze, das mit Abstand am meisten bringt. Gieß ihn, wenn er Durst hat: Eine Pflanze, die austrocknet, welkt und verliert Qualität, und zu lange trocken geht sie ein. Eine Lampe über dem Topf lässt sie schneller wachsen (das LED-Panel am schnellsten und besser), und ab und zu bekommt eine Pflanze Schädlinge: sprüh sie weg. Ist sie reif, ernte sie: Das Gras kommt in den Vorrat, bereit für den Packtisch, und je besser gepflegt, desto mehr und desto besser.',
     'grow.pot': 'Topf {n}',
     'grow.stage.seedling': 'Keimling',
     'grow.stage.vegetative': 'Wächst',

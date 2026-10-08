@@ -29,6 +29,7 @@ const LOOKS: Record<string, { leaf: string; bud: string }> = {
   'seed-skunk': { leaf: '#5aa83a', bud: '#d6e0a0' },
   'seed-kush': { leaf: '#3f7d3a', bud: '#c4a2d4' },
   'seed-haze': { leaf: '#78bd3a', bud: '#e8eea0' },
+  'seed-royal': { leaf: '#2e6b45', bud: '#f2c94c' },
 };
 const WILTED = new THREE.Color('#b59a3a');
 const DEAD = new THREE.Color('#6b4a2a');
