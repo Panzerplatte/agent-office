@@ -1,17 +1,90 @@
 import { strings } from '../table';
 
+/** A number from the server (grams), the German way: 0,98 g. */
+const de = (v: string | number | undefined) => (typeof v === 'number' ? v.toLocaleString('de-DE') : String(v));
+
 /**
  * The bunker's pack feature (ui/bunker/pack.ts, world/drugbunker/pack.ts), keyed `pack.<what>` (so
- * `t('bunker.pack.title')`). Its server's toasts (bunker.event) are keys here too, and a
- * `pack.help` (if there is one) goes in the bunker's help. Filled in by #121.
+ * `t('bunker.pack.title')`). Its server's toasts (bunker.event) are keys here too, and `pack.help`
+ * goes in the bunker's help.
  */
 export default strings(
   {
     'pack.title': '📦 Packing table',
     'pack.mark': 'PACKING',
+    'pack.help':
+      "At the packing table you weigh loose product into bags (1 g, 5 g), jars (20 g) and, for the cartel, bricks (500 g); the packaging comes from the PC's supplier. Pick the product and the packaging, then scoop onto the scale until it shows the target: a bit over is product given away, and a light unit keeps its real weight, which customers notice. With a packing machine (also at the PC) you pack up to 10 at once.",
+    'pack.product': 'Product',
+    'pack.packaging': 'Packaging',
+    'pack.count': 'How many',
+    'pack.start': 'To the scale',
+    'pack.noLoose': 'No loose product: grow some or make some in the lab.',
+    'pack.have': (v) => `${v.n} in stock`,
+    'pack.loose': '{grams} g · quality {quality} %',
+    'pack.target': 'Target {target} g',
+    'pack.scoop.big': 'Big scoop',
+    'pack.scoop.scoop': 'Scoop',
+    'pack.scoop.pinch': 'Pinch',
+    'pack.empty': 'Tip it back',
+    'pack.seal': 'Seal',
+    'pack.stop': 'Clear the table',
+    'pack.read.low': 'Not enough yet',
+    'pack.read.under': 'Under',
+    'pack.read.on': 'Spot on',
+    'pack.read.over': 'Over',
+    'pack.packed': 'Packed',
+    'pack.stack': (v) => `×${v.n} · ${v.grams} g · quality ${v.quality} %`,
+    'pack.noUnit': "That product isn't on the shelf any more",
+    'pack.noPack': "That's not packaging",
+    'pack.noBags': 'Not enough of that packaging: buy more at the PC',
+    'pack.noMachine': 'Packing several at once takes the packing machine (at the PC)',
+    'pack.badCount': "That's not a number of units",
+    'pack.gone': 'The product on the table is gone',
+    'pack.noMore': "That's all of that product",
+    'pack.full': "The scale's full: seal it or tip it back",
+    'pack.tooLight': (v) => `Too light to seal: at least ${v.min} g`,
+    'pack.shelfFull': 'The stash is full',
+    'pack.sealed': (v) => `📦 Packed ${v.count} × ${v.grams} g, spot on`,
+    'pack.sealedOver': (v) => `📦 Packed ${v.count} × ${v.grams} g (${v.over} g given away)`,
+    'pack.sealedUnder': (v) => `📦 Packed ${v.count} × ${v.grams} g: ${v.under} g light, customers will notice`,
   },
   {
     'pack.title': '📦 Packtisch',
     'pack.mark': 'PACKEN',
+    'pack.help':
+      'Am Packtisch wiegst du lose Ware ab in Tütchen (1 g), Beutel (5 g), Gläser (20 g) und, fürs Kartell, Ziegel (500 g); die Verpackung gibt es beim Lieferanten am PC. Wähl Ware und Verpackung und schaufel auf die Waage, bis sie das Ziel zeigt: Etwas drüber ist verschenkte Ware, und eine zu leichte Einheit behält ihr echtes Gewicht, das merkt die Kundschaft. Mit einer Verpackungsmaschine (auch am PC) packst du bis zu 10 auf einmal.',
+    'pack.product': 'Ware',
+    'pack.packaging': 'Verpackung',
+    'pack.count': 'Wie viele',
+    'pack.start': 'Auf die Waage',
+    'pack.noLoose': 'Keine lose Ware: Bau welche an oder mach welche im Labor.',
+    'pack.have': (v) => `${v.n} auf Lager`,
+    'pack.loose': '{grams} g · Qualität {quality} %',
+    'pack.target': 'Ziel {target} g',
+    'pack.scoop.big': 'Große Schaufel',
+    'pack.scoop.scoop': 'Schaufel',
+    'pack.scoop.pinch': 'Prise',
+    'pack.empty': 'Zurückkippen',
+    'pack.seal': 'Verschließen',
+    'pack.stop': 'Tisch abräumen',
+    'pack.read.low': 'Noch zu wenig',
+    'pack.read.under': 'Zu wenig',
+    'pack.read.on': 'Genau richtig',
+    'pack.read.over': 'Zu viel',
+    'pack.packed': 'Verpackt',
+    'pack.stack': (v) => `×${v.n} · ${v.grams} g · Qualität ${v.quality} %`,
+    'pack.noUnit': 'Die Ware liegt nicht mehr im Regal',
+    'pack.noPack': 'Das ist keine Verpackung',
+    'pack.noBags': 'Nicht genug von der Verpackung: Kauf mehr am PC',
+    'pack.noMachine': 'Mehrere auf einmal gehen nur mit der Verpackungsmaschine (am PC)',
+    'pack.badCount': 'Das ist keine Anzahl',
+    'pack.gone': 'Die Ware auf dem Tisch ist weg',
+    'pack.noMore': 'Das ist alles von der Ware',
+    'pack.full': 'Die Waage ist voll: Verschließ oder kipp zurück',
+    'pack.tooLight': (v) => `Zu leicht zum Verschließen: mindestens ${de(v.min)} g`,
+    'pack.shelfFull': 'Der Vorrat ist voll',
+    'pack.sealed': (v) => `📦 ${v.count} × ${de(v.grams)} g verpackt, genau richtig`,
+    'pack.sealedOver': (v) => `📦 ${v.count} × ${de(v.grams)} g verpackt (${de(v.over)} g verschenkt)`,
+    'pack.sealedUnder': (v) => `📦 ${v.count} × ${de(v.grams)} g verpackt: ${de(v.under)} g zu leicht, das merkt die Kundschaft`,
   },
 );

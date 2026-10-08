@@ -62,8 +62,10 @@ export const ITEMS: readonly BunkerItem[] = [
   { id: 'press', kind: 'equipment', icon: '🗜️', name: { en: 'Tablet press', de: 'Tablettenpresse' }, price: 900 },
   // Packaging, for the packing table.
   { id: 'bag', kind: 'packaging', icon: '👝', name: { en: 'Little bag (1 g)', de: 'Tütchen (1 g)' }, price: 1, holds: 1 },
-  { id: 'bag-big', kind: 'packaging', icon: '🛍️', name: { en: 'Bag (10 g)', de: 'Beutel (10 g)' }, price: 4, holds: 10 },
-  { id: 'brick', kind: 'packaging', icon: '🧱', name: { en: 'Brick wrap (100 g)', de: 'Ziegel-Folie (100 g)' }, price: 20, holds: 100 },
+  { id: 'bag-big', kind: 'packaging', icon: '🛍️', name: { en: 'Bag (5 g)', de: 'Beutel (5 g)' }, price: 3, holds: 5 },
+  { id: 'jar', kind: 'packaging', icon: '🫙', name: { en: 'Jar (20 g)', de: 'Glas (20 g)' }, price: 8, holds: 20 },
+  { id: 'brick', kind: 'packaging', icon: '🧱', name: { en: 'Brick wrap (500 g)', de: 'Ziegel-Folie (500 g)' }, price: 60, holds: 500 },
+  { id: 'pack-machine', kind: 'equipment', icon: '🏭', name: { en: 'Packing machine', de: 'Verpackungsmaschine' }, price: 1500 },
 ];
 
 export const PRODUCTS: readonly ProductKind[] = [
