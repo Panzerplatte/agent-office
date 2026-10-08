@@ -15,6 +15,6 @@ export const customersApp: PcApp = {
   icon: '👥',
   title: () => t('bunker.customers.app'),
   mount(host) {
-    host.replaceChildren(h('h3.bunker-app-title', {}, t('bunker.customers.app')));
+    host.replaceChildren(h('h3.bunker-app-title', {}, `👥 ${t('bunker.customers.app')}`));
   },
 };

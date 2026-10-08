@@ -12,7 +12,7 @@ export const shopApp: PcApp = {
   icon: '🛒',
   title: () => t('bunker.pc.shop'),
   mount(host) {
-    host.replaceChildren(h('h3.bunker-app-title', {}, t('bunker.pc.shop')));
+    host.replaceChildren(h('h3.bunker-app-title', {}, `🛒 ${t('bunker.pc.shop')}`));
   },
 };
 

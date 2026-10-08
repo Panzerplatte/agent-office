@@ -9,11 +9,11 @@ export default strings(
   {
     'customers.title': '🚪 Customers',
     'customers.mark': 'CUSTOMERS',
-    'customers.app': '👥 Customers',
+    'customers.app': 'Customers',
   },
   {
     'customers.title': '🚪 Kundschaft',
     'customers.mark': 'KUNDEN',
-    'customers.app': '👥 Kundschaft',
+    'customers.app': 'Kundschaft',
   },
 );

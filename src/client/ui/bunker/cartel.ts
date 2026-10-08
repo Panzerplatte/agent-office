@@ -15,6 +15,6 @@ export const cartelApp: PcApp = {
   icon: '🤝',
   title: () => t('bunker.cartel.app'),
   mount(host) {
-    host.replaceChildren(h('h3.bunker-app-title', {}, t('bunker.cartel.app')));
+    host.replaceChildren(h('h3.bunker-app-title', {}, `🤝 ${t('bunker.cartel.app')}`));
   },
 };

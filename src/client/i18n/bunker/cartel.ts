@@ -9,11 +9,11 @@ export default strings(
   {
     'cartel.title': '☎️ Cartel',
     'cartel.mark': 'CARTEL',
-    'cartel.app': '🤝 Cartel',
+    'cartel.app': 'Cartel',
   },
   {
     'cartel.title': '☎️ Kartell',
     'cartel.mark': 'KARTELL',
-    'cartel.app': '🤝 Kartell',
+    'cartel.app': 'Kartell',
   },
 );

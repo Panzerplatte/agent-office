@@ -10,14 +10,14 @@ export default strings(
     'pc.title': '🖥️ PC',
     'pc.mark': 'PC',
     'pc.apps': 'Apps',
-    'pc.shop': '🛒 Supplier',
+    'pc.shop': 'Supplier',
     'pc.back': '← Apps',
   },
   {
     'pc.title': '🖥️ PC',
     'pc.mark': 'PC',
     'pc.apps': 'Apps',
-    'pc.shop': '🛒 Lieferant',
+    'pc.shop': 'Lieferant',
     'pc.back': '← Apps',
   },
 );
