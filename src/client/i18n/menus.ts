@@ -523,6 +523,7 @@ export default strings(
     keyClick: 'Click / E',
     keyDrag: 'Drag / wheel',
     keyCtrl: 'Ctrl + [',
+    keyCopy: 'Ctrl + right-click',
     helpWalk: 'Walk (hold Shift to run)',
     helpJump: 'Jump',
     helpCoffee: 'Press E at the coffee machine in the kitchen for a minute of quicker walking and higher jumps. Three cups in a row gives you the jitters',
@@ -564,6 +565,7 @@ export default strings(
     helpMenu: 'The ☰ menu, top right: every window, and what shows on screen. Pin what you use most to the top bar',
     helpEsc: 'Close any window and get back to looking around',
     helpCtrl: 'Send Esc to a terminal (e.g. to interrupt Claude)',
+    helpCopy: 'Copy from a terminal: drag over the text (hold Ctrl or Shift while a program like Claude uses the mouse; Cmd or Option on a Mac), then Ctrl + right-click. Ctrl + Shift + C (Cmd + C on a Mac) copies too, and Ctrl + C copies while something is selected (with nothing selected it interrupts)',
     helpSettings: 'Settings (in the ☰ menu): switch between first and third person',
   },
   {
@@ -1083,6 +1085,7 @@ export default strings(
     keyClick: 'Klick / E',
     keyDrag: 'Ziehen / Mausrad',
     keyCtrl: 'Strg + [',
+    keyCopy: 'Strg + Rechtsklick',
     helpWalk: 'Gehen (Shift halten zum Rennen)',
     helpJump: 'Springen',
     helpCoffee: 'Drück E an der Kaffeemaschine in der Küche für eine Minute schnelleres Gehen und höhere Sprünge. Drei Tassen hintereinander machen dich zittrig',
@@ -1124,6 +1127,7 @@ export default strings(
     helpMenu: 'Das ☰-Menü oben rechts: jedes Fenster, und was auf dem Bildschirm zu sehen ist. Hefte an die obere Leiste, was du am meisten nutzt',
     helpEsc: 'Jedes Fenster schließen und wieder umsehen',
     helpCtrl: 'Esc an ein Terminal senden (z. B. um Claude zu unterbrechen)',
+    helpCopy: 'Aus einem Terminal kopieren: den Text mit der Maus überstreichen (mit Strg oder Shift gedrückt, wenn ein Programm wie Claude die Maus nutzt; am Mac Cmd oder Option), dann Strg + Rechtsklick. Strg + Shift + C (am Mac Cmd + C) kopiert auch, und Strg + C kopiert, solange etwas markiert ist (ohne Markierung unterbricht es)',
     helpSettings: 'Einstellungen (im ☰-Menü): zwischen Ich- und Verfolgerperspektive wechseln',
   },
 );

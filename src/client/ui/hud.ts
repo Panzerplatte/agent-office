@@ -199,6 +199,7 @@ export function openHelp() {
     ['Tab', t('menus.helpMenu')],
     ['Esc', t('menus.helpEsc')],
     [t('menus.keyCtrl'), t('menus.helpCtrl')],
+    [t('menus.keyCopy'), t('menus.helpCopy')],
     ['⚙️', t('menus.helpSettings')],
   ];
   const close = h('button.btn.close', { 'aria-label': t('menus.close') }, '✕');
