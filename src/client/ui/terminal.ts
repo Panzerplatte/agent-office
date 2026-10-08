@@ -11,6 +11,7 @@ import { isAsleep } from '../../shared/status';
 import { findLine } from '../../shared/search';
 import { providerLabel, providerUsageNote, providerUsageState, resolvedProvider } from './provider';
 import { t } from '../i18n';
+import { cleanSelection, copyKey, copyText, mouseIntent, selectingMouseDown } from './termcopy';
 
 /** A line to scroll to once the terminal has loaded: a search hit (see search.ts). */
 export interface TerminalFind {
@@ -83,6 +84,8 @@ export function openTerminal(net: Net, workerId: string, onChanges?: () => void,
     scrollback: 5000,
     allowProposedApi: true,
     macOptionIsMeta: true,
+    // Option+drag selects on macOS even while the program tracks the mouse (Shift+drag elsewhere).
+    macOptionClickForcesSelection: true,
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
@@ -281,13 +284,56 @@ export function openTerminal(net: Net, workerId: string, onChanges?: () => void,
   });
 
   term.open(host);
+  /** Copies what's selected in the terminal, with a toast to say so (#115). */
+  const copySelection = () => {
+    if (!term.hasSelection()) return void toast(t('windows.terminal.nothingSelected'));
+    void copyText(cleanSelection(term.getSelection())).then((ok) => (ok ? toast(t('windows.terminal.copied')) : toast(t('windows.terminal.copyFailed'), 'warn')));
+  };
   term.attachCustomKeyEventHandler((e) => {
     if (e.type === 'keydown' && e.ctrlKey && e.key === ']') {
       modal.close();
       return false;
     }
-    return true;
+    const copy = copyKey(e, term.hasSelection());
+    if (!copy) return true;
+    // Ctrl+Shift+C would open the browser's inspector.
+    e.preventDefault();
+    if (copy === 'copy') {
+      copySelection();
+      // So the next Ctrl+C interrupts again.
+      if (!e.shiftKey && !e.metaKey) term.clearSelection();
+    }
+    return false;
   });
+  // Before xterm sees the press (capture on its parent): Ctrl+right-click copies, Ctrl+drag selects.
+  let copiedByPress = false;
+  host.addEventListener(
+    'mousedown',
+    (e) => {
+      copiedByPress = false;
+      const intent = mouseIntent(e, term.modes.mouseTrackingMode !== 'none');
+      if (!intent) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (intent === 'copy') {
+        copiedByPress = true;
+        copySelection();
+      } else e.target?.dispatchEvent(selectingMouseDown(e));
+    },
+    true,
+  );
+  host.addEventListener(
+    'contextmenu',
+    (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Copies too when the press itself didn't (a touchpad can send only the contextmenu).
+      if (!copiedByPress) copySelection();
+      copiedByPress = false;
+    },
+    true,
+  );
   term.onData((data) => {
     sendSize(true);
     net.send({ t: 'term.input', workerId, data });

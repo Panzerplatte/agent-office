@@ -36,5 +36,7 @@ Back to the [README](../README.md).
 | Tab | The ☰ menu: every window, and what shows on screen |
 | Esc | Close any window (a terminal too) and get back to looking around |
 | Ctrl + [ | Send Esc to a terminal (e.g. to interrupt Claude) |
+| Drag, then Ctrl + right-click (in a terminal) | Copy text out of a terminal: drag over it to select it, then Ctrl + right-click copies it (no browser menu) and a short **Copied** shows. While a program like Claude uses the mouse, a plain drag goes to the program, so hold **Ctrl** or **Shift** while dragging (**Cmd** or **Option** on a Mac). Lines keep their breaks, without the padding spaces at their ends |
+| Ctrl + Shift + C / Ctrl + C (in a terminal) | Copy the selection too (**Cmd + C** on a Mac). Ctrl + C only copies while something is selected (and clears the selection); with nothing selected it's the interrupt, as always. Works over plain HTTP on the LAN as well |
 
 You can also click a nearby desk to interact with it, or click a worker in the Workers panel (**🤖 Workers**, top right) to open its terminal.

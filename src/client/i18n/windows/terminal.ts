@@ -20,6 +20,9 @@ export default strings(
     'terminal.waitingMetrics': 'waiting for metrics',
     'terminal.waitingFirstReport': 'waiting for first report',
     'terminal.usageUntracked': 'usage untracked',
+    'terminal.copied': '📋 Copied',
+    'terminal.copyFailed': 'Couldn’t copy: the browser didn’t allow it',
+    'terminal.nothingSelected': 'Nothing selected: drag over the text first (with Ctrl or Shift held while a program uses the mouse)',
   },
   {
     'terminal.dialog': 'Terminal von {name}',
@@ -39,5 +42,8 @@ export default strings(
     'terminal.waitingMetrics': 'warte auf Messwerte',
     'terminal.waitingFirstReport': 'warte auf ersten Bericht',
     'terminal.usageUntracked': 'Verbrauch nicht erfasst',
+    'terminal.copied': '📋 Kopiert',
+    'terminal.copyFailed': 'Kopieren ging nicht: der Browser hat es nicht erlaubt',
+    'terminal.nothingSelected': 'Nichts markiert: erst den Text mit der Maus überstreichen (mit Strg oder Shift gedrückt, wenn ein Programm die Maus nutzt)',
   },
 );
