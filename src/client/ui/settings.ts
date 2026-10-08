@@ -6,6 +6,7 @@ import { THEME_PICKS } from '../../shared/theme';
 import { FLOOR_STYLES } from '../../shared/floorstyle';
 import { ROOF } from '../../shared/rooftop';
 import { CASINO } from '../../shared/casino';
+import { BUNKER } from '../../shared/bunker/index';
 import { CAT_NAME_MAX, cleanCatName } from '../../shared/cat';
 import { DOG_NAME_MAX, cleanDogName } from '../../shared/dog';
 import { h, openModal, timeAgo } from './dom';
@@ -185,7 +186,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   const styleRow = h('div.seg', { role: 'radiogroup', 'aria-label': t('windows.settings.floorStyle') });
   const styleNote = h('p.setting-note');
   const paintStyle = () => {
-    const onFloor = !!store.floor && store.floor !== ROOF && store.floor !== CASINO;
+    const onFloor = !!store.floor && store.floor !== ROOF && store.floor !== CASINO && store.floor !== BUNKER;
     styleRow.replaceChildren(
       ...FLOOR_STYLES.map((st) =>
         h(
@@ -214,7 +215,7 @@ export function openSettings(net: Net, settings: Settings, onChange: (s: Setting
   const galleryRemove = h('button.btn.danger', { type: 'button' }, t('windows.settings.remove'));
   const galleryNote = h('p.setting-note');
   const paintGallery = () => {
-    const onFloor = !!store.floor && store.floor !== ROOF && store.floor !== CASINO;
+    const onFloor = !!store.floor && store.floor !== ROOF && store.floor !== CASINO && store.floor !== BUNKER;
     const url = store.demoGallery;
     galleryInput.disabled = gallerySave.disabled = !onFloor;
     galleryRemove.classList.toggle('hidden', !onFloor || !url);

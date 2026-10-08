@@ -1,4 +1,5 @@
 import './style.css';
+import './ui/bunker/bunker.css';
 import * as THREE from 'three';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { sameLook } from '../shared/avatar';
@@ -25,7 +26,10 @@ import { openBar } from './ui/bar';
 import { casinoBartender } from './world/casinobartender';
 import { openAshtray, strainName } from './ui/ashtray';
 import { DRINK_BY_ID, ROOF, type Drink, type DrinkId } from '../shared/rooftop';
-import { CASINO, casinoSpotOf } from '../shared/casino';
+import { CASINO, SECRET_HATCH, casinoSpotOf } from '../shared/casino';
+import { BUNKER, BUNKER_LADDER, BUNKER_ROOM } from '../shared/bunker/index';
+import { buildDrugBunker, type DrugBunker } from './world/drugbunker/index';
+import { openStation, stationMark, stationTitle, type BunkerHooks } from './ui/bunker/index';
 import { DoorPush } from '../shared/secretdoor';
 import { canSmokeAt } from '../shared/smoking';
 import { BlackjackPlayer } from './blackjack';
@@ -75,7 +79,7 @@ import { OfficeSound } from './sound';
 import { DesktopNotifier, askNotifyPermission, notifyPermission, waitingOnSomeone } from './notify';
 import { NextUp, waitingInOrder, waitingLabel } from './nextup';
 import { $, h, clip, closeAllModals, doingNow, modalOpen, onDoingChange, onModalChange, openModal, readingNow, toast, STATUS_LABEL } from './ui/dom';
-import { noticeText, t } from './i18n';
+import { noticeText, t, type Key } from './i18n';
 import { deskLabel, deskLabelOf, drinkName, emoteLabel, patternLabel, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
 import { openTerminal, openTerminalFor, routeTerminalMessage, type TerminalFind } from './ui/terminal';
 import { openSearch } from './ui/search';
@@ -419,6 +423,71 @@ function lightCasino() {
   const fog = scene.fog as THREE.Fog;
   fog.near = 80;
   fog.far = 160;
+}
+
+// ---- The bunker -------------------------------------------------------------------------------------
+// Under the casino, down the ladder in its secret room (see shared/bunker/index.ts). Not the floor
+// look of the same name (world/bunker/): this one's world/drugbunker/.
+/** Down in the bunker: built the first time anyone goes down there. */
+let drugBunker: DrugBunker | null = null;
+function theDrugBunker(): DrugBunker {
+  if (!drugBunker) {
+    drugBunker = buildDrugBunker(stationMark);
+    drugBunker.group.visible = false;
+    scene.add(drugBunker.group);
+    noOutline(drugBunker.group);
+  }
+  return drugBunker;
+}
+/** Where you are now: down in the bunker (true). */
+let deep = false;
+/** What the bunker's panels ask of the office. */
+const bunkerHooks: BunkerHooks = { act: (feature, action, args) => net.send({ t: 'bunker.act', feature, action, ...(args === undefined ? {} : { args }) }) };
+/** Fluorescent tubes: cold and flat, whatever the time of day up above (after the sky's had its say). */
+function lightBunker() {
+  hemi.intensity = 0.7;
+  hemi.color.set('#e4eef2');
+  hemi.groundColor.set('#3a3d38');
+  ambient.intensity = 0.42;
+  ambient.color.set('#eef3f0');
+  sun.intensity = 0;
+  const fog = scene.fog as THREE.Fog;
+  fog.near = 80;
+  fog.far = 160;
+}
+/** E at the ladder: down through the hatch from the casino's secret room, or back up it from the bunker. */
+function climbHatch() {
+  if (trip || climber.active) return;
+  const to = deep ? CASINO : downstairs ? BUNKER : null;
+  if (!to) return;
+  closeAllModals();
+  if (player.seat) standUp();
+  if (hanger.active) hanger.cancel();
+  if (walkingTo) stopWalking();
+  sound.rung(true);
+  trip = { floor: to, how: 'hatch', timer: window.setTimeout(tripFailed, 10_000) };
+  player.enabled = false;
+  player.clearKeys();
+  fade(true, true);
+  setTimeout(() => net.send({ t: 'floor.go', floor: to }), 170);
+}
+/** At the foot of the ladder in the bunker, facing into the room (arriving down it, or back after a reload). */
+function placeAtBunkerLadder() {
+  const L = BUNKER_LADDER;
+  player.pos.set(L.foot.x, 0, L.foot.z);
+  player.vy = 0;
+  player.facing = 0;
+  player.camYaw = player.facing - Math.PI;
+  player.lookPitch = -0.08;
+}
+/** Up out of the hatch in the casino's secret room, facing its door. */
+function placeAtSecretHatch() {
+  const K = SECRET_HATCH;
+  player.pos.set(K.x + 0.35, 0, K.z - K.size / 2 - 0.55);
+  player.vy = 0;
+  player.facing = Math.PI;
+  player.camYaw = player.facing - Math.PI;
+  player.lookPitch = -0.08;
 }
 
 // ---- Networking & state -------------------------------------------------------------------------
@@ -1405,6 +1474,10 @@ net.onMessage((msg) => {
       ballNews(false);
       arrive();
       break;
+    case 'bunker.event':
+      // Something about your bunker, by a key of its texts (the feature's own: see i18n/bunker/).
+      toast(t(`bunker.${msg.event.key}` as Key, msg.event.params), msg.event.level ?? 'info');
+      break;
     case 'ball':
       ballNews(true);
       break;
@@ -1536,6 +1609,12 @@ function renderProject() {
     $('project-meta').textContent = t('menus.casinoMeta');
     return;
   }
+  if (store.floor === BUNKER) {
+    $('project-meta').classList.remove('lobby');
+    $('project-name').textContent = `🕳️ ${t('bunker.common.name')}`;
+    $('project-meta').textContent = t('bunker.common.meta');
+    return;
+  }
   if (!p) {
     $('project-name').textContent = '🏢 Agent Office';
     $('project-meta').textContent = t(store.floors.length ? 'menus.lobbyPick' : 'menus.lobbyEmpty');
@@ -1566,6 +1645,8 @@ function renderTitle() {
 function placeInCar(at?: { x: number; z: number }) {
   // You arrive on your feet.
   if (player.seat) standUp();
+  // There's no elevator down in the bunker: you're at the foot of its ladder.
+  if (store.floor === BUNKER) return placeAtBunkerLadder();
   const spot = at && inElevator(at.x, at.z) ? at : { x: ELEVATOR.x, z: (ELEVATOR_CAR.minZ + ELEVATOR_CAR.maxZ) / 2 };
   player.pos.set(spot.x, 0, spot.z);
   player.vy = 0;
@@ -1580,7 +1661,7 @@ function fade(on: boolean, quick = false) {
 }
 
 /** How you're going to another floor: by elevator, straight there from the floor list, or by the ladder or a pole. */
-type TripKind = 'elevator' | 'switch' | Grip;
+type TripKind = 'elevator' | 'switch' | 'hatch' | Grip;
 /** A trip under way: the lights are down (and by elevator the doors are shut) until the next floor arrives. */
 let trip: { floor: string; how: TripKind; timer: number } | null = null;
 
@@ -1595,6 +1676,8 @@ function lift() {
 
 /** Rides the elevator to another floor (or up to the roof). From outside the car, you step in while the lights are down. */
 function ride(floorId: string) {
+  // The elevator doesn't go down to the bunker: as near as it gets is the casino.
+  if (floorId === BUNKER) floorId = CASINO;
   if (trip || floorId === store.floor) return;
   closeAllModals();
   if (hanger.active) hanger.cancel();
@@ -1632,7 +1715,7 @@ function standingAt(to: string): Arrival {
 /** Straight to another floor from the floor list: a blink, and you're standing in the same spot there. */
 function switchFloor(floorId: string) {
   // The roof and the casino aren't laid out like a floor: to and from them, it's the elevator.
-  if (upTop || downstairs || floorId === ROOF || floorId === CASINO) return ride(floorId);
+  if (upTop || downstairs || deep || floorId === ROOF || floorId === CASINO || floorId === BUNKER) return ride(floorId);
   if (trip || floorId === store.floor) return;
   closeAllModals();
   if (hanger.active) hanger.cancel();
@@ -1664,7 +1747,7 @@ function tripFailed() {
   if (!t) return;
   trip = null;
   fade(false);
-  if (t.how === 'elevator') lift().setOpen(!!store.floor);
+  if (t.how === 'elevator' && !deep) lift().setOpen(!!store.floor);
   if (t.how === 'ladder' || t.how === 'pole') climber.abort();
   player.enabled = !modalOpen();
 }
@@ -1697,22 +1780,27 @@ store.on('floors', paintFloor);
 function setPlace() {
   const up = store.floor === ROOF;
   const down = store.floor === CASINO;
-  if (up === upTop && down === downstairs) return;
+  const under = store.floor === BUNKER;
+  if (up === upTop && down === downstairs && under === deep) return;
   upTop = up;
   downstairs = down;
+  deep = under;
   const r = up ? theRoof() : roof;
   const c = down ? theCasino() : casino;
-  office.group.visible = !up && !down;
+  const b = under ? theDrugBunker() : drugBunker;
+  const onFloor = !up && !down && !under;
+  office.group.visible = onFloor;
   // The holiday decorations are dressed round the office and the street below it, not up here (or down there).
-  holiday.group.visible = !up && !down;
+  holiday.group.visible = onFloor;
   // The pool balls (and cue) and the golf balls are the office floor's too, though not in its group (they're not for clicking).
-  poolBalls.group.visible = !up && !down;
-  balls.group.visible = !up && !down;
+  poolBalls.group.visible = onFloor;
+  balls.group.visible = onFloor;
   if (r) r.group.visible = up;
   if (c) c.group.visible = down;
-  player.colliders = up ? r!.colliders : down ? c!.colliders : office.colliders;
+  if (b) b.group.visible = under;
+  player.colliders = up ? r!.colliders : down ? c!.colliders : under ? b!.colliders : office.colliders;
   sky.setRoof(up, roofDrop(roofFloors()));
-  sky.setUnderground(down);
+  sky.setUnderground(down || under);
   sound.setOutdoors(up);
   sound.setDj(up ? djAt : null);
   // You can see the whole city from up there (and its clouds); from the top floors, as far as the haze.
@@ -1727,6 +1815,7 @@ function setPlace() {
 /** What you can use where you are, and what's in the way of looking at it. */
 function usable(): Interactable[][] {
   if (downstairs && casino) return [casino.interactables];
+  if (deep && drugBunker) return [drugBunker.interactables];
   return upTop && roof ? [roof.interactables] : [office.interactables, gallery.interactables, dog.interactables, cat.interactables, ball.interactables];
 }
 
@@ -1754,6 +1843,15 @@ function arrive() {
     return;
   }
   fade(false);
+  // Down or up the ladder between the casino's secret room and the bunker: at its other end.
+  if (how === 'hatch' || deep) {
+    if (how === 'hatch') {
+      if (deep) placeAtBunkerLadder();
+      else if (downstairs) placeAtSecretHatch();
+    }
+    player.enabled = !modalOpen();
+    return;
+  }
   if (how !== 'elevator') {
     player.enabled = !modalOpen();
     if (how === 'switch') unstick();
@@ -1874,7 +1972,8 @@ function walkTo(id: string) {
   else {
     const floor = store.floors.find((f) => f.id === p.floor)?.name;
     toast(floor ? t('notices.walkElevator', { name: p.name, floor }) : t('notices.walkElevatorOther', { name: p.name }));
-    ride(p.floor!);
+    // (Someone down in the bunker: the elevator goes as far as the casino.)
+    ride(p.floor === BUNKER ? CASINO : p.floor!);
   }
 }
 
@@ -2537,6 +2636,8 @@ function interact(target: Interactable | null, key: DeskKey, note = aimedNote) {
   else if (target.kind === 'plinko') plinkoPanel.show();
   else if (target.kind === 'market') marketPanel.show();
   else if (target.kind === 'machine') showMachine();
+  else if (target.kind === 'hatch') climbHatch();
+  else if (target.kind === 'bunker' && target.station) openStation(target.station, bunkerHooks);
 }
 
 // ---- The rooftop bar ---------------------------------------------------------------------------------
@@ -3475,6 +3576,12 @@ function hintFor(it: Interactable): Hint {
       const up = floorThere(1)?.name;
       return { k: `landing|${up}`, parts: [title(t('main.firePole')), aside(up ? t('main.comesDownFrom', { floor: up }) : t('main.comesDownAbove')), key('E', t('main.twirl'))] };
     }
+    case 'hatch': {
+      const down = !deep;
+      return { k: String(down), parts: [title(t('bunker.common.ladder')), aside(t(down ? 'bunker.common.ladderDown' : 'bunker.common.ladderUp')), key('E', t(down ? 'bunker.common.climbDown' : 'bunker.common.climbUp'))] };
+    }
+    case 'bunker':
+      return it.station ? { k: it.station, parts: [title(stationTitle(it.station)), key('E', t('bunker.common.use'))] } : { k: '', parts: [] };
     case 'bank': {
       const c = chips.state.credit;
       const what = c ? t('main.bankOwed', { owed: c.owed.toLocaleString(slotsLocale()), wait: workTime(creditWork(c.owed)) }) : t('main.bankCredit');
@@ -4117,14 +4224,14 @@ document.addEventListener('pointerlockchange', () => {
 const raycaster = new THREE.Raycaster();
 const CROSSHAIR = new THREE.Vector2(0, 0);
 /** How close (meters from your eyes) you must be to use each kind of thing. */
-const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5, machine: 9, market: 9 };
+const REACH: Record<InteractKind, number> = { desk: 4.5, station: 4.5, coffee: 3, issues: 9, pulls: 9, services: 9, queue: 9, tv: 10, decor: 9, smoke: 3, elevator: 4.5, gong: 3.5, dog: 3.2, cat: 3, jukebox: 4, seat: 3, whiteboard: 7, cabinet: 4, snake: 4, ladder: 3, pole: 4, meeting: 7, bar: 3.5, dj: 6, golf: 3.5, ball: 3.2, bookshelf: 4, darts: 3.2, pool: 4, crash: 9, bank: 3.5, shop: 3.5, plinko: 5, machine: 9, market: 9, hatch: 3, bunker: 3.5 };
 const eye = new THREE.Vector3();
 
 /** What the ray through `ndc` lands on first, whether it is within reach (plus `slack` meters), and where it hit. */
 function aimedAt(ndc: THREE.Vector2, slack = 0): { it: Interactable; near: boolean; hit: THREE.Intersection } | null {
   raycaster.setFromCamera(ndc, camera);
   eye.set(player.pos.x, player.pos.y + EYE_HEIGHT, player.pos.z);
-  for (const hit of raycaster.intersectObjects(downstairs && casino ? casino.pickables : upTop && roof ? roof.pickables : [office.group, dog.root, cat.root], true)) {
+  for (const hit of raycaster.intersectObjects(downstairs && casino ? casino.pickables : deep && drugBunker ? drugBunker.pickables : upTop && roof ? roof.pickables : [office.group, dog.root, cat.root], true)) {
     let it: Interactable | undefined;
     let shown = true;
     for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) {
@@ -4374,6 +4481,7 @@ const hud = mountHud(
 function startHanging() {
   if (upTop) return toast(t('notices.hangUpTop'), 'warn');
   if (downstairs) return toast(t('notices.hangCasino'), 'warn');
+  if (deep) return toast(t('bunker.common.noPictures'), 'warn');
   hanger.start();
 }
 /** 🖥️ This machine, process by process: who uses how much memory and CPU, and why. */
@@ -4472,12 +4580,12 @@ function frame(ts?: number) {
   cabinet.update(camera, dt);
   snakeMachine.update(camera, dt);
   // Pulled away from the tee (sat down, off up the ladder, into the elevator): the club goes back.
-  if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) golf.stop();
+  if (golf.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs || deep)) golf.stop();
   golf.update(dt);
-  if (darter.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) darter.stop();
+  if (darter.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs || deep)) darter.stop();
   darter.update(dt);
   boardDarts.update(dt);
-  if (cueist.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs)) cueist.stop();
+  if (cueist.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs || deep)) cueist.stop();
   cueist.update(dt);
   blackjackSeat();
   blackjack.update(dt);
@@ -4563,7 +4671,7 @@ function frame(ts?: number) {
     const ground = groundAt(player.colliders, p.x, p.z, p.y);
     const airborne = !sat && p.y > ground + 0.05;
     // Or holding on to the ladder or a pole; off a pole onto the mat, the firehouse bell rings.
-    const holding = sat || upTop || downstairs ? null : gripOf(p, office.stack.poles(), ground);
+    const holding = sat || upTop || downstairs || deep ? null : gripOf(p, office.stack.poles(), ground);
     if (r.grip === 'pole' && !holding && Math.abs(p.y) < 0.2) sound.poleLanding(6, { x: pos.x, y: 0.5, z: pos.z });
     r.grip = holding;
     r.person.setGrip(holding);
@@ -4601,8 +4709,8 @@ function frame(ts?: number) {
   arrivals.update(dt);
   dog.update(dt);
   cat.update(dt);
-  if (!upTop && !downstairs) updateBall(now, dt);
-  if (!upTop && !downstairs) {
+  if (!upTop && !downstairs && !deep) updateBall(now, dt);
+  if (!upTop && !downstairs && !deep) {
     office.update(t, dt, [player.pos, ...[...remotes.values()].map((r) => r.person.root.position), ...departures.positions(), ...arrivals.positions()]);
     office.stack.update(dt, [{ x: player.pos.x, y: player.pos.y, z: player.pos.z, grip }, ...[...remotes.values()].map((r) => ({ x: r.person.root.position.x, y: r.person.root.position.y, z: r.person.root.position.z, grip: r.grip }))], camera.position);
     office.jukebox.update(t, dt, sound.beat());
@@ -4612,14 +4720,18 @@ function frame(ts?: number) {
   confetti.update(dt);
   hanger.update();
   sky.update(dt, t, camera);
-  if (!upTop && !downstairs) holiday.update(t, sky.lampsOn, camera);
-  if (!upTop && !downstairs) bunker.update(dt);
+  if (!upTop && !downstairs && !deep) holiday.update(t, sky.lampsOn, camera);
+  if (!upTop && !downstairs && !deep) bunker.update(dt);
   sound.setWeather(sky.rain, 1 - sky.daylight);
   if (upTop && roof) {
     // Everything up there moves to the DJ's set; strobes flash the whole roof as a drop lands.
     const strobe = roof.update(t, dt, djFrame(djAt()), { dark: sky.lampsOn, motion: !reduceMotion.matches });
     ambient.intensity += strobe * 1.5;
     hemi.intensity += strobe * 0.8;
+  }
+  if (deep && drugBunker) {
+    lightBunker();
+    drugBunker.update(t, dt, store.bunker);
   }
   if (downstairs && casino) {
     lightCasino();
@@ -4681,7 +4793,7 @@ function frame(ts?: number) {
     // Hands go on top of everything, so they never clip into a desk you walk up to. They have
     // lights of their own, turned down to match wherever you're standing.
     renderer.clearDepth();
-    hands.setLight(downstairs ? 0.75 : sky.lightAt(camera.position));
+    hands.setLight(downstairs ? 0.75 : deep ? 0.85 : sky.lightAt(camera.position));
     sky.shading(false);
     effect.render(hands.scene, hands.camera);
     sky.shading(true);
@@ -4731,7 +4843,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, casino: () => casino, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { roof: () => roof, casino: () => casino, drugBunker: () => drugBunker, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

@@ -32,6 +32,7 @@ import { buildCasinoBartender } from './casinobartender';
 import { buildCasinoShop, type CasinoShop } from './casinoshop';
 import { buildSecretDoor, type SecretDoorView } from './casinosecret';
 import { buildElevator, type Elevator } from './elevator';
+import { buildSecretHatch } from './drugbunker/hatch';
 import type { Collider, Interactable } from './office';
 import { mergeByMaterial, mesh, roundedBox, toon, toonUnique } from './toon';
 
@@ -628,6 +629,8 @@ export function buildCasino(): Casino {
   // looks like nothing but wall, and a little room behind it (see casinosecret.ts).
   const secretDoor = buildSecretDoor(colliders, { paper, toonMap, panel, brass, back: toon('#1a0a10'), dado, fromX: doorE, carpet: carpetTexture() });
   group.add(secretDoor.group);
+  // And in that room, a hatch in the floor with a ladder down to the bunker (see world/drugbunker/).
+  buildSecretHatch(group, colliders, interactables);
   // A dark ceiling with a coffer of lit cove round its edge, and pot lights in rows.
   statics.add(mesh(new THREE.BoxGeometry(w + WALL_T * 2, 0.2, d + WALL_T * 2), toon('#120c14'), cx, H + 0.1, cz, false));
   const cove = glow('#ff9f43');

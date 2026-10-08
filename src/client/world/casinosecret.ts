@@ -80,7 +80,7 @@ function paperGeometry(x0: number, x1: number, y0: number, y1: number, dado: num
  * A plain material lit only by the room's lamp (and a little of its own): warm, falling off with
  * distance, stronger where a surface faces the bulb, and dimmer above it, where the shade is.
  */
-function roomLit(color: THREE.ColorRepresentation, map: THREE.Texture | null = null): THREE.MeshBasicMaterial {
+export function roomLit(color: THREE.ColorRepresentation, map: THREE.Texture | null = null): THREE.MeshBasicMaterial {
   const m = new THREE.MeshBasicMaterial({ color, map });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.secretLamp = { value: SECRET_LAMP };

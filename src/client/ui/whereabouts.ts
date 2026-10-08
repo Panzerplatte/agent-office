@@ -1,6 +1,7 @@
 import { BALCONY, DANCE_FLOOR, FIRE_PIT, FLOOR, LOFT, MEETING_ROOM, ROOF_BAR, ROOF_TABLES, SEATING_BY_ID, STAGE, seatAt } from '../../shared/layout';
 import type { PeerInfo } from '../../shared/protocol';
 import { ROOF } from '../../shared/rooftop';
+import { BUNKER } from '../../shared/bunker/index';
 import { CASHIER, CASINO, CASINO_BAR, CASINO_LOUNGE, ROULETTE_TABLE, SLOT_MACHINES } from '../../shared/casino';
 import { seatOn } from '../i18n/labels';
 
@@ -20,6 +21,8 @@ export function whereabouts(p: PeerInfo): string | undefined {
   if (p.floor === ROOF) return onTheRoof(p);
   // Nor down in the casino.
   if (p.floor === CASINO) return inTheCasino(p);
+  // Nor in the bunker under it (everyone down there is in the one room).
+  if (p.floor === BUNKER) return undefined;
   // Down on the street, or out the back door on the stairs down to it.
   if (p.y < -1 || p.x < FLOOR.minX || p.x > FLOOR.maxX || p.z < FLOOR.minZ) return '🚶 outside';
   if (p.z > FLOOR.maxZ) return p.x >= BALCONY.minX && p.x <= BALCONY.maxX ? '🌇 on the balcony' : '🚶 outside';

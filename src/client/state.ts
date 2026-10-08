@@ -20,8 +20,9 @@ import type { BallState } from '../shared/hoop';
 import { emptyPlinko, type PlinkoBall, type PlinkoLanding } from '../shared/plinko';
 import { HISTORY as MARKET_HISTORY, emptyMarket, type MarketClose, type MarketPosition, type MarketState } from '../shared/market';
 import type { SecretDoorState } from '../shared/secretdoor';
+import type { BunkerPerson } from '../shared/bunker/index';
 
-export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'machineProcs' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks' | 'plinko' | 'market' | 'marketMine' | 'secretDoor';
+export type Topic = 'peers' | 'workers' | 'issues' | 'pulls' | 'chat' | 'project' | 'screens' | 'team' | 'upgrade' | 'services' | 'tvBrowser' | 'demoGallery' | 'decor' | 'usage' | 'limits' | 'queue' | 'me' | 'accounts' | 'notify' | 'machine' | 'machineProcs' | 'floors' | 'floor' | 'projectsDir' | 'repos' | 'dog' | 'cat' | 'jukebox' | 'style' | 'sky' | 'theme' | 'leaveOnMerge' | 'whiteboard' | 'drawing' | 'cabinet' | 'cabinetFrame' | 'snake' | 'snakeFrame' | 'meeting' | 'prompts' | 'ball' | 'darts' | 'poker' | 'pool' | 'onlinebj' | 'onlinebjEmote' | 'blackjack' | 'roulette' | 'crash' | 'crashBoard' | 'crashAuto' | 'looks' | 'plinko' | 'market' | 'marketMine' | 'secretDoor' | 'bunker';
 
 const zeroUsage = (): Usage => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0, cost: 0, calls: 0 });
 
@@ -243,6 +244,8 @@ class Store {
   marketClosedSeen = 0;
   /** A certain bit of the casino's wall (see shared/secretdoor.ts). */
   secretDoor: SecretDoorState = { open: false, side: 1 };
+  /** Your bunker under the casino (see shared/bunker/index.ts): null until you've been down there. */
+  bunker: BunkerPerson | null = null;
   /** Outside the windows; null until the server says. */
   sky: SkyState | null = null;
   /** The building's holiday decorations: the same on every floor. */
@@ -556,6 +559,10 @@ class Store {
       case 'secretDoor':
         this.secretDoor = msg.door;
         this.emit('secretDoor');
+        break;
+      case 'bunker.state':
+        this.bunker = msg.state;
+        this.emit('bunker');
         break;
       case 'market.mine':
         this.marketMine = msg.positions;
