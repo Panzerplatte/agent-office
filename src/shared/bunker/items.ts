@@ -42,10 +42,11 @@ export interface ProductKind {
 }
 
 export const ITEMS: readonly BunkerItem[] = [
-  // Seeds, one per strain.
+  // Seeds, one per strain: from the quick cheap one to the slow premium one.
+  { id: 'seed-skunk', kind: 'seed', icon: '🌱', name: { en: 'Basement Skunk seeds', de: 'Keller-Skunk-Samen' }, price: 5, grows: 'weed-skunk' },
   { id: 'seed-kush', kind: 'seed', icon: '🌱', name: { en: 'Bunker Kush seeds', de: 'Bunker-Kush-Samen' }, price: 40, grows: 'weed-kush' },
   { id: 'seed-haze', kind: 'seed', icon: '🌱', name: { en: 'Neon Haze seeds', de: 'Neon-Haze-Samen' }, price: 60, grows: 'weed-haze' },
-  { id: 'seed-skunk', kind: 'seed', icon: '🌱', name: { en: 'Basement Skunk seeds', de: 'Keller-Skunk-Samen' }, price: 30, grows: 'weed-skunk' },
+  { id: 'seed-royal', kind: 'seed', icon: '🌱', name: { en: 'Royal Haze seeds', de: 'Royal-Haze-Samen' }, price: 250, grows: 'weed-royal' },
   // For growing them.
   { id: 'soil', kind: 'soil', icon: '🟫', name: { en: 'Bag of soil', de: 'Sack Erde' }, price: 15 },
   { id: 'soil-premium', kind: 'soil', icon: '🟤', name: { en: 'Premium soil', de: 'Premium-Erde' }, price: 45 },
@@ -72,6 +73,7 @@ export const PRODUCTS: readonly ProductKind[] = [
   { id: 'weed-kush', source: 'grow', icon: '🥦', name: { en: 'Bunker Kush', de: 'Bunker-Kush' }, basePrice: 10, addictiveness: 0.15 },
   { id: 'weed-haze', source: 'grow', icon: '🥦', name: { en: 'Neon Haze', de: 'Neon-Haze' }, basePrice: 14, addictiveness: 0.2 },
   { id: 'weed-skunk', source: 'grow', icon: '🥦', name: { en: 'Basement Skunk', de: 'Keller-Skunk' }, basePrice: 8, addictiveness: 0.1 },
+  { id: 'weed-royal', source: 'grow', icon: '🥦', name: { en: 'Royal Haze', de: 'Royal Haze' }, basePrice: 24, addictiveness: 0.25 },
   { id: 'glimmer', source: 'lab', icon: '💎', name: { en: 'Glimmer', de: 'Glimmer' }, basePrice: 35, addictiveness: 0.55 },
   { id: 'fizz', source: 'lab', icon: '💊', name: { en: 'Fizz tabs', de: 'Fizz-Tabs' }, basePrice: 25, addictiveness: 0.4 },
   { id: 'nebula', source: 'lab', icon: '🧪', name: { en: 'Nebula', de: 'Nebula' }, basePrice: 45, addictiveness: 0.7 },

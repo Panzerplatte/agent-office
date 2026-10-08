@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as THREE from 'three';
 import { BUNKER_STATIONS, addItem, countItem, type BunkerPerson } from '../src/shared/bunker/index.js';
-import { ITEMS, productKind } from '../src/shared/bunker/items.js';
+import { ITEMS, bunkerItem, productKind, productValue } from '../src/shared/bunker/items.js';
 import {
   DIES_AFTER,
   GROW_STAGES,
@@ -59,23 +59,39 @@ function grown(pot: Pot, secs: number, step = 5, water = true): Pot {
 
 // ---- The model ---------------------------------------------------------------------------------------
 
-test('the strains: one for every seed, a cheap fast one, a balanced one and a slow premium one, a few minutes a stage', () => {
+test('the strains: one for every seed, a ladder from a minute to the 20–30 minute endgame strain without a lamp, each worth more', () => {
   const seeds = ITEMS.filter((i) => i.kind === 'seed');
   assert.deepEqual(seeds.map((s) => s.id).sort(), Object.keys(STRAINS).sort());
-  for (const s of seeds) {
-    const strain = strainOf(s.id)!;
-    assert.ok(strain.stage >= 60 && strain.stage <= 600, `${s.id}: minutes, not hours`);
-    assert.ok(productKind(s.grows)?.source === 'grow', `${s.id} grows weed`);
-  }
+  for (const s of seeds) assert.ok(productKind(s.grows)?.source === 'grow', `${s.id} grows weed`);
+  // Seed to harvest under the room's tubes (no lamp of your own), as it is at the start.
+  const minutes = (seed: string) => secondsLeft({ soil: 'soil', plant: plant(seed) }) / 60;
+  assert.equal(minutes('seed-skunk'), 1);
+  assert.ok(Math.abs(minutes('seed-kush') - 5) <= 1, 'Kush in about 5');
+  assert.ok(Math.abs(minutes('seed-haze') - 10) <= 1, 'Haze in about 10');
+  assert.ok(minutes('seed-royal') >= 20 && minutes('seed-royal') <= 30, 'the endgame strain in 20–30');
   const bySpeed = seeds.map((s) => s.id).sort((a, b) => STRAINS[a].stage - STRAINS[b].stage);
+  assert.deepEqual(bySpeed, ['seed-skunk', 'seed-kush', 'seed-haze', 'seed-royal']);
+  assert.deepEqual(seeds.map((s) => s.id), bySpeed, 'the shop lists them up the ladder');
   const price = (id: string) => ITEMS.find((i) => i.id === id)!.price;
   assert.deepEqual(bySpeed, [...bySpeed].sort((a, b) => price(a) - price(b)), 'the cheaper the faster');
-  assert.ok(STRAINS[bySpeed[2]].grams > STRAINS[bySpeed[0]].grams, 'the slow one gives more');
+  // Each step up gives more, dearer weed, and earns a pot more a minute (after the seed and the soil), so the wait pays.
+  const soil = price('soil');
+  const earns = (seed: string) => {
+    const kind = productKind(bunkerItem(seed)!.grows)!;
+    return (productValue(kind, 0.8, STRAINS[seed].grams) - price(seed) - soil) / minutes(seed);
+  };
+  for (let i = 1; i < bySpeed.length; i++) {
+    const [a, b] = [bySpeed[i - 1], bySpeed[i]];
+    assert.ok(STRAINS[b].grams > STRAINS[a].grams, `${b} gives more than ${a}`);
+    assert.ok(productKind(bunkerItem(b)!.grows)!.basePrice > productKind(bunkerItem(a)!.grows)!.basePrice, `${b} is dearer than ${a}`);
+    assert.ok(earns(b) > earns(a), `${b} earns a pot more a minute than ${a}`);
+  }
+  assert.ok(earns('seed-skunk') > 0, 'even the cheap one pays for its seed and soil');
   assert.equal(strainOf('soil'), undefined);
   assert.equal(strainOf('constructor'), undefined);
   // Everything the grow area takes is in the catalog.
   const { seeds: s, soils, lamps } = growItems();
-  assert.equal(s.length, 3);
+  assert.equal(s.length, 4);
   assert.deepEqual(soils.map((i) => i.id).sort(), Object.keys(SOILS).sort());
   assert.deepEqual(lamps.map((i) => i.id).sort(), Object.keys(LIGHTS).filter((k) => k !== 'none').sort());
 });
@@ -94,23 +110,26 @@ test('a watered plant goes seedling → vegetative → flowering → ready, each
   assert.equal(secondsLeft(pot), 0);
   assert.deepEqual(growStep(pot, 600), [], 'a ready plant just waits');
   assert.equal(pot.plant!.dead, undefined);
-  // Almost exactly on time under a plain lamp.
-  const p2: Pot = { soil: 'soil', lamp: 'lamp', plant: plant('seed-kush') };
+  // Almost exactly on time with no lamp.
+  const p2: Pot = { soil: 'soil', plant: plant('seed-kush') };
   grown(p2, 3 * STRAINS['seed-kush'].stage - 10);
   assert.equal(stageOf(p2.plant!), 'flowering');
 });
 
-test('light: a better lamp grows faster, and with none it only crawls along under the room’s tubes', () => {
-  const at = (lamp?: string) => grown({ soil: 'soil', lamp, plant: plant('seed-skunk') }, 120).plant!.growth;
+test('light: a lamp is an upgrade that grows it faster, the LED panel fastest; with none it grows in the strain’s own time', () => {
+  const at = (lamp?: string) => grown({ soil: 'soil', lamp, plant: plant('seed-royal') }, STRAINS['seed-royal'].stage).plant!.growth;
   assert.ok(at('lamp-led') > at('lamp') && at('lamp') > at(undefined));
-  assert.ok(at(undefined) > 0, 'it still grows');
-  assert.ok(Math.abs(at('lamp') - 1) < 0.02, 'a stage in its time under a lamp');
+  assert.ok(Math.abs(at(undefined) - 1) < 0.02, 'a stage in its time with no lamp');
+  // The endgame strain under an LED panel is still the longest wait of all under the room's tubes but one.
+  const left = (seed: string, lamp?: string) => secondsLeft({ soil: 'soil', lamp, plant: plant(seed) });
+  assert.ok(left('seed-royal', 'lamp-led') < left('seed-royal') / 2, 'the LED panel more than halves it');
+  assert.ok(left('seed-skunk', 'lamp-led') > 0);
 });
 
 test('water: it runs out while the plant grows; dry, it stops growing, wilts, loses quality and in the end dies', () => {
-  const pot: Pot = { soil: 'soil', lamp: 'lamp', plant: plant('seed-haze', { water: 1 }) };
+  const pot: Pot = { soil: 'soil', lamp: 'lamp', plant: plant('seed-royal', { water: 1 }) };
   const news = new Set<string>();
-  for (let t = 0; t < WATER_LASTS; t += 5) for (const n of growStep(pot, 5)) news.add(n);
+  for (let t = 0; t <= WATER_LASTS; t += 5) for (const n of growStep(pot, 5)) news.add(n);
   assert.ok(pot.plant!.water <= 1e-9);
   assert.deepEqual([...news].sort(), ['dry', 'thirsty']);
   const g = pot.plant!.growth;
@@ -126,6 +145,53 @@ test('water: it runs out while the plant grows; dry, it stops growing, wilts, lo
   assert.equal(pot.plant!.dead, true);
   assert.equal(harvestOf(pot), null);
   assert.deepEqual(growStep(pot, 60), [], 'dead is dead');
+});
+
+test('water fits the strains: a new plant’s water sees the 1-minute one through, the endgame one wants it a few times, and nothing dies in a minute away', () => {
+  // Planted with half a pot (as the server plants), never watered: Skunk is ready with water to spare.
+  const skunk = grown({ soil: 'soil', plant: plant('seed-skunk', { water: 0.5 }) }, 60, 5, false).plant!;
+  assert.equal(skunk.growth, 3);
+  assert.ok(skunk.water >= THIRSTY, 'never even thirsty');
+  // The endgame strain, watered whenever it's thirsty: a few times, not every couple of minutes.
+  const royal: Pot = { soil: 'soil', plant: plant('seed-royal', { water: 0.5 }) };
+  let waterings = 0;
+  for (let t = 0; royal.plant!.growth < 3 && t < 3600; t += 5) {
+    if (royal.plant!.water < THIRSTY) {
+      royal.plant!.water = 1;
+      waterings++;
+    }
+    growStep(royal, 5);
+  }
+  assert.equal(royal.plant!.growth, 3);
+  assert.ok(waterings >= 2 && waterings <= 5, `${waterings} waterings`);
+  // Thirsty and left alone for a minute (at the PC, say): it's still alive, and more than a minute more.
+  const thirsty: Pot = { soil: 'soil', plant: plant('seed-royal', { water: THIRSTY - 0.01 }) };
+  growStep(thirsty, 60 + (THIRSTY - 0.01) * WATER_LASTS);
+  assert.ok(!thirsty.plant!.dead && DIES_AFTER >= 120, 'a minute dry is nothing like dead');
+});
+
+test('a plant saved under the old (slower) numbers carries on: same stage, done sooner, never stuck', () => {
+  // As #119 saved them: growth 0–3 and water 0–1 are fractions, `dry` seconds (up to the old 240).
+  const saved = loadGrow({
+    at: 5,
+    pots: [
+      { soil: 'soil', lamp: 'lamp', plant: { seed: 'seed-haze', growth: 1.4, water: 0.3, care: 0.7, dry: 0 } },
+      { soil: 'soil', plant: { seed: 'seed-kush', growth: 2.2, water: 0, care: 0.6, dry: 200 } },
+      { soil: 'soil-premium', plant: { seed: 'seed-skunk', growth: 0.5, water: 0.6, care: 0.9, dry: 0, pests: true } },
+    ],
+  });
+  assert.equal(stageOf(saved.pots[0].plant!), 'vegetative');
+  for (const pot of saved.pots.filter((p) => p.plant && !p.plant.dead)) {
+    const left = secondsLeft(pot);
+    if (pot.plant!.water > 0) assert.ok(Number.isFinite(left) && left <= 30 * 60, `${pot.plant!.seed} done within the half hour`);
+    grown(pot, 30 * 60);
+    assert.ok(pot.plant!.growth === 3 || pot.plant!.dead, `${pot.plant!.seed} isn't stuck`);
+  }
+  // Watered, the one that was nearly dead grows on too.
+  saved.pots[1].plant!.water = 1;
+  saved.pots[1].plant!.dry = 0;
+  grown(saved.pots[1], 10 * 60);
+  assert.equal(saved.pots[1].plant!.growth, 3);
 });
 
 test('the model doesn’t care how time is cut up: one long step comes out like many short ones', () => {
@@ -277,7 +343,7 @@ test('left dry it wilts and dies, with a toast each time; a dead plant is cleare
   stock(o, A, { soil: 1, 'seed-kush': 1 });
   o.act(A, 'soil', { pot: 2, item: 'soil' });
   o.act(A, 'plant', { pot: 2, item: 'seed-kush' });
-  o.pass(WATER_LASTS);
+  o.pass(WATER_LASTS / 2); // It's planted with half a pot.
   assert.deepEqual(
     o.toasts().map((e) => [e.key, e.level, e.params?.pot]),
     [['grow.dry', 'warn', 3]],
@@ -449,7 +515,7 @@ test('the panel’s words: stages, timers, icons, and every toast the server sen
     assert.match(bunkerHelp(), lang === 'en' ? /harvest/ : /ernte/);
   }
   setLang('en');
-  const growing: Pot = { soil: 'soil', lamp: 'lamp', plant: plant('seed-kush', { growth: 2 }) };
+  const growing: Pot = { soil: 'soil', plant: plant('seed-kush', { growth: 2 }) };
   assert.deepEqual(potStatus(growing), { stage: 'Flowering', timer: `ready in ${clock(STRAINS['seed-kush'].stage)}` });
   assert.equal(potStatus({ soil: 'soil', plant: plant('seed-kush', { water: 0, dry: 5 }) }).timer, 'not growing');
   assert.equal(potStatus({}).stage, 'Empty: fill it with soil');

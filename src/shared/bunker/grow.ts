@@ -1,7 +1,7 @@
 // The grow area along the west wall: a row of pots, each with soil, a seed of a strain, a lamp over
-// it and water. A plant goes seedling → vegetative → flowering → ready in a few minutes a stage, as
-// long as it has water (a dry plant wilts, loses quality and in the end dies), faster under a better
-// lamp; now and then it gets pests that want spraying. Harvested, it's raw weed (a loose unit of the
+// it and water. A plant goes seedling → vegetative → flowering → ready, from a minute all told for the
+// cheap strain to 25 for the premium one, as long as it has water (a dry plant wilts, loses quality and
+// in the end dies), faster under a lamp; now and then it gets pests that want spraying. Harvested, it's raw weed (a loose unit of the
 // strain's product) in your stash, ready for the packing table. It's a game: the strains are made up.
 //
 // The model is one pure step (growStep), run by the server's tick and by the page to count the timers
@@ -17,21 +17,26 @@ export const MAX_POTS = 8;
 export const GROW_STAGES = ['seedling', 'vegetative', 'flowering', 'ready'] as const;
 export type GrowStage = (typeof GROW_STAGES)[number];
 
-/** How a strain grows: how long each of its first three stages takes (s, under a plain lamp), and how much it gives. */
+/** How a strain grows: how long each of its first three stages takes (s, with no lamp of its own), and how much it gives. */
 export interface Strain {
   /** Its seed (an item id). */
   seed: string;
-  /** Seconds per stage under a plain lamp (seedling, vegetative and flowering each take this long). */
+  /** Seconds per stage with no lamp of its own (seedling, vegetative and flowering each take this long; a lamp makes it quicker). */
   stage: number;
   /** Grams harvested from a plant looked after perfectly. */
   grams: number;
 }
 
-/** The strains (by their seeds): a cheap fast one, a balanced one, a slow premium one. */
+/**
+ * The strains (by their seeds), a ladder from seed to harvest with no lamp: a cheap one in a minute,
+ * one in 5, one in 10, and the expensive endgame one in 25 minutes, each giving more (and dearer)
+ * weed than the one before, so the longer the wait the more a pot earns a minute.
+ */
 export const STRAINS: Readonly<Record<string, Strain>> = {
-  'seed-skunk': { seed: 'seed-skunk', stage: 120, grams: 10 },
-  'seed-kush': { seed: 'seed-kush', stage: 180, grams: 14 },
-  'seed-haze': { seed: 'seed-haze', stage: 270, grams: 18 },
+  'seed-skunk': { seed: 'seed-skunk', stage: 20, grams: 5 },
+  'seed-kush': { seed: 'seed-kush', stage: 100, grams: 16 },
+  'seed-haze': { seed: 'seed-haze', stage: 200, grams: 26 },
+  'seed-royal': { seed: 'seed-royal', stage: 500, grams: 60 },
 };
 
 /** The strain of a seed, or undefined for anything that isn't one. */
@@ -41,24 +46,24 @@ export function strainOf(seed: unknown): Strain | undefined {
 
 /** How fast a plant grows under each light: the room's tubes (no lamp of its own), a grow lamp, an LED panel; and the quality a better light adds at harvest. */
 export const LIGHTS: Readonly<Record<string, { speed: number; bonus: number }>> = {
-  none: { speed: 0.35, bonus: 0 },
-  lamp: { speed: 1, bonus: 0 },
-  'lamp-led': { speed: 1.6, bonus: 0.1 },
+  none: { speed: 1, bonus: 0 },
+  lamp: { speed: 1.6, bonus: 0 },
+  'lamp-led': { speed: 2.5, bonus: 0.1 },
 };
 
 /** How good a plant starts out in each soil (its `care`, 0–1). */
 export const SOILS: Readonly<Record<string, number>> = { soil: 0.65, 'soil-premium': 0.85 };
 
-/** How long a full pot of water lasts while the plant grows (s). */
-export const WATER_LASTS = 240;
+/** How long a full pot of water lasts while the plant grows (s): a new plant's half a pot sees the cheap strain through, the premium one wants it a few times. */
+export const WATER_LASTS = 480;
 /** Below this much water the plant's thirsty (the panel says so). */
 export const THIRSTY = 0.25;
 /** How much care a dry plant loses a second, and how long dry it lasts before it dies (s). */
-export const WILT_RATE = 0.1 / 60;
+export const WILT_RATE = 0.15 / 60;
 export const DIES_AFTER = 240;
-/** The chance a growing plant gets pests, per second (about once in 25 minutes), how much care they eat a second, and how they slow it. */
-export const PEST_RATE = 1 / 1500;
-export const PEST_DAMAGE = 0.05 / 60;
+/** The chance a growing plant gets pests, per second (about once in 20 minutes: rare on the quick strains, likely on the premium one), how much care they eat a second, and how they slow it. */
+export const PEST_RATE = 1 / 1200;
+export const PEST_DAMAGE = 0.1 / 60;
 export const PEST_SLOW = 0.5;
 /** The longest step the model takes at once (s): longer ones are cut into these. */
 export const MAX_STEP = 10;

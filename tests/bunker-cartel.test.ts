@@ -7,13 +7,16 @@ import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { addUnit, BUNKER_STATIONS, stationBox, stationFront, type BunkerPerson } from '../src/shared/bunker/index.js';
-import { PRODUCTS, productKind, productValue } from '../src/shared/bunker/items.js';
+import { ITEMS, PRODUCTS, productKind, productValue } from '../src/shared/bunker/items.js';
+import { LIGHTS, MAX_POTS, START_POTS, STRAINS } from '../src/shared/bunker/grow.js';
 import {
   OFFER_GAP,
   OFFER_TTL,
   REP_DONE,
   REP_FAILED,
+  PREMIUM_WEED,
   START_REP,
+  TIER_MINUTES,
   TIER_REP,
   cartelTier,
   contractPay,
@@ -92,9 +95,28 @@ test('reputation puts you on a rung: nobody to family, and the next rung is in s
     tierProducts(0).every((p) => p.source === 'grow'),
     'weed to start with',
   );
+  assert.ok(!tierProducts(1).some((p) => p.id === PREMIUM_WEED), 'not the premium weed yet');
+  assert.ok(tierProducts(2).some((p) => p.id === PREMIUM_WEED), 'the premium weed from the third rung');
   assert.equal(tierProducts(2).length, PRODUCTS.length, "the lab's products from the third rung");
   assert.ok(haggleChance(0) < haggleChance(50) && haggleChance(50) < haggleChance(100));
   assert.ok(haggleChance(0) > 0 && haggleChance(100) < 1, 'never sure either way');
+});
+
+test('weed contracts fit the grow times (#132): growable in time with every pot under an LED panel, but the big ones not with the four pots you start with', () => {
+  /** Minutes to grow `grams` of `product` in `pots` pots under `light`, round after round (a plant giving 90% of its best). */
+  const growMinutes = (product: string, grams: number, pots: number, light: string) => {
+    const strain = STRAINS[ITEMS.find((i) => i.grows === product)!.id];
+    return (Math.ceil(grams / (pots * strain.grams * 0.9)) * 3 * strain.stage) / LIGHTS[light].speed / 60;
+  };
+  for (let tier = 0; tier <= 4; tier++) {
+    for (const roll of [0, 0.25, 0.5, 0.75, 0.999]) {
+      const o = makeOffer(TIER_REP[tier], 0, 'k1', dice(roll));
+      if (productKind(o.product)!.source !== 'grow') continue;
+      assert.equal(o.time, TIER_MINUTES[tier] * 60_000);
+      assert.ok(growMinutes(o.product, o.grams, MAX_POTS, 'lamp-led') <= TIER_MINUTES[tier] * 0.6, `tier ${tier}: ${o.grams} g of ${o.product} can be grown in time`);
+      if (tier >= 3) assert.ok(growMinutes(o.product, o.grams, START_POTS, 'none') > TIER_MINUTES[tier], `tier ${tier}: ${o.grams} g of ${o.product} wants more than the starting pots`);
+    }
+  }
 });
 
 test('offers: bigger and better paid up the ladder, but always less a gram than customers pay', () => {
