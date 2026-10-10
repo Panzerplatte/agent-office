@@ -73,7 +73,7 @@ export default strings(
     signRip: 'R.I.P.',
     djGetReady: 'GET READY',
     jukeboxPlaying: '♪ NOW PLAYING ♪',
-    jukebox: 'JUKEBOX',
+    jukebox: 'DENISE',
     jukeboxPress: 'press E to play',
 
     // A worker's bubble, and the chip on its task card
@@ -259,7 +259,7 @@ export default strings(
     signRip: 'R.I.P.',
     djGetReady: 'GLEICH GEHT’S LOS',
     jukeboxPlaying: '♪ LÄUFT GERADE ♪',
-    jukebox: 'JUKEBOX',
+    jukebox: 'DENISE',
     jukeboxPress: 'E drücken zum Abspielen',
 
     chipStarting: '⏳ STARTET',

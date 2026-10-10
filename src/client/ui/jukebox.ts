@@ -160,7 +160,7 @@ export function openJukebox(net: Net, openVolume: () => void) {
   void fetchNowPlaying(render);
   const off = store.on('jukebox', render);
   const modal = openModal(el, {
-    doing: '🎵 at the jukebox',
+    doing: '🎵 with Denise',
     onClose: () => {
       off();
       clearInterval(songs);
