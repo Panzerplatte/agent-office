@@ -24,9 +24,9 @@ export default strings(
     'settings.pushToTalk': '✋ Push to talk',
     'settings.voiceChatNote': 'Either way, V joins voice, holding V talks and you’re muted once you let go, and M mutes or unmutes. With push to talk you join muted. Leave voice from the ☰ menu.',
 
-    'settings.jukebox': '🎵 Jukebox',
-    'settings.jukeboxVolume': 'Jukebox volume',
-    'settings.jukeboxNote': 'The jukebox in the lounge. Everyone on the floor hears the same song, louder the closer they are to it; this is how loud it is for you alone.',
+    'settings.jukebox': '🎵 Denise',
+    'settings.jukeboxVolume': "Denise's volume",
+    'settings.jukeboxNote': 'Denise in the lounge. Everyone on the floor hears the same song, louder the closer they are to her; this is how loud it is for you alone.',
 
     'settings.outside': 'Outside',
     'settings.skyLive': 'Everyone sees the same sky: the office’s clock and the live weather where it is.',
@@ -154,9 +154,9 @@ export default strings(
     'settings.pushToTalk': '✋ Push-to-Talk',
     'settings.voiceChatNote': 'So oder so: V tritt dem Sprachchat bei, solange du V hältst, sprichst du, und beim Loslassen bist du stumm; M schaltet stumm oder wieder laut. Mit Push-to-Talk trittst du stumm bei. Verlassen kannst du den Sprachchat über das ☰-Menü.',
 
-    'settings.jukebox': '🎵 Jukebox',
-    'settings.jukeboxVolume': 'Lautstärke der Jukebox',
-    'settings.jukeboxNote': 'Die Jukebox in der Lounge. Alle auf der Etage hören denselben Song, umso lauter, je näher sie dran sind; hier stellst du ein, wie laut er nur für dich ist.',
+    'settings.jukebox': '🎵 Denise',
+    'settings.jukeboxVolume': 'Lautstärke von Denise',
+    'settings.jukeboxNote': 'Denise in der Lounge. Alle auf der Etage hören denselben Song, umso lauter, je näher sie dran sind; hier stellst du ein, wie laut er nur für dich ist.',
 
     'settings.outside': 'Draußen',
     'settings.skyLive': 'Alle sehen denselben Himmel: die Uhrzeit des Büros und das echte Wetter dort.',

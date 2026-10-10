@@ -33,7 +33,7 @@ const texts = strings(
     'walkCloser': 'Walk closer to that first',
     'emoteSlow': 'Easy there, one emote at a time',
     'noRoomOnSeat': 'No room on that {seat} right now',
-    'musicStream': "📻 The jukebox can't play that stream in your browser",
+    'musicStream': "📻 Denise can't play that stream in your browser",
 
     // Walking over to someone
     'walkTo': '🚶 Walking over to {name}',
@@ -177,7 +177,7 @@ const texts = strings(
     'walkCloser': 'Geh erst näher heran',
     'emoteSlow': 'Immer langsam, ein Emote nach dem anderen',
     'noRoomOnSeat': 'Gerade kein Platz frei: {seat}',
-    'musicStream': '📻 Die Jukebox kann diesen Stream in deinem Browser nicht abspielen',
+    'musicStream': '📻 Denise kann diesen Stream in deinem Browser nicht abspielen',
 
     'walkTo': '🚶 Unterwegs zu {name}',
     'walkElevator': '🛗 Mit dem Aufzug zu {name}, auf der Etage {floor}',
