@@ -57,7 +57,7 @@ const CORD = new THREE.LineBasicMaterial({ color: '#2b2d42' });
  * A parachute, to hang from a worker's shoulders: striped gores in a dome over its head, and the
  * cords down to it. Its origin is where it's strapped on, so it pops open (and crumples) from there.
  */
-function parachute(color: string): { group: THREE.Group; dome: THREE.Group } {
+export function parachute(color: string): { group: THREE.Group; dome: THREE.Group } {
   const group = new THREE.Group();
   group.position.y = 0.88;
   const dome = new THREE.Group();
