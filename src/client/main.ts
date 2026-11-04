@@ -3,7 +3,7 @@ import './ui/bunker/bunker.css';
 import * as THREE from 'three';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { sameLook } from '../shared/avatar';
-import { DESK_BY_ID, DESKS, ELEVATOR, ELEVATOR_CAR, FLOOR, GOLF_HOLE, LADDER, LOFT, POLE, POLES, SEATING_BY_ID, SLAB, STATIONS, STATION_AGENT, STOREY, WALL_HEIGHT, beanbagsOut, deskSeat, inElevator, nextFreeSeat, roofDrop, seatAt, seatPlace, streetBelow, vacantSeats, type DeskDef, type SeatDef, type SeatPlace, type StationKind } from '../shared/layout';
+import { DESK_BY_ID, DESKS, ELEVATOR, ELEVATOR_CAR, FLOOR, GOLF_HOLE, LADDER, LOFT, POLE, POLES, SEATING_BY_ID, SLAB, STATIONS, STATION_AGENT, STOREY, STREET_Y, WALL_HEIGHT, beanbagsOut, deskSeat, inElevator, nextFreeSeat, roofDrop, seatAt, seatPlace, streetBelow, vacantSeats, type DeskDef, type SeatDef, type SeatPlace, type StationKind } from '../shared/layout';
 import { floorPalette } from '../shared/floors';
 import type { AgentEffort, AgentProvider, CarriedIssue, FloorInfo, GhIssue, GongWhy, PeerInfo, Smokable, WorkerInfo, WorkerTask } from '../shared/protocol';
 import { MEETING_PATTERNS } from '../shared/meetings';
@@ -14,6 +14,10 @@ import { EYE_HEIGHT, PlayerController, groundAt, isTyping } from './player';
 import { Climber, gripOf, type Arrival, type Grip, type Way } from './climb';
 import { Caffeine } from './caffeine';
 import { buildOffice, type DeskView, type InteractKind, type Interactable } from './world/office';
+import { buildLobby } from './world/lobby';
+import type { Elevator } from './world/elevator';
+import { directory, inLobby, lobbyCarSpot, lobbyFloor, peopleInLobby } from '../shared/lobby';
+import type { LobbyStop } from './ui/lobbystop';
 import { createBunker } from './world/bunker';
 import { setBunkerFloors } from './world/tower';
 import { buildRooftop, type Rooftop } from './world/rooftop';
@@ -83,7 +87,7 @@ import { DesktopNotifier, askNotifyPermission, notifyPermission, waitingOnSomeon
 import { NextUp, waitingInOrder, waitingLabel } from './nextup';
 import { $, h, clip, closeAllModals, doingNow, modalOpen, onDoingChange, onModalChange, openModal, readingNow, toast, STATUS_LABEL } from './ui/dom';
 import { noticeText, t, type Key } from './i18n';
-import { deskLabel, deskLabelOf, drinkName, emoteLabel, patternLabel, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
+import { casinoName, deskLabel, deskLabelOf, drinkName, emoteLabel, patternLabel, roofName, seatLabel, seatNoun, stationAgentName } from './i18n/labels';
 import { openTerminal, openTerminalFor, routeTerminalMessage, type TerminalFind } from './ui/terminal';
 import { openSearch } from './ui/search';
 import { openChanges, openChangesFor, routeChangesMessage } from './ui/changes';
@@ -181,6 +185,10 @@ scene.add(sun);
 
 const office = buildOffice();
 scene.add(office.group);
+// The lobby at street level, under the bottom floor (see shared/lobby.ts): part of the street, so it goes down with it.
+const lobby = buildLobby({ sign: t('lobby.sign'), directory: t('lobby.directory'), building: t('lobby.building') });
+office.group.add(lobby.group);
+office.colliders.push(...lobby.colliders);
 const sky = new Sky(scene, { sun, hemi, ambient }, office.night);
 store.on('sky', () => store.sky && sky.set(store.sky));
 // Halloween or Christmas decorations, up while the building's dressed up for one (see dressUp).
@@ -492,6 +500,112 @@ function placeAtSecretHatch() {
   player.camYaw = player.facing - Math.PI;
   player.lookPitch = -0.08;
 }
+
+// ---- The lobby ----------------------------------------------------------------------------------
+// At street level under the bottom floor (see shared/lobby.ts): its elevator rides up to every floor,
+// and every elevator has it as a stop. It's the bottom floor's: walking in from another floor's
+// street takes you over to that one, so everyone in the lobby is in the same one.
+/** Where you'll be standing in the lobby when you get there: in its car, or where you walked in (`walked`). */
+let lobbyAt: { x: number; y: number; z: number; rotY: number; walked?: boolean } | null = null;
+/** Down in the lobby now. */
+function inTheLobby(): boolean {
+  return !upTop && !downstairs && !deep && !!store.floor && player.pos.y < -SLAB - 1 && inLobby(player.pos.x, player.pos.z);
+}
+/** The lobby as a stop on the elevator's panel, or none before there's a floor. */
+function lobbyStop(): LobbyStop | null {
+  const floor = lobbyFloor(store.floors);
+  return floor ? { here: inTheLobby(), people: peopleInLobby(store.peers.values(), floor), go: rideToLobby } : null;
+}
+function placeInLobby() {
+  if (player.seat) standUp();
+  const at = lobbyAt ?? { ...lobbyCarSpot(), y: STREET_Y, rotY: 0 };
+  player.pos.set(at.x, at.y, at.z);
+  player.vy = 0;
+  player.facing = at.rotY;
+  player.camYaw = player.facing - Math.PI;
+  player.lookPitch = -0.08;
+}
+/** Off whatever you were doing, for a ride. */
+function leaveForTrip() {
+  closeAllModals();
+  if (hanger.active) hanger.cancel();
+  if (climber.active) climber.abort();
+  if (golf.active) golf.stop();
+  if (darter.active) darter.stop();
+  if (cueist.active) cueist.stop();
+  if (walkingTo && !trip) stopWalking();
+  player.enabled = false;
+  player.clearKeys();
+}
+/** Between the lobby and the floor it's under, the same floor: the doors shut, the lights dip, and you step out of the other elevator. */
+function hop(from: Elevator, to: Elevator, place: () => void) {
+  const floor = store.floor;
+  if (trip || !floor) return;
+  leaveForTrip();
+  const timer = window.setTimeout(tripFailed, 10_000);
+  trip = { floor, how: 'lobby', timer };
+  from.setOpen(false);
+  setTimeout(() => {
+    fade(true);
+    setTimeout(() => {
+      place();
+      fade(false);
+      setTimeout(() => {
+        clearTimeout(timer);
+        trip = null;
+        to.setOpen(true);
+        sound.ding('done');
+        player.enabled = !modalOpen();
+      }, 450);
+    }, 320);
+  }, 650);
+}
+/** The elevator down to the lobby, from wherever you are: the floor it's under, or another (the roof, the casino). */
+function rideToLobby() {
+  const floor = lobbyFloor(store.floors);
+  if (!floor || trip || inTheLobby()) return;
+  lobbyAt = { ...lobbyCarSpot(), y: STREET_Y, rotY: 0 };
+  if (store.floor === floor && !upTop && !downstairs && !deep) return hop(office.elevator, lobby.elevator, placeInLobby);
+  leaveForTrip();
+  trip = { floor, how: 'lobby', timer: window.setTimeout(tripFailed, 10_000) };
+  const at = lobbyAt;
+  lift().setOpen(false);
+  setTimeout(() => {
+    fade(true);
+    setTimeout(() => net.send({ t: 'floor.go', floor, at }), 320);
+  }, 650);
+}
+/** Down on another floor's street, in through the lobby's door: over to the bottom floor's lobby, in the same spot. */
+function walkIntoLobby() {
+  const floor = lobbyFloor(store.floors);
+  if (!floor || trip || store.floor === floor || upTop || downstairs || deep) return;
+  lobbyAt = { x: player.pos.x, y: STREET_Y + (player.pos.y - player.street), z: player.pos.z, rotY: player.facing, walked: true };
+  const at = lobbyAt;
+  trip = { floor, how: 'lobby', timer: window.setTimeout(tripFailed, 10_000) };
+  player.enabled = false;
+  player.clearKeys();
+  fade(true, true);
+  setTimeout(() => net.send({ t: 'floor.go', floor, at }), 170);
+}
+/** There, after a ride down (the doors open) or walking in. */
+function arriveInLobby() {
+  const walked = !!lobbyAt?.walked;
+  placeInLobby();
+  lobbyAt = null;
+  // Upstairs, the floor's own elevator stands open as it does after any ride.
+  office.elevator.setOpen(true);
+  if (walked) {
+    player.enabled = !modalOpen();
+    return;
+  }
+  setTimeout(() => {
+    lobby.elevator.setOpen(true);
+    sound.ding('done');
+    player.enabled = !modalOpen();
+  }, 450);
+}
+/** The directory on the lobby's wall lists the building as it is. */
+const paintDirectory = () => lobby.setDirectory(directory(builtFloors(), { roof: roofName(), lobby: t('lobby.name'), casino: casinoName() }));
 
 // ---- Networking & state -------------------------------------------------------------------------
 const net = new Net(() => store.profile);
@@ -1346,9 +1460,11 @@ function syncStack() {
   if (s.index === Math.max(0, index) && s.count === count && s.up === up && s.down === down) return;
   office.stack.set({ index: Math.max(0, index), count, up, down });
   office.setLevel(Math.max(0, index), count);
+  lobby.setLevel(Math.max(0, index));
   player.street = streetBelow(index);
 }
 store.on('floors', syncStack);
+store.on('floors', () => paintDirectory());
 // The floors in the bunker look have no windows from outside, wherever the building is drawn (world/tower.ts).
 store.on('floors', () => setBunkerFloors(builtFloors().map((f) => f.style === 'bunker')));
 
@@ -1677,17 +1793,18 @@ function fade(on: boolean, quick = false) {
 }
 
 /** How you're going to another floor: by elevator, straight there from the floor list, or by the ladder or a pole. */
-type TripKind = 'elevator' | 'switch' | 'hatch' | Grip;
+type TripKind = 'elevator' | 'switch' | 'hatch' | 'lobby' | Grip;
 /** A trip under way: the lights are down (and by elevator the doors are shut) until the next floor arrives. */
 let trip: { floor: string; how: TripKind; timer: number } | null = null;
 
 function showElevator() {
-  openElevator({ net, ride });
+  // In the lobby, the floor over it is where the elevator goes up to, not where you are.
+  openElevator({ net, ride: (id) => (inTheLobby() && id === store.floor ? hop(lobby.elevator, office.elevator, () => placeInCar()) : ride(id)), lobby: lobbyStop });
 }
 
 /** The elevator where you are: the office's, or the one up on the roof. */
 function lift() {
-  return downstairs && casino ? casino.elevator : upTop && roof ? roof.elevator : office.elevator;
+  return downstairs && casino ? casino.elevator : upTop && roof ? roof.elevator : inTheLobby() ? lobby.elevator : office.elevator;
 }
 
 /** Rides the elevator to another floor (or up to the roof). From outside the car, you step in while the lights are down. */
@@ -1731,7 +1848,7 @@ function standingAt(to: string): Arrival {
 /** Straight to another floor from the floor list: a blink, and you're standing in the same spot there. */
 function switchFloor(floorId: string) {
   // The roof and the casino aren't laid out like a floor: to and from them, it's the elevator.
-  if (upTop || downstairs || deep || floorId === ROOF || floorId === CASINO || floorId === BUNKER) return ride(floorId);
+  if (upTop || downstairs || deep || inTheLobby() || floorId === ROOF || floorId === CASINO || floorId === BUNKER) return ride(floorId);
   if (trip || floorId === store.floor) return;
   closeAllModals();
   if (hanger.active) hanger.cancel();
@@ -1763,7 +1880,7 @@ function tripFailed() {
   if (!t) return;
   trip = null;
   fade(false);
-  if (t.how === 'elevator' && !deep) lift().setOpen(!!store.floor);
+  if ((t.how === 'elevator' || t.how === 'lobby') && !deep) lift().setOpen(!!store.floor);
   if (t.how === 'ladder' || t.how === 'pole') climber.abort();
   player.enabled = !modalOpen();
 }
@@ -1832,7 +1949,7 @@ function setPlace() {
 function usable(): Interactable[][] {
   if (downstairs && casino) return [casino.interactables];
   if (deep && drugBunker) return [drugBunker.interactables];
-  return upTop && roof ? [roof.interactables] : [office.interactables, gallery.interactables, dog.interactables, cat.interactables, ball.interactables];
+  return upTop && roof ? [roof.interactables] : [office.interactables, gallery.interactables, dog.interactables, cat.interactables, ball.interactables, lobby.interactables];
 }
 
 /** You're on a floor (or in the building without one): paint it, and open the doors (or carry on down the pole…). */
@@ -1868,6 +1985,7 @@ function arrive() {
     player.enabled = !modalOpen();
     return;
   }
+  if (how === 'lobby') return arriveInLobby();
   if (how !== 'elevator') {
     player.enabled = !modalOpen();
     if (how === 'switch') unstick();
@@ -3338,8 +3456,8 @@ let target: Interactable | null = null;
 let hintKey = '';
 
 function pickTarget(): Interactable | null {
-  // Everything you can use is upstairs; down on the street you're under it all.
-  if (player.pos.y < -SLAB - 1) return null;
+  // Everything you can use is upstairs; down on the street you're under it all (but for the lobby's elevator).
+  if (player.pos.y < -SLAB - 1 && !inTheLobby()) return null;
   let best: Interactable | null = null;
   let bestD = Infinity;
   for (const list of usable()) {
@@ -3556,6 +3674,7 @@ function hintFor(it: Interactable): Hint {
       return { k: what, parts: [title(t('main.meetingRoom')), aside(clip(what, 50)), key('E', t(m?.status === 'running' ? 'main.seeHowGoing' : m ? 'main.seeOrCall' : 'main.callMeeting'))] };
     }
     case 'elevator': {
+      if (inTheLobby()) return { k: 'lobby', parts: [title(t('lobby.elevator')), aside(t('lobby.elevatorAside')), key('E', t('lobby.chooseFloor'))] };
       const f = store.currentFloor();
       const n = store.floors.length;
       return { k: `${f?.name}|${n}`, parts: [title(t('main.elevator')), f ? aside(t('main.floors', { floor: f.name, n })) : '', key('E', t(n > 1 ? 'main.chooseFloor' : 'main.floorsProjects'))] };
@@ -4761,6 +4880,9 @@ function frame(ts?: number) {
     office.update(t, dt, [player.pos, ...[...remotes.values()].map((r) => r.person.root.position), ...departures.positions(), ...arrivals.positions()]);
     office.stack.update(dt, [{ x: player.pos.x, y: player.pos.y, z: player.pos.z, grip }, ...[...remotes.values()].map((r) => ({ x: r.person.root.position.x, y: r.person.root.position.y, z: r.person.root.position.z, grip: r.grip }))], camera.position);
     office.jukebox.update(t, dt, sound.beat());
+    lobby.update(dt, [player.pos, ...[...remotes.values()].map((r) => r.person.root.position)]);
+    // In through the lobby's door from another floor's street: over to the bottom floor's lobby.
+    if (!trip && player.pos.y < -SLAB - 1 && inLobby(player.pos.x, player.pos.z) && store.floor !== lobbyFloor(store.floors)) walkIntoLobby();
   }
   checkSmokeBreak(now);
   smoke.update(dt, camera);
@@ -4894,7 +5016,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { roof: () => roof, casino: () => casino, drugBunker: () => drugBunker, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, skydiver, peerChutes, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { lobby, rideToLobby, roof: () => roof, casino: () => casino, drugBunker: () => drugBunker, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, skydiver, peerChutes, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;
