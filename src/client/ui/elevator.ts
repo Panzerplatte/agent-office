@@ -8,6 +8,7 @@ import type { Net } from '../net';
 import { store } from '../state';
 import { h, openModal, timeAgo, type Modal } from './dom';
 import { confirmDialog } from './prompt';
+import { lobbyButton, type LobbyStop } from './lobbystop';
 
 // The elevator's panel: a button for every floor (every project), and "add a project", which clones
 // one of the repositories the office's gh login can see and makes it a new floor. The first time
@@ -17,6 +18,8 @@ import { confirmDialog } from './prompt';
 export interface ElevatorOptions {
   net: Net;
   ride(floorId: string): void;
+  /** The lobby at street level, as a stop (see ui/lobbystop.ts); none before there's a floor. */
+  lobby?(): LobbyStop | null;
 }
 
 /** How many repositories the list shows at once; typing narrows it down. */
@@ -95,7 +98,8 @@ export function openElevator(opts: ElevatorOptions): void {
   const choice = (): string | undefined => selected ?? normalizeRepo(filter);
 
   const floorButton = (f: FloorInfo, i: number) => {
-    const here = f.id === store.floor;
+    // Down in the lobby, the floor it's under isn't where you are: the elevator goes up there.
+    const here = f.id === store.floor && !opts.lobby?.()?.here;
     const p = floorPalette(f.palette);
     const stats: (HTMLElement | string)[] = [];
     if (f.cloning) stats.push(t('windows.elevator.cloning'));
@@ -174,6 +178,9 @@ export function openElevator(opts: ElevatorOptions): void {
     return btn;
   };
 
+  /** The lobby's button: riding down there closes the panel first, like any floor's. */
+  const lobbyStop = (stop: LobbyStop) => lobbyButton({ ...stop, go: () => (modal.close(), stop.go()) });
+
   const renderFloors = () => {
     const floors = store.floors;
     const built = floors.some((f) => !f.cloning);
@@ -181,6 +188,7 @@ export function openElevator(opts: ElevatorOptions): void {
     floorsEl.replaceChildren(
       ...(built ? [roofButton()] : []),
       ...(floors.length ? floors.map(floorRow).reverse() : [h('p.empty', {}, t('windows.elevator.noFloors'))]),
+      ...(built && opts.lobby?.() ? [lobbyStop(opts.lobby()!)] : []),
       ...(built ? [casinoButton()] : []),
     );
   };
