@@ -139,6 +139,7 @@ import { whereabouts } from './ui/whereabouts';
 import { wayTo } from './walkto';
 import { MeetingBoardTexture, MeetingSignTexture, meetingStage } from './world/meeting';
 import { issueMeeting, openMeeting, type MeetingPreset } from './ui/meeting';
+import { JumpRunGame } from './jumprun';
 
 // index.html's HUD is written in English: into your language before anything else draws on it.
 localizeHud();
@@ -521,6 +522,8 @@ me.onSmoke = (kind, at, dir, what) => {
 };
 const sound = new OfficeSound();
 sound.setVolume(settings.volume, settings.muted);
+// The jump & run down on the street east of the building (#140).
+const jumpRun = new JumpRunGame({ net, player, ground: office.look.ground, colliders: office.colliders, sound, me: () => store.profile.name });
 // The floor's dog. It goes quiet once someone has the terminal of the worker it's barking at open.
 const dog = new Dog(sound, (id) => (store.workers.get(id)?.viewers.length ?? 0) > 0);
 scene.add(dog.root);
@@ -4572,6 +4575,7 @@ function frame(ts?: number) {
 
   walkTick(now);
   player.update(dt);
+  jumpRun.update(dt, player.colliders === office.colliders && !trip && !player.seat);
   // Walked into a pole's hole: you grab the pole on your way down it.
   const hole = office.stack.polesGoDown() ? office.stack.poles().find((s) => Math.hypot(player.pos.x - s.x, player.pos.z - s.z) < POLE.hole - 0.15) : undefined;
   if (hole && !climber.active && !trip && !player.seat && player.enabled && player.pos.y > -1.35 && player.pos.y < 0.6) climber.slide(hole);

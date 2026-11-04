@@ -33,6 +33,7 @@ import { RELAY_LOGIN, relayRequest, relayUpgrade, signInPage, stoppedPage, tunne
 import { ChatLog } from './history.js';
 import { Arcade, HighScores } from './cabinet.js';
 import { GOOD_RUN, SnakeArcade, SnakeScores } from './snake.js';
+import { JumpRun, JumpRunTimes } from './jumprun.js';
 import type { ChatLine, ClientMsg, FloorInfo, FloorView, Me, MeetingRequest, PeerInfo, SearchResults, ServerMsg, ServicesState } from '../shared/protocol.js';
 import { GH_COMMENT_MAX, GH_LABEL_MAX, isAgentEffort, isAgentProvider, isSmokable } from '../shared/protocol.js';
 import { DESK_BY_ID, elevatorSpot, seatHere, streetBelow } from '../shared/layout.js';
@@ -240,6 +241,7 @@ export async function startServer(cfg: Config) {
   const highScores = new HighScores(cfg.dataDir);
   // And the Snake machine's, the same: one table for the building, the office checking every result.
   const snakeScores = new SnakeScores(cfg.dataDir);
+  const jumpRun = new JumpRun(new JumpRunTimes(cfg.dataDir));
   // Chips: everyone's balance, kept on disk. A change goes to every page of theirs.
   const chips = new Chips(cfg.dataDir, {
     onChange: (who, state, change, quiet) => {
@@ -1357,6 +1359,7 @@ export async function startServer(cfg: Config) {
       if (client.whiteboard) drawingChanged(floorOf(client));
       stopPlaying(client);
       stopSnake(client);
+      jumpRun.quit(id);
       tvPeopleChanged();
       // At the blackjack table they're away: their seat (and their hands in a round) wait for them.
       if (blackjack.away(id)) blackjackChanged();
@@ -2845,6 +2848,13 @@ export async function startServer(cfg: Config) {
         if (r.first) toastFloor(floor, notice('snake.highScore', { name: r.score.name, score: scoreText(r.score.score) }));
         break;
       }
+      case 'jumprun.start':
+      case 'jumprun.checkpoint':
+      case 'jumprun.finish':
+      case 'jumprun.quit':
+      case 'jumprun.board':
+        handleJumpRun(c, msg);
+        break;
       case 'jukebox.stop': {
         const at = jukeboxOf(c);
         if (!at || !at.jukebox.stop(who)) break;
@@ -2855,6 +2865,20 @@ export async function startServer(cfg: Config) {
         sendTo(c, { t: 'pong', at: num(msg.at), now: Date.now() });
         break;
     }
+  };
+
+  /** The jump & run down on the street (see JumpRun): only from an office floor, where the street is. */
+  const handleJumpRun = (c: Client, msg: Extract<ClientMsg, { t: `jumprun.${string}` }>) => {
+    const p = c.peer;
+    if (msg.t === 'jumprun.board') return sendTo(c, { t: 'jumprun', board: jumpRun.times.top() });
+    if (msg.t === 'jumprun.quit' || p.floor === ROOF || p.floor === CASINO || p.floor === BUNKER) return jumpRun.quit(c.id);
+    const runner = { id: c.id, owner: c.accountId ? `account:${c.accountId}` : `chips:${c.chips}`, name: p.name, color: p.color, x: p.x, z: p.z };
+    if (msg.t === 'jumprun.start') return jumpRun.start(c.id);
+    if (msg.t === 'jumprun.checkpoint') return void jumpRun.checkpoint(runner, num(msg.n));
+    const r = jumpRun.finish(runner);
+    if (!r.ok) return sendTo(c, { t: 'jumprun.void' });
+    sendTo(c, { t: 'jumprun.done', ms: r.ms, rank: r.rank, best: r.best });
+    if (r.rank !== null && r.best) broadcast({ t: 'jumprun', board: jumpRun.times.top(), ...(r.first && { record: { name: p.name, ms: r.ms } }) });
   };
 
   /** Inviting, listing and revoking people. Admins only: an admin account, or the shared password. */
