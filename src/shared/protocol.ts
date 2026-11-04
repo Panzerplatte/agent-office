@@ -4,6 +4,7 @@ import type { Look } from './avatar.js';
 import type { HouseBankState } from './housebank.js';
 import type { CabinetFrame, CabinetState, CabinetView } from './cabinet.js';
 import type { SnakeFrame, SnakeResult, SnakeState, SnakeView } from './snake.js';
+import type { JumpRunClientMsg, JumpRunServerMsg } from './jumprun.js';
 import type { DartsMode, DartsState } from './darts.js';
 import type { PoolPlayback, PoolState, PoolTeam } from './pool.js';
 import type { ActionKind, PokerState } from './poker.js';
@@ -1291,6 +1292,8 @@ export type ClientMsg =
   | { t: 'snake.play' }
   /** Step away from the Snake machine: a game still on ends with no score (send `snake.over` first to keep it). */
   | { t: 'snake.leave' }
+  /** The jump & run down on the street (see shared/jumprun.ts). */
+  | JumpRunClientMsg
   /** Your Snake game as it looks now, for everyone else on the floor to watch; the office follows the game by them. */
   | { t: 'snake.frame'; frame: SnakeFrame }
   /** Your Snake game `game` is over at `result`: on the high-score table it goes if it adds up (and a good run pays chips), under `name` if you typed one in. */
@@ -1656,6 +1659,7 @@ export type ServerMsg =
   | { t: 'cabinet.frame'; frame: CabinetFrame }
   /** Who's at the Snake machine on your floor now, and the building's Snake high scores. */
   | { t: 'snake'; state: SnakeState }
+  | JumpRunServerMsg
   /** The game on your floor's Snake machine, as its player sees it (sent to everyone else on the floor). */
   | { t: 'snake.frame'; frame: SnakeFrame }
   /** Someone changed these elements on the floor's whiteboard (sent to everyone else on the floor). */

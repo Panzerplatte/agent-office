@@ -180,6 +180,7 @@ export function openHelp() {
     ['🎱', t('menus.helpPool')],
     ['🎰', t('menus.helpSlots')],
     ['🍸', t('menus.helpRoof')],
+    ['🏁', t('jumprun.help')],
     ['🎰', t('menus.helpCasino')],
     ['🕳️', bunkerHelp()],
     ['🎡', t('menus.helpRoulette')],
