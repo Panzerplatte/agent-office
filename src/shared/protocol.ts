@@ -522,13 +522,34 @@ export interface NotifyState {
  * The office's machine (see server/machine.ts): how busy it is, for the wall monitor and a warning
  * before hiring, and the most workers the office runs at once, across every floor.
  */
+/**
+ * Memory a VM's host took back through the virtio balloon (Linux, from /proc/vmstat), when it holds
+ * more than a little. It has already left memTotal: the machine can't use it.
+ */
+export interface MemBalloon {
+  /** Bytes the balloon holds: the host has them now. */
+  taken: number;
+  /** What the machine had before: memTotal + taken. */
+  original: number;
+}
+
+/** The total memory went down a lot since the office started. */
+export interface MemDrop {
+  /** The most it had, bytes. */
+  from: number;
+}
+
 export interface MachineState {
   /** Percent of every core busy, 0-100, over the last few seconds. */
   cpu: number;
   cores: number;
-  /** Memory in use and in all, bytes. */
+  /** Memory in use and in all, bytes: the memory really there (after any balloon). */
   memUsed: number;
   memTotal: number;
+  /** What the VM's host took back, when it took a fair amount. */
+  balloon?: MemBalloon;
+  /** The total has gone down a lot since the office started. */
+  memDrop?: MemDrop;
   /** The last few minutes, oldest first: [cpu %, memory %] a few seconds apart. */
   history: [number, number][];
   /** What makes another worker a strain right now, e.g. "memory is 93% used"; missing when nothing does. */
@@ -589,6 +610,8 @@ export interface MachineProcs {
   cores: number;
   memUsed: number;
   memTotal: number;
+  balloon?: MemBalloon;
+  memDrop?: MemDrop;
   pressure?: string;
   /** Which of memory and CPU the pressure is about. */
   strain: { mem: boolean; cpu: boolean };

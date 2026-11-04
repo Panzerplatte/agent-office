@@ -643,6 +643,8 @@ export async function startServer(cfg: Config) {
 
   // The machine's CPU and memory, for the monitor on the wall and a warning before hiring, and the
   // most workers the office runs at once, across every floor (--max-workers, or ⚙️ Settings).
+  let memDropTold = false;
+  const gb = (bytes: number) => `${(bytes / 2 ** 30).toFixed(1)} GB`;
   const machine = new Machine(
     cfg.dataDir,
     cfg.maxWorkers,
@@ -651,7 +653,12 @@ export async function startServer(cfg: Config) {
       for (const f of floors.values()) n += f.workers.list().length;
       return n;
     },
-    (state) => broadcast({ t: 'machine', state }),
+    (state) => {
+      // Once each time the total goes down a lot (a VM's host taking memory back), so people find out before everything gets slow.
+      if (state.memDrop && !memDropTold) toastAll(notice('machine.memDropped', { from: gb(state.memDrop.from), now: gb(state.memTotal) }), 'warn');
+      memDropTold = !!state.memDrop;
+      broadcast({ t: 'machine', state });
+    },
   );
   machine.start();
   // 🖥️ This machine, process by process: the table is only read while someone has it open.
@@ -673,7 +680,7 @@ export async function startServer(cfg: Config) {
     machine: () => {
       const m = machine.state();
       const strain = machine.strain(m.memTotal);
-      return { cores: m.cores, memUsed: m.memUsed, memTotal: m.memTotal, pressure: m.pressure, strain: { mem: strain.mem !== undefined, cpu: strain.cpu !== undefined } };
+      return { cores: m.cores, memUsed: m.memUsed, memTotal: m.memTotal, balloon: m.balloon, memDrop: m.memDrop, pressure: m.pressure, strain: { mem: strain.mem !== undefined, cpu: strain.cpu !== undefined } };
     },
     cpuTimes,
     cores: () => os.cpus().length,

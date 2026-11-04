@@ -58,6 +58,7 @@ export const NOTICES = table(
     'worker.wentHomeMerged': '🏠 {name} went home: PR #{pr} merged',
     'worker.hostStopped': "The workers' terminal host stopped — resuming them",
     'worker.freshStart': "{name}'s last conversation couldn't be resumed — starting a fresh one",
+    'machine.memDropped': "🖥️ This machine's memory went down from {from} to {now} since the office started: look at 🖥️ This machine",
     'worker.startFailed': 'Could not start {what}: {error}',
     'worktree.keptWork': (p) =>
       `Kept ${p.name}'s worktree and branch ${p.branch} — it has ${
@@ -233,6 +234,7 @@ export const NOTICES = table(
     'worker.wentHomeMerged': '🏠 {name} ist nach Hause gegangen: PR #{pr} gemergt',
     'worker.hostStopped': 'Der Terminal-Host der Worker ist ausgefallen — sie werden fortgesetzt',
     'worker.freshStart': '{name}s letztes Gespräch ließ sich nicht fortsetzen — es beginnt ein neues',
+    'machine.memDropped': '🖥️ Der Arbeitsspeicher dieses Rechners ist seit dem Start des Büros von {from} auf {now} gesunken: schau in 🖥️ Dieser Rechner',
     'worker.startFailed': '{what} konnte nicht gestartet werden: {error}',
     'worktree.keptWork': (p) =>
       `Worktree und Branch ${p.branch} von ${p.name} behalten — ${

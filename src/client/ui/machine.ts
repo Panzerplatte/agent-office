@@ -1,4 +1,4 @@
-import type { ClientMsg, MachineProcs, ProcGroup, ProcRow } from '../../shared/protocol';
+import type { ClientMsg, MachineProcs, MemBalloon, ProcGroup, ProcRow } from '../../shared/protocol';
 import { store } from '../state';
 import { h, openModal } from './dom';
 import { locale, t } from '../i18n';
@@ -80,6 +80,41 @@ function groupMeta(g: ProcGroup, floors: number): string {
   if (g.kind === 'office') return [t(officePart(g.id)[1]), t('windows.machine.procCount', { n: g.count })].join(' · ');
   if (g.id === 'other:rest') return t('windows.machine.otherRestWhy');
   return [g.user ? t('windows.machine.user', { user: g.user }) : '', g.count > 1 ? t('windows.machine.procCount', { n: g.count }) : ''].filter(Boolean).join(' · ');
+}
+
+/** The balloon is big: the host has this much of what the machine started with (share). */
+const BALLOON_BIG = 0.25;
+
+/** The balloon's help: what it is, and when it's big, the fix on the host. Empty without one. */
+export function balloonHint(s: Pick<MachineProcs, 'balloon' | 'memDrop'>): string {
+  if (!s.balloon) return s.memDrop ? t('windows.machine.memDroppedHint') : '';
+  const big = s.balloon.taken >= s.balloon.original * BALLOON_BIG;
+  return t(big ? 'windows.machine.balloonBigHint' : 'windows.machine.balloonHint', { taken: fmtBytes(s.balloon.taken) });
+}
+
+/** The RAM the machine started with: in use, free, and what the VM's host took back, each its own part. */
+function ramBar(s: MachineProcs, balloon: MemBalloon, hint: string): HTMLElement {
+  const pct = (n: number) => `${Math.max(0, Math.min(100, (n / balloon.original) * 100))}%`;
+  const free = Math.max(0, s.memTotal - s.memUsed);
+  const usedPct = s.memTotal ? (s.memUsed / s.memTotal) * 100 : 0;
+  return h(
+    'div.mp-ram',
+    {},
+    h(
+      'div.mp-ram-bar',
+      { role: 'img', 'aria-label': t('windows.machine.ramBar', { used: fmtBytes(s.memUsed), free: fmtBytes(free), taken: fmtBytes(balloon.taken) }) },
+      h('span.used', { style: `width:${pct(s.memUsed)};background:${loadColor(usedPct * 2)}`, title: t('windows.machine.ramUsed', { n: fmtBytes(s.memUsed) }) }),
+      h('span.free', { style: `width:${pct(free)}`, title: t('windows.machine.ramFree', { n: fmtBytes(free) }) }),
+      h('span.taken', { style: `width:${pct(balloon.taken)}`, title: hint }),
+    ),
+    h(
+      'div.mp-ram-legend',
+      {},
+      h('span', {}, h('i.used', { style: `background:${loadColor(usedPct * 2)}` }), t('windows.machine.ramUsed', { n: fmtBytes(s.memUsed) })),
+      h('span', {}, h('i.free'), t('windows.machine.ramFree', { n: fmtBytes(free) })),
+      h('span', { title: hint }, h('i.taken'), t('windows.machine.ramTaken', { n: fmtBytes(balloon.taken) })),
+    ),
+  );
 }
 
 /** A thin bar: how much of the machine it takes. */
@@ -199,20 +234,25 @@ export function openMachine(hooks: MachineHooks) {
 
   const summary = (s: MachineProcs): HTMLElement => {
     const memPct = s.memTotal ? Math.round((s.memUsed / s.memTotal) * 100) : 0;
+    const hint = balloonHint(s);
     const box = h(
       'div.mp-summary',
       {},
       h('span', {}, t('windows.machine.summaryCpu', { cpu: fmtCpu(s.cpu), cores: s.cores })),
       h('span', {}, t('windows.machine.summaryMem', { used: fmtBytes(s.memUsed), total: fmtBytes(s.memTotal), pct: memPct })),
+      s.balloon ? h('span.mp-balloon-sum', { title: hint }, t('windows.machine.summaryBalloon', { taken: fmtBytes(s.balloon.taken), original: fmtBytes(s.balloon.original) }), hint ? h('span.mp-help', { 'aria-label': hint }, '?') : '') : '',
       h('span', {}, store.machine.limit === undefined ? t('windows.machine.summaryWorkers', { n: store.machine.workers }) : t('windows.machine.summaryWorkersOf', { n: store.machine.workers, limit: store.machine.limit })),
     );
-    if (!s.pressure) return box;
+    const notices: HTMLElement[] = [];
+    if (s.balloon) notices.push(ramBar(s, s.balloon, hint));
+    if (s.memDrop) notices.push(h('div.mp-pressure.mp-dropped', { title: hint }, h('p', {}, t('windows.machine.memDropped', { from: fmtBytes(s.memDrop.from), now: fmtBytes(s.memTotal) }))));
+    if (!s.pressure) return notices.length ? h('div', {}, box, ...notices) : box;
     const settings = h('button.btn', { type: 'button' }, t('windows.machine.limitInSettings'));
     settings.addEventListener('click', () => hooks.settings());
     // In the reader's language (the office's own words are English).
     const parts = [s.strain.mem ? t('windows.machine.pressureMem', { pct: memPct }) : '', s.strain.cpu ? t('windows.machine.pressureCpu') : ''].filter(Boolean);
     const why = parts.length === 2 ? t('windows.machine.pressureAnd', { a: parts[0], b: parts[1] }) : (parts[0] ?? s.pressure);
-    return h('div', {}, box, h('div.mp-pressure', {}, h('p', {}, t('windows.machine.pressure', { why })), settings));
+    return h('div', {}, box, ...notices, h('div.mp-pressure', {}, h('p', {}, t('windows.machine.pressure', { why })), settings));
   };
 
   const groupItem = (g: ProcGroup, s: MachineProcs, floors: number): HTMLElement => {

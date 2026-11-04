@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { MachineState } from '../shared/protocol.js';
+import type { MachineState, MemBalloon, MemDrop } from '../shared/protocol.js';
 
 /** How often the CPU and memory are read. */
 const SAMPLE_MS = 5_000;
@@ -12,6 +13,11 @@ const HISTORY = 60;
 const MEM_PRESSURE = 90;
 const CPU_PRESSURE = 90;
 const CPU_WINDOW = 6;
+/** A virtio balloon holding less than this is noise, not the host taking memory back. */
+export const BALLOON_SHOWN = 256 * 2 ** 20;
+/** The total going down by this much (share of the most it had, and at least MEM_DROP_MIN) since the office started is worth telling. */
+const MEM_DROP = 0.25;
+const MEM_DROP_MIN = 2 ** 30;
 /** The highest worker limit there is: past this it isn't a limit. */
 export const MAX_WORKER_LIMIT = 500;
 
@@ -46,6 +52,65 @@ export function cpuTimes(): { idle: number; total: number } {
   return { idle, total };
 }
 
+/** Where the machine reads its memory from, so tests can hand it fake /proc files. */
+export interface MemorySource {
+  /** Linux's /proc/meminfo and /proc/vmstat; elsewhere neither exists and nothing changes. */
+  meminfo?: string;
+  vmstat?: string;
+  /** The kernel's page size, bytes: what /proc/vmstat counts balloon pages in. */
+  pageSize?: number;
+  platform?: NodeJS.Platform;
+}
+
+/** A /proc file's "name value" or "name: value kB" lines, as numbers. */
+function procFields(text: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const line of text.split('\n')) {
+    const m = /^(\w+):?\s+(\d+)/.exec(line);
+    if (m) out.set(m[1]!, Number(m[2]));
+  }
+  return out;
+}
+
+/**
+ * Bytes the virtio memory balloon holds now (pages blown in minus pages let out, times the page
+ * size): memory the VM's host took back, which has already left MemTotal. Undefined when
+ * /proc/vmstat doesn't say (no balloon driver, or not Linux).
+ */
+export function balloonBytes(vmstat: string, pageSize = 4096): number | undefined {
+  const f = procFields(vmstat);
+  const inflate = f.get('balloon_inflate');
+  if (inflate === undefined) return undefined;
+  return Math.max(0, inflate - (f.get('balloon_deflate') ?? 0)) * pageSize;
+}
+
+/** MemTotal and MemAvailable from /proc/meminfo, bytes; undefined when it doesn't have them. */
+export function parseMeminfo(meminfo: string): { total: number; available: number } | undefined {
+  const f = procFields(meminfo);
+  const total = f.get('MemTotal');
+  const available = f.get('MemAvailable') ?? f.get('MemFree');
+  if (!total || available === undefined) return undefined;
+  return { total: total * 1024, available: available * 1024 };
+}
+
+/** The balloon when it holds more than a little: what the host took back and what the machine started with. */
+export function balloonOf(taken: number | undefined, memTotal: number): MemBalloon | undefined {
+  if (taken === undefined || taken < BALLOON_SHOWN) return undefined;
+  return { taken, original: memTotal + taken };
+}
+
+let pageSizeAsked: Promise<number> | undefined;
+/** The kernel's page size (4 KiB nearly everywhere, 16 or 64 KiB on some ARM machines). */
+function systemPageSize(): Promise<number> {
+  pageSizeAsked ??= new Promise((resolve) => {
+    execFile('getconf', ['PAGESIZE'], { timeout: 2000 }, (err, out) => {
+      const n = Number(String(out).trim());
+      resolve(!err && Number.isInteger(n) && n >= 4096 ? n : 4096);
+    });
+  });
+  return pageSizeAsked;
+}
+
 /**
  * Memory the machine can still hand out, in bytes. On Linux os.freemem() is MemAvailable and on
  * Windows the available physical memory, but on macOS it counts only pages that were never used: a
@@ -75,6 +140,10 @@ export class Machine implements Capacity {
   private last = cpuTimes();
   private cpu = 0;
   private memUsed = 0;
+  private memTotal = os.totalmem();
+  /** The most memory the machine has had since the office started (0 before the first reading). */
+  private memPeak = 0;
+  private balloon?: MemBalloon;
   private history: [number, number][] = [];
   /** The worker count everyone was last told. */
   private told = -1;
@@ -86,10 +155,34 @@ export class Machine implements Capacity {
     /** How many workers the office has now, on every floor. */
     private count: () => number,
     private onState: (state: MachineState) => void,
+    private source: MemorySource = {},
   ) {
     this.path = path.join(dataDir, 'machine.json');
     this.restore();
     this.memUsed = os.totalmem() - os.freemem();
+  }
+
+  private get linux(): boolean {
+    return (this.source.platform ?? process.platform) === 'linux';
+  }
+
+  /**
+   * The memory really there now (total and available) and the balloon. On Linux it's read from
+   * /proc, where a VM's host may have taken memory back through the virtio balloon: that has
+   * already left MemTotal, so the total and what's used of it stay what the machine can use, and
+   * the balloon is told on its own. Anything unreadable falls back to os.totalmem()/freemem().
+   */
+  private async readMemory(): Promise<{ total: number; available: number; balloon?: number }> {
+    const linux = this.linux;
+    const [meminfo, vmstat, pageSize] = await Promise.all([
+      linux ? readFile(this.source.meminfo ?? '/proc/meminfo', 'utf8').catch(() => undefined) : undefined,
+      linux ? readFile(this.source.vmstat ?? '/proc/vmstat', 'utf8').catch(() => undefined) : undefined,
+      linux ? (this.source.pageSize ?? systemPageSize()) : 4096,
+    ]);
+    const mem = meminfo === undefined ? undefined : parseMeminfo(meminfo);
+    const total = mem?.total ?? os.totalmem();
+    const available = mem?.available ?? (await availableMemory());
+    return { total, available, balloon: vmstat === undefined ? undefined : balloonBytes(vmstat, pageSize) };
   }
 
   start() {
@@ -123,12 +216,14 @@ export class Machine implements Capacity {
   }
 
   state(): MachineState {
-    const memTotal = os.totalmem();
+    const memTotal = this.memTotal;
     return {
       cpu: this.cpu,
       cores: os.cpus().length,
       memUsed: this.memUsed,
       memTotal,
+      balloon: this.balloon && { ...this.balloon },
+      memDrop: this.memDrop(),
       history: this.history.slice(),
       pressure: this.pressure(memTotal),
       workers: this.count(),
@@ -154,8 +249,21 @@ export class Machine implements Capacity {
     if (this.count() !== this.told) this.emit();
   }
 
-  /** Which of memory and CPU are under pressure now, with how full or busy they are. */
-  strain(memTotal = os.totalmem()): { mem?: number; cpu?: number } {
+  /**
+   * The total has gone down a lot since the office started (a VM's host taking memory back),
+   * with the most it had: worth telling before everything gets slow.
+   */
+  memDrop(): MemDrop | undefined {
+    if (!this.memPeak) return undefined;
+    const lost = this.memPeak - this.memTotal;
+    return lost >= MEM_DROP_MIN && lost >= this.memPeak * MEM_DROP ? { from: this.memPeak } : undefined;
+  }
+
+  /**
+   * Which of memory and CPU are under pressure now, with how full or busy they are. Memory is what's
+   * used of the memory really there (MemTotal, after any balloon), never of what the machine started with.
+   */
+  strain(memTotal = this.memTotal): { mem?: number; cpu?: number } {
     const out: { mem?: number; cpu?: number } = {};
     const mem = memTotal ? Math.round((this.memUsed / memTotal) * 100) : 0;
     if (mem >= MEM_PRESSURE) out.mem = mem;
@@ -176,15 +284,20 @@ export class Machine implements Capacity {
     return why.length ? why.join(' and ') : undefined;
   }
 
-  private async sample(cpu = true) {
+  /** Takes one reading now (the timer takes them every SAMPLE_MS); `cpu` false reads only the memory. */
+  async sample(cpu = true) {
     if (cpu) {
       const now = cpuTimes();
       const total = now.total - this.last.total;
       if (total > 0) this.cpu = Math.max(0, Math.min(100, Math.round((1 - (now.idle - this.last.idle) / total) * 100)));
       this.last = now;
     }
-    const memTotal = os.totalmem();
-    this.memUsed = Math.max(0, memTotal - (await availableMemory()));
+    const mem = await this.readMemory();
+    const memTotal = mem.total;
+    this.memTotal = memTotal;
+    this.memPeak = Math.max(this.memPeak, memTotal);
+    this.memUsed = Math.max(0, Math.min(memTotal, memTotal - mem.available));
+    this.balloon = balloonOf(mem.balloon, memTotal);
     if (cpu) {
       this.history.push([this.cpu, memTotal ? Math.round((this.memUsed / memTotal) * 100) : 0]);
       if (this.history.length > HISTORY) this.history.shift();
