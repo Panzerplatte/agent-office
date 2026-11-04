@@ -77,6 +77,9 @@ import { Holiday } from './world/holiday';
 import { Arrivals, Departures } from './world/leaving';
 import { Confetti, type Area } from './world/confetti';
 import { Hanger } from './hanging';
+import { Skydiver } from './skydive';
+import { jumpSpotNear, type JumpSpot } from '../shared/skydive';
+import { PeerChutes } from './world/skydive';
 import { disposeSprite, textSprite } from './world/toon';
 import { Voice } from './voice';
 import { OfficeSound } from './sound';
@@ -1363,6 +1366,19 @@ function floorThere(way: Way): FloorInfo | undefined {
   const i = floors.findIndex((f) => f.id === store.floor);
   return i < 0 ? undefined : floors[i + way];
 }
+// Out of a window or over the balcony railing, by parachute down to the street (see skydive.ts).
+const skydiver = new Skydiver(player, {
+  ground: (x, z, y) => Math.max(groundAt(player.colliders, x, z, y), player.street),
+  street: () => player.street,
+  color: () => store.profile.color,
+  scene,
+  wind: (level) => sound.skydive(level),
+  pop: () => sound.chute(),
+  land: () => sound.step('land'),
+});
+const peerChutes = new PeerChutes();
+/** The window or the railing you could jump from right now (E), if nothing else is in reach. */
+let jumpSpot: JumpSpot | null = null;
 const climber = new Climber(player, {
   floorThere: (way) => floorThere(way)?.name,
   travel: (way, how, at) => {
@@ -3478,6 +3494,8 @@ function renderHint() {
   const el = $('hint');
   if (hanger.active && !modalOpen()) return renderHangHint(el);
   if (climber.active && !modalOpen()) return renderClimbHint(el);
+  if (skydiver.active && !modalOpen()) return renderSkydiveHint(el);
+  if (jumpSpot && !modalOpen()) return renderJumpHint(el, jumpSpot);
   if (golf.active && !modalOpen()) return renderGolfHint(el);
   if (darter.active && !modalOpen()) return renderDartsHint(el);
   if (cueist.active && !modalOpen()) return renderPoolHint(el);
@@ -3861,6 +3879,23 @@ function renderClimbHint(el: HTMLElement) {
   el.classList.remove('hidden');
 }
 
+/** At a window or the railing: E jumps. On the way down: how to steer. */
+function renderJumpHint(el: HTMLElement, spot: JumpSpot) {
+  const k = `jump|${spot.kind}|${spot.window ?? ''}`;
+  if (k === hintKey) return;
+  hintKey = k;
+  el.replaceChildren(h('span.title', {}, t(spot.kind === 'window' ? 'skydive.window' : 'skydive.railing')), key('E', t('skydive.jump')));
+  el.classList.remove('hidden');
+}
+function renderSkydiveHint(el: HTMLElement) {
+  const stage = skydiver.doing;
+  const k = `skydive|${stage}`;
+  if (k === hintKey) return;
+  hintKey = k;
+  el.replaceChildren(...(stage === 'glide' ? [h('span.title', {}, t('skydive.gliding')), key('A D', t('skydive.steer')), key('W S', t('skydive.faster'))] : [h('span.title', {}, t('skydive.falling'))]));
+  el.classList.remove('hidden');
+}
+
 /** At the golf tee: how to aim and swing, or how to get back to it while the ball's out there. */
 function renderGolfHint(el: HTMLElement) {
   const title = (text: string) => h('span.title', {}, text);
@@ -4124,6 +4159,13 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (stopEmoteKey(e)) return;
+  // Jumping out, nothing else is in reach (WASD steer); at a window or the railing, E jumps.
+  if (skydiver.active && (e.code === 'KeyE' || e.code === 'KeyF' || e.code in DESK_KEYS)) return;
+  if (e.code === 'KeyE' && jumpSpot && !e.repeat) {
+    skydiver.jump(jumpSpot);
+    jumpSpot = null;
+    return;
+  }
   // On the ladder, E gets you off it (and nothing else is in reach); W, S and Space climb.
   if (climber.active && (e.code === 'KeyE' || e.code === 'KeyF' || e.code in DESK_KEYS)) {
     if (e.code === 'KeyE') climber.letGo();
@@ -4706,6 +4748,8 @@ function frame(ts?: number) {
   boardDarts.update(dt);
   if (cueist.active && (trip || hanger.active || climber.active || player.seat || upTop || downstairs || deep)) cueist.stop();
   cueist.update(dt);
+  if (skydiver.active && (trip || upTop || downstairs || deep)) skydiver.abort();
+  skydiver.update(dt);
   blackjackSeat();
   blackjack.update(dt);
   poolBalls.update();
@@ -4812,6 +4856,9 @@ function frame(ts?: number) {
     const d = Math.hypot(pos.x - player.pos.x, pos.z - player.pos.z);
     voice.setVolume(id, d < 4 ? 1 : Math.max(0.2, 1 - (d - 4) / 16));
   }
+  // Others gliding down past the windows get a chute over them.
+  if (upTop || downstairs || deep) peerChutes.clear();
+  else peerChutes.update(dt, [...remotes].map(([id, r]) => ({ id, root: r.person.root, color: store.peers.get(id)?.color ?? '' })), player.street);
 
   const camPos = camera.position;
   for (const [id, v] of workerViews) {
@@ -4872,7 +4919,7 @@ function frame(ts?: number) {
   }
 
   aimedNote = null;
-  if (modalOpen() || hanger.active || climber.active || golf.active || darter.active || cueist.active || blackjack.active || roulettePlayer.active) target = null;
+  if (modalOpen() || hanger.active || climber.active || skydiver.active || golf.active || darter.active || cueist.active || blackjack.active || roulettePlayer.active) target = null;
   else if (firstPerson) {
     const aim = aimedAt(CROSSHAIR);
     target = aim?.near ? aim.it : (mySeat() ?? ballAtFeet());
@@ -4885,6 +4932,10 @@ function frame(ts?: number) {
       if (aim?.near) aimedNote = noteUnder(aim);
     }
   }
+  // Office floors only, on your feet, with nothing else in reach: a window or the railing to jump from.
+  const canJump = !target && !carrying && !holdingBall() && !trip && !skydiver.active && !climber.active && !player.seat && player.enabled && !upTop && !downstairs && !deep && !bunker.on && !inElevator(player.pos.x, player.pos.z);
+  camera.getWorldDirection(lookDir);
+  jumpSpot = canJump ? jumpSpotNear(player.pos.x, player.pos.y, player.pos.z, firstPerson ? lookDir.x : Math.sin(player.facing), firstPerson ? lookDir.z : Math.cos(player.facing)) : null;
   issuesTex.lift(aimedNote?.number ?? null);
   renderHint();
   renderCrosshair();
@@ -4965,7 +5016,7 @@ void whoami().then(() => {
 });
 
 // Debug handle for quick checks from the console / headless screenshots.
-(window as any).__office = { lobby, rideToLobby, roof: () => roof, casino: () => casino, drugBunker: () => drugBunker, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
+(window as any).__office = { lobby, rideToLobby, roof: () => roof, casino: () => casino, drugBunker: () => drugBunker, booze, dj: () => djFrame(djAt()), store, player, caffeine, camera, arcade, cabinet, snakeMachine, workerViews, departures, arrivals, scene, net, renderer, hands, me, remotes, settings, gallery, hanger, office, ride, switchFloor, climber, skydiver, peerChutes, golf, balls, darter, boardDarts, cueist, poolBalls, blackjack, elevatorPanelOpen, confetti, dog, cat, sky, holiday, bunker, carried: () => carrying, emoteWheel, emote, ball };
 (window as any).__voice = voice;
 (window as any).__sound = sound;
 (window as any).__notify = notifier;

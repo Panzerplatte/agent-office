@@ -9,6 +9,7 @@ import world from './world';
 import pages from './pages';
 import bunker from './bunker';
 import lobby from './lobby';
+import skydive from './skydive';
 import type { Table } from './table';
 
 /**
@@ -17,7 +18,7 @@ import type { Table } from './table';
  * side, so a German one missing a key doesn't typecheck. Your pick is yours alone, kept in this
  * browser, and the page reloads to switch, since windows and panels are built with their text.
  */
-const TABLES = { core, menus, windows, boards, notices, main, data, world, pages, bunker, lobby };
+const TABLES = { core, menus, windows, boards, notices, main, data, world, pages, bunker, lobby, skydive };
 
 export type Lang = 'en' | 'de';
 
