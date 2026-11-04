@@ -866,6 +866,58 @@ export class OfficeSound {
     }
   }
 
+  private skyWind: { gain: GainNode; tone: BiquadFilterNode; src: AudioBufferSourceNode } | null = null;
+
+  /**
+   * The rush of air jumping out of the building (see skydive.ts): `level` 0–1, loud falling free,
+   * softer under the chute; 0 lets it die away.
+   */
+  skydive(level: number) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    if (!this.skyWind) {
+      if (level <= 0) return;
+      this.count('skydive');
+      const src = this.noise(this.buf.white, true);
+      const tone = biquad(ctx, 'bandpass', 600, 0.7);
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(tone).connect(gain).connect(this.ambience);
+      src.start();
+      this.skyWind = { gain, tone, src };
+    }
+    const w = this.skyWind;
+    w.gain.gain.setTargetAtTime(0.32 * Math.min(1, level), now, 0.12);
+    w.tone.frequency.setTargetAtTime(380 + 1500 * Math.min(1, level), now, 0.2);
+    if (level <= 0) {
+      w.src.stop(now + 1);
+      this.skyWind = null;
+    }
+  }
+
+  /** A parachute snapping open over you: a thump of cloth catching the air. */
+  chute(at?: Pos) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.count('chute');
+    const t0 = ctx.currentTime + 0.01;
+    const n = this.noise(this.buf.white);
+    const band = biquad(ctx, 'lowpass', 900, 0.8);
+    band.frequency.setValueAtTime(1800, t0);
+    band.frequency.exponentialRampToValueAtTime(220, t0 + 0.35);
+    const g = ctx.createGain();
+    envelope(g.gain, t0, [
+      [0.015, 0.9],
+      [0.12, 0.35],
+      [0.45, 0],
+    ]);
+    const out = n.connect(band).connect(g);
+    (at ? out.connect(this.panner(at, 3, 1)) : out).connect(this.ambience);
+    n.start(t0);
+    n.stop(t0 + 0.5);
+  }
+
   /** A little "wheee!" whistle, swinging round the pole. */
   twirl() {
     const ctx = this.ctx;
