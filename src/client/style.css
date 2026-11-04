@@ -1496,6 +1496,17 @@ a.when:hover { text-decoration: underline; }
 .machine-procs .mp-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; font-weight: 800; margin: 0 0 10px; }
 .machine-procs .mp-pressure { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 12px; border: 3px solid var(--bad); border-radius: 14px; background: #ffe4ea; }
 .machine-procs .mp-pressure p { margin: 0; flex: 1 1 320px; font-weight: 700; }
+.machine-procs .mp-dropped { border-color: #e9a23b; background: #fff4dc; }
+.mp-balloon-sum { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+.mp-help { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink); font-size: 11px; font-weight: 900; }
+.mp-ram { margin: 0 0 12px; }
+.mp-ram-bar { display: flex; height: 14px; border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; background: #e9e4dc; }
+.mp-ram-bar span { display: block; height: 100%; }
+.mp-ram-bar .free, .mp-ram-legend i.free { background: #e9e4dc; }
+.mp-ram-bar .taken, .mp-ram-legend i.taken { background: repeating-linear-gradient(135deg, #9b8bd6 0 6px, #7d6bc4 6px 12px); cursor: help; }
+.mp-ram-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 13px; font-weight: 700; }
+.mp-ram-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mp-ram-legend i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--ink); }
 .machine-procs .mp-head { margin: 16px 0 8px; font-size: 15px; }
 .mp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mp-group { padding: 10px 12px; border: 3px solid var(--ink); border-radius: 14px; background: #fff; box-shadow: 0 3px 0 var(--ink); }

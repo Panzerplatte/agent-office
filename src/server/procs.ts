@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type { MachineProcs, ProcGroup, ProcRow, WorkerStatus } from '../shared/protocol.js';
+import type { MachineProcs, MemBalloon, MemDrop, ProcGroup, ProcRow, WorkerStatus } from '../shared/protocol.js';
 
 // 🖥️ This machine, process by process: who uses how much memory and CPU, and why. While someone has
 // the breakdown open, every few seconds the office reads the process table (/proc on Linux, `ps`
@@ -79,6 +79,8 @@ export interface MachineFigures {
   cores: number;
   memUsed: number;
   memTotal: number;
+  balloon?: MemBalloon;
+  memDrop?: MemDrop;
   pressure?: string;
   strain: { mem: boolean; cpu: boolean };
 }
@@ -405,6 +407,8 @@ export function breakdown(procs: RawProc[], owners: Owners, cpu: Map<number, num
     cores: machine.cores,
     memUsed: machine.memUsed,
     memTotal: machine.memTotal,
+    balloon: machine.balloon,
+    memDrop: machine.memDrop,
     pressure: machine.pressure,
     strain,
     groups,
